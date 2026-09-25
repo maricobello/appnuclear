@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import { buildForecast } from "../src/lib/market/forecast";
 import { bessArbitrage, euBattery, euBorders, globalLens, submarketSpreads } from "../src/lib/market/arbitrage";
-import { PLD_LIMITS, toDayMatrix } from "../src/lib/market/brazil";
+import { PLD_LIMITS, pldFromCmo, toDayMatrix } from "../src/lib/market/brazil";
+import { brtToUtc } from "../src/lib/sources/time";
+import { SUBS, type SubPanel } from "../src/lib/sources/types";
 import { simEu, simFx, simPld, simUkMid } from "../src/lib/sources/simulate";
 import { parseCsv, num } from "../src/lib/sources/csv";
 import { subOf } from "../src/lib/sources/ckan";
@@ -67,5 +69,27 @@ describe("parsers", () => {
     expect(subOf("Nordeste")).toBe("NE");
     expect(subOf("N")).toBe("N");
     expect(subOf("SUL")).toBe("S");
+  });
+});
+
+describe("PLD pela regra da ANEEL a partir do CMO", () => {
+  const { min, maxStructural, maxHourly } = PLD_LIMITS;
+  // dia 1: escassez (média acima do teto estrutural); dia 2: sobra (abaixo do piso); dia 3: só 6 horas
+  const ts = [...Array.from({ length: 48 }, (_, h) => brtToUtc(2026, 9, 1, 0) + h * 3600_000), ...Array.from({ length: 6 }, (_, h) => brtToUtc(2026, 9, 3, h))];
+  const cmoAt = (i: number) => (i < 24 ? (i >= 17 && i <= 21 ? 2500 : 700 + 10 * i) : i < 48 ? 5 : 3000);
+  const cmo: SubPanel = { ts, unit: "R$/MWh", values: Object.fromEntries(SUBS.map((s) => [s, ts.map((_, i) => cmoAt(i))])) as SubPanel["values"] };
+  const pld = pldFromCmo(cmo).values.SE as number[];
+
+  it("limita a média diária ao PLD máximo estrutural mantendo o perfil e o piso", () => {
+    const day1 = pld.slice(0, 24);
+    expect(day1.reduce((a, b) => a + b, 0) / 24).toBeCloseTo(maxStructural, 6);
+    expect(Math.max(...day1)).toBeLessThanOrEqual(maxHourly);
+    expect(Math.min(...day1)).toBeGreaterThanOrEqual(min);
+    for (let h = 1; h < 24; h++) expect(Math.sign(day1[h] - day1[h - 1])).toBe(Math.sign(Math.min(maxHourly, cmoAt(h)) - Math.min(maxHourly, cmoAt(h - 1))));
+  });
+
+  it("aplica o piso e não mexe em dias incompletos além do teto horário", () => {
+    expect(pld.slice(24, 48).every((v) => v === min)).toBe(true);
+    expect(pld.slice(48).every((v) => v === maxHourly)).toBe(true);
   });
 });

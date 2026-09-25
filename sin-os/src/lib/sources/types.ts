@@ -28,6 +28,8 @@ export interface SourceMeta {
   /** Idade máxima aceitável da observação mais recente (horas). */
   freshnessSlaHours: number;
   requiresKey?: string;
+  /** Canal oficial para pedir liberação quando a fonte bloqueia o servidor (HTTP 403). */
+  support?: string;
   description: string;
 }
 

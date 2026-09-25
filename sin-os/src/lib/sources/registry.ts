@@ -16,6 +16,7 @@ export const SOURCES: Record<SourceId, SourceMeta> = {
     license: "Dados abertos CCEE",
     cadence: "diária (D−1, ~tarde)",
     freshnessSlaHours: 48,
+    support: "chamado na CCEE (atendimento@ccee.org.br · 0800 591 4185) com o código do erro e o IP da página de bloqueio",
     description: "Preço de Liquidação das Diferenças por submercado e hora — referência do mercado de curto prazo.",
   },
   ons_cmo: {

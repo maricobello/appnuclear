@@ -38,8 +38,16 @@ Todas gratuitas e sem cadastro, exceto a EIA (chave gratuita, opcional).
 | **Banco Central (SGS)** | USD, EUR, GBP | conversão para R$/MWh |
 | **U.S. EIA** (opcional) | Henry Hub, Brent | custo marginal térmico |
 
-Resiliência do PLD: **CCEE → CMO do ONS limitado ao piso/teto** (mesma regra de formação) **→ histórico
-no Firestore → simulação sinalizada**. Qualquer dado simulado aparece com alerta amarelo na tela.
+Resiliência do PLD: **CCEE → CMO do ONS pela regra da ANEEL** (piso, teto horário e teto estrutural
+na média diária) **→ histórico no Firestore → simulação sinalizada**. Qualquer dado simulado aparece com
+alerta amarelo na tela.
+
+**CCEE bloqueando o servidor (HTTP 403 "Acesso bloqueado")**: o portal de dados abertos da CCEE recusa
+acessos que não atendem à política de segurança dela — em produção isso acontece com os IPs da Vercel.
+O app não tenta contornar o bloqueio; ele segue com o PLD calculado a partir do CMO e grava esse histórico
+(fonte `ons-cmo`), que é substituído pelo oficial quando a CCEE volta. Para liberar, abra chamado na CCEE
+(atendimento@ccee.org.br · 0800 591 4185) informando o código do erro e o IP que a página de bloqueio
+mostra — o auditor exibe os dois na tela **Agente auditor**.
 
 ## Modelos (todos em TypeScript, testados)
 
@@ -56,7 +64,7 @@ no Firestore → simulação sinalizada**. Qualquer dado simulado aparece com al
 | Armazenamento: DP + LSMC | Longstaff & Schwartz (2001); Boogert & de Jong (2008) | QuantLib |
 | CVaR / Expected Shortfall | Rockafellar & Uryasev (2000) | — |
 
-`npm test` roda 30 testes: recuperação de parâmetros em dados simulados (LASSO/LARS, HMM, GARCH, MRJD,
+`npm test` roda 32 testes: recuperação de parâmetros em dados simulados (LASSO/LARS, HMM, GARCH, MRJD,
 regressão quantílica), valores críticos de MacKinnon, cobertura do conformal, DP contra força bruta,
 LEAR superando o benchmark ingênuo com Diebold–Mariano significativo, contratos de payload de cada API
 e o caminho completo previsão → arbitragem.

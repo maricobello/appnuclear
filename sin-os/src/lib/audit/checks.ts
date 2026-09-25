@@ -42,8 +42,11 @@ export function auditSource(meta: SourceMeta, r: SourceResult<unknown>, now = Da
   const checks: Check[] = [];
   const failedProbes = probes.filter((p) => !p.ok).length;
   if (!r.ok) {
-    checks.push(mk("availability", "Disponibilidade", "fail", 0, r.error ?? "falhou"));
-    return { ...base, status: "down", score: 0, checks, error: r.error };
+    // 403 = a origem recusou este servidor (WAF/IP), não uma falha do app: aponta o canal de liberação
+    const blocked = last?.status === 403 && meta.support ? ` · bloqueio na origem — para liberar: ${meta.support}` : "";
+    const error = `${r.error ?? "falhou"}${blocked}`;
+    checks.push(mk("availability", "Disponibilidade", "fail", 0, error));
+    return { ...base, status: "down", score: 0, checks, error };
   }
   checks.push(
     failedProbes > 0

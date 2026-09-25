@@ -1,9 +1,9 @@
 name: Auditoria de APIs (15 min)
 
 # O plano Hobby da Vercel só permite cron diário. Este workflow chama a rota de
-# auditoria a cada 15 min de graça. Configure em Settings → Secrets and variables → Actions:
-#   Variable  SIN_OS_URL   = https://seu-projeto.vercel.app
-#   Secret    CRON_SECRET  = o mesmo valor cadastrado na Vercel
+# auditoria a cada 15 min de graça. Opcional, em Settings → Secrets and variables → Actions:
+#   Variable  SIN_OS_URL   = outra URL (padrão: produção https://sinos-iota.vercel.app)
+#   Secret    CRON_SECRET  = o mesmo valor cadastrado na Vercel (obrigatório se ele existir lá)
 on:
   schedule:
     - cron: "*/15 * * * *"
@@ -12,11 +12,10 @@ on:
 jobs:
   audit:
     runs-on: ubuntu-latest
-    if: ${{ vars.SIN_OS_URL != '' }}
     steps:
       - name: Disparar auditoria
         env:
-          URL: ${{ vars.SIN_OS_URL }}
+          URL: ${{ vars.SIN_OS_URL || 'https://sinos-iota.vercel.app' }}
           TOKEN: ${{ secrets.CRON_SECRET }}
         run: |
           curl -fsS --max-time 290 -X POST "$URL/api/auditoria/run" \

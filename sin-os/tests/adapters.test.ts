@@ -160,15 +160,18 @@ describe("contratos dos adaptadores (fetch mockado)", () => {
     const a = auditSource(SOURCES.ccee_pld, r);
     expect(a.status).toBe("down");
     expect(a.error).toContain("403");
+    expect(a.error).toContain("atendimento@ccee.org.br");
   });
 });
 
 describe("cliente HTTP", () => {
   afterEach(() => vi.unstubAllGlobals());
 
-  it("resume páginas HTML de erro (WAF) pelo <title>", () => {
-    const html = "<!DOCTYPE html><html><head><title>Acesso bloqueado</title><style>p{}</style></head><body><p>Seu IP...</p></body></html>";
-    expect(errorSnippet(html)).toBe("Acesso bloqueado");
+  it("resume páginas HTML de erro (WAF) pelo <title> e preserva código/IP", () => {
+    const html =
+      '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acesso bloqueado</title><style>body{font:13px Arial}</style></head>' +
+      "<body><h1>Acesso bloqueado</h1><p>Código do erro: 15815&nbsp;· IP: 203.0.113.7</p><script>x()</script></body></html>";
+    expect(errorSnippet(html)).toBe("Acesso bloqueado — Código do erro: 15815 · IP: 203.0.113.7");
     expect(errorSnippet("<html><body><h1>Forbidden</h1></body></html>")).toBe("Forbidden");
     expect(errorSnippet('{"error":"rate"}')).toBe('{"error":"rate"}');
   });

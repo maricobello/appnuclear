@@ -51,15 +51,23 @@ function describeError(e: unknown): string {
   return `${e.name}: ${e.message}${detail}`;
 }
 
-/** Resumo legível do corpo de erro: páginas HTML (WAF, CDN) viram o <title>. */
+/**
+ * Resumo legível do corpo de erro. Páginas HTML (WAF, CDN) viram "<title> — texto",
+ * preservando código do erro e IP que a página de bloqueio mostra (necessários para
+ * abrir chamado com o provedor).
+ */
 export function errorSnippet(text: string): string {
   const t = text.trim();
   if (/^<(!doctype|html)/i.test(t) || /<\/(head|body|html)>/i.test(t)) {
-    const title = /<title[^>]*>([^<]*)<\/title>/i.exec(t)?.[1];
-    const body = title ?? t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ");
-    return body.replace(/\s+/g, " ").trim().slice(0, 160);
+    const clean = (x: string) => x.replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+    const title = clean(/<title[^>]*>([^<]*)<\/title>/i.exec(t)?.[1] ?? "");
+    const body = clean(
+      t.replace(/<head[\s\S]*?<\/head>/i, " ").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " "),
+    );
+    const rest = title && body.startsWith(title) ? clean(body.slice(title.length)) : body;
+    return [title, rest].filter(Boolean).join(" — ").slice(0, 400);
   }
-  return t.slice(0, 160);
+  return t.slice(0, 200);
 }
 
 /** Espera sugerida por Retry-After (segundos ou data HTTP), limitada; null se ausente. */
@@ -94,7 +102,7 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ te
     let wait: number | null = null;
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": UA, Accept: "application/json, text/csv, */*", ...headers },
+        headers: { "User-Agent": UA, Accept: "application/json, text/csv, */*", "Accept-Language": "pt-BR,pt;q=0.9,en;q=0.6", ...headers },
         signal: AbortSignal.timeout(timeoutMs),
         cache: "no-store",
       });

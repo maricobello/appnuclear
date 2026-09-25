@@ -76,13 +76,34 @@ export function latestBySub(panel: SubPanel, atOrBefore = Date.now()) {
   return out;
 }
 
-/** PLD estimado a partir do CMO (DESSEM) — regra de formação: CMO limitado ao piso/teto. */
+/**
+ * PLD estimado a partir do CMO (DESSEM) pela regra de formação da ANEEL:
+ *  1) cada hora limitada ao piso (PLD_min) e ao teto horário (PLD_max_horário);
+ *  2) se a média do dia (24 h, BRT) passar do PLD_max_estrutural, a curva é ajustada
+ *     de forma uniforme e proporcional acima do piso até a média ficar igual ao teto
+ *     estrutural, mantendo o perfil horário (REN ANEEL 1.051/2022; Regras de
+ *     Comercialização, módulo PLD). Dias incompletos só recebem o passo 1.
+ */
 export function pldFromCmo(cmo: SubPanel): SubPanel {
-  return {
-    ts: cmo.ts,
-    unit: "R$/MWh",
-    values: Object.fromEntries(
-      SUBS.map((s) => [s, cmo.values[s].map((v) => (v === null ? null : clampPld(v)))]),
-    ) as SubPanel["values"],
-  };
+  const values = Object.fromEntries(
+    SUBS.map((s) => [s, cmo.values[s].map((v) => (v === null ? null : clampPld(v)))]),
+  ) as SubPanel["values"];
+  const days = new Map<string, number[]>();
+  cmo.ts.forEach((t, i) => {
+    const d = brtDate(t);
+    days.set(d, [...(days.get(d) ?? []), i]);
+  });
+  const { min, maxStructural } = PLD_LIMITS;
+  for (const idx of days.values()) {
+    if (idx.length !== 24) continue;
+    for (const s of SUBS) {
+      const day = idx.map((i) => values[s][i]);
+      if (day.some((v) => v === null)) continue;
+      const mean = (day as number[]).reduce((a, b) => a + b, 0) / 24;
+      if (mean <= maxStructural) continue;
+      const k = (maxStructural - min) / (mean - min);
+      idx.forEach((i) => (values[s][i] = min + (values[s][i]! - min) * k));
+    }
+  }
+  return { ts: cmo.ts, unit: "R$/MWh", values };
 }
