@@ -52,22 +52,24 @@ function describeError(e: unknown): string {
 }
 
 /**
- * Resumo legível do corpo de erro. Páginas HTML (WAF, CDN) viram "<title> — texto",
- * preservando código do erro e IP que a página de bloqueio mostra (necessários para
- * abrir chamado com o provedor).
+ * Resumo legível do corpo de erro. Páginas HTML (WAF, CDN) viram o <title> mais o
+ * código do erro e o IP que a página de bloqueio mostra — é o que o provedor pede
+ * para abrir chamado. Sem esses dados, inclui o trecho final do texto da página.
  */
 export function errorSnippet(text: string): string {
   const t = text.trim();
-  if (/^<(!doctype|html)/i.test(t) || /<\/(head|body|html)>/i.test(t)) {
-    const clean = (x: string) => x.replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
-    const title = clean(/<title[^>]*>([^<]*)<\/title>/i.exec(t)?.[1] ?? "");
-    const body = clean(
-      t.replace(/<head[\s\S]*?<\/head>/i, " ").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " "),
-    );
-    const rest = title && body.startsWith(title) ? clean(body.slice(title.length)) : body;
-    return [title, rest].filter(Boolean).join(" — ").slice(0, 400);
-  }
-  return t.slice(0, 200);
+  if (!(/^<(!doctype|html)/i.test(t) || /<\/(head|body|html)>/i.test(t))) return t.slice(0, 200);
+  const clean = (x: string) => x.replace(/&nbsp;/g, " ").replace(/\s+/g, " ").trim();
+  const title = clean(/<title[^>]*>([^<]*)<\/title>/i.exec(t)?.[1] ?? "");
+  const body = clean(
+    t.replace(/<head[\s\S]*?<\/head>/i, " ").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " "),
+  );
+  const code = [...body.matchAll(/(?:error\s*code|c[óo]digo(?:\s+do\s+erro)?)\W{0,3}([\w-]+)/gi)].map((m) => m[1]).find((x) => /\d/.test(x));
+  const ip = /\b(?:\d{1,3}\.){3}\d{1,3}\b/.exec(body)?.[0] ?? /\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b/i.exec(body)?.[0];
+  const ids = [code && `Error Code ${code}`, ip && `IP ${ip}`].filter(Boolean).join(" · ");
+  if (ids) return `${title || "HTML"} (${ids})`;
+  // sem código/IP reconhecíveis: o fim da página costuma trazer os detalhes
+  return title ? `${title} — ${body.length > 250 ? "…" : ""}${body.slice(-250)}` : body.slice(0, 300);
 }
 
 /** Espera sugerida por Retry-After (segundos ou data HTTP), limitada; null se ausente. */

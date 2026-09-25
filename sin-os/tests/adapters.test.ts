@@ -210,8 +210,10 @@ describe("cliente HTTP", () => {
   it("resume páginas HTML de erro (WAF) pelo <title> e preserva código/IP", () => {
     const html =
       '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acesso bloqueado</title><style>body{font:13px Arial}</style></head>' +
-      "<body><h1>Acesso bloqueado</h1><p>Código do erro: 15815&nbsp;· IP: 203.0.113.7</p><script>x()</script></body></html>";
-    expect(errorSnippet(html)).toBe("Acesso bloqueado — Código do erro: 15815 · IP: 203.0.113.7");
+      "<body><h1>Acesso bloqueado</h1><p>Abra um chamado informando o Error Code e o IP exibidos abaixo.</p>" +
+      "<p>Error Code</p><p>a7f3-15815</p><p>IP&nbsp;203.0.113.7</p><script>x()</script></body></html>";
+    expect(errorSnippet(html)).toBe("Acesso bloqueado (Error Code a7f3-15815 · IP 203.0.113.7)");
+    expect(errorSnippet("<html><head><title>Acesso bloqueado</title></head><body>sem detalhes</body></html>")).toBe("Acesso bloqueado — sem detalhes");
     expect(errorSnippet("<html><body><h1>Forbidden</h1></body></html>")).toBe("Forbidden");
     expect(errorSnippet('{"error":"rate"}')).toBe('{"error":"rate"}');
   });
