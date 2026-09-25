@@ -1,5 +1,5 @@
 import { cached } from "../cache";
-import { errMsg, fetchJson, probesOf } from "./http";
+import { errMsg, fetchJson, mapLimit, probesOf } from "./http";
 import { isoDay } from "./time";
 import { emptyQuality, type Probe, type SourceResult, type TimeSeries } from "./types";
 
@@ -42,37 +42,36 @@ export async function fetchEuPrices(daysBack = 7): Promise<SourceResult<ZonePric
   const end = isoDay(Date.now() + 2 * 86400_000);
   const out: ZonePrices = {};
   const errors: string[] = [];
-  await Promise.all(
-    EU_ZONES.map(async (z) => {
-      try {
-        const { value } = await cached(`ec:${z.bzn}:${start}`, 5 * 60_000, () =>
-          fetchJson<EcPrice>(`${EC_BASE}/price?bzn=${encodeURIComponent(z.bzn)}&start=${start}&end=${end}`),
-        );
-        probes.push(...value.probes);
-        const j = value.json;
-        const arr = j.price ?? j.data;
-        if (!Array.isArray(j.unix_seconds) || !Array.isArray(arr) || arr.length !== j.unix_seconds.length) {
-          quality.schemaIssues.push(`${z.bzn}: arrays unix_seconds/price ausentes ou desalinhados`);
-          return;
-        }
-        const ts: number[] = [];
-        const values: number[] = [];
-        const seen = new Set<number>();
-        j.unix_seconds.forEach((s, i) => {
-          const v = arr[i];
-          if (v === null || !Number.isFinite(v)) { quality.invalid++; return; }
-          if (seen.has(s)) { quality.duplicates++; return; }
-          seen.add(s);
-          ts.push(s * 1000);
-          values.push(v);
-        });
-        out[z.bzn] = { ts, values, unit: j.unit ?? "EUR/MWh", name: z.name };
-      } catch (e) {
-        probes.push(...probesOf(e));
-        errors.push(`${z.bzn}: ${errMsg(e)}`);
+  // a API limita a taxa por IP: 3 zonas por vez em vez de 12 em paralelo
+  await mapLimit(EU_ZONES, 3, async (z) => {
+    try {
+      const { value } = await cached(`ec:${z.bzn}:${start}`, 5 * 60_000, () =>
+        fetchJson<EcPrice>(`${EC_BASE}/price?bzn=${encodeURIComponent(z.bzn)}&start=${start}&end=${end}`),
+      );
+      probes.push(...value.probes);
+      const j = value.json;
+      const arr = j.price ?? j.data;
+      if (!Array.isArray(j.unix_seconds) || !Array.isArray(arr) || arr.length !== j.unix_seconds.length) {
+        quality.schemaIssues.push(`${z.bzn}: arrays unix_seconds/price ausentes ou desalinhados`);
+        return;
       }
-    }),
-  );
+      const ts: number[] = [];
+      const values: number[] = [];
+      const seen = new Set<number>();
+      j.unix_seconds.forEach((s, i) => {
+        const v = arr[i];
+        if (v === null || !Number.isFinite(v)) { quality.invalid++; return; }
+        if (seen.has(s)) { quality.duplicates++; return; }
+        seen.add(s);
+        ts.push(s * 1000);
+        values.push(v);
+      });
+      out[z.bzn] = { ts, values, unit: j.unit ?? "EUR/MWh", name: z.name };
+    } catch (e) {
+      probes.push(...probesOf(e));
+      errors.push(`${z.bzn}: ${errMsg(e)}`);
+    }
+  });
   const zones = Object.values(out);
   if (!zones.length) {
     return { id: "energy_charts", ok: false, data: null, error: errors.join(" | ") || "sem dados", probes, quality, simulated: false, fetchedAt: Date.now() };

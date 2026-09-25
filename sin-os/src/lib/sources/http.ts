@@ -3,10 +3,13 @@ import type { Probe } from "./types";
 /**
  * Cliente HTTP instrumentado: timeout, retry com backoff exponencial para
  * falhas transitórias (rede, 429, 5xx) e telemetria de cada tentativa.
- * A telemetria alimenta o agente auditor (latência real observada em produção).
+ * 429 respeita Retry-After. A telemetria alimenta o agente auditor (latência
+ * real observada em produção).
  */
 
-const UA = "SIN-OS/1.0 (energy-market-terminal)";
+// identificação honesta, com contato — nunca se passa por navegador
+const UA = "SIN-OS/1.0 (+https://github.com/maricobello/sinos)";
+const RETRY_AFTER_MAX_MS = 8_000;
 const RING_MAX = 500;
 
 type GlobalWithTelemetry = typeof globalThis & { __sinTelemetry?: Probe[] };
@@ -48,6 +51,39 @@ function describeError(e: unknown): string {
   return `${e.name}: ${e.message}${detail}`;
 }
 
+/** Resumo legível do corpo de erro: páginas HTML (WAF, CDN) viram o <title>. */
+export function errorSnippet(text: string): string {
+  const t = text.trim();
+  if (/^<(!doctype|html)/i.test(t) || /<\/(head|body|html)>/i.test(t)) {
+    const title = /<title[^>]*>([^<]*)<\/title>/i.exec(t)?.[1];
+    const body = title ?? t.replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " ");
+    return body.replace(/\s+/g, " ").trim().slice(0, 160);
+  }
+  return t.slice(0, 160);
+}
+
+/** Espera sugerida por Retry-After (segundos ou data HTTP), limitada; null se ausente. */
+export function retryAfterMs(h: string | null, now = Date.now()): number | null {
+  if (!h) return null;
+  const secs = Number(h);
+  const ms = Number.isFinite(secs) ? secs * 1000 : Date.parse(h) - now;
+  return Number.isFinite(ms) ? Math.min(RETRY_AFTER_MAX_MS, Math.max(0, ms)) : null;
+}
+
+/** map com no máximo `limit` tarefas simultâneas (evita 429 em APIs com limite de taxa). */
+export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const worker = async () => {
+    while (next < items.length) {
+      const i = next++;
+      out[i] = await fn(items[i], i);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return out;
+}
+
 export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ text: string; probes: Probe[] }> {
   const { timeoutMs = 20_000, retries = 2, headers = {} } = opts;
   const probes: Probe[] = [];
@@ -55,6 +91,7 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ te
     const t0 = Date.now();
     let text = "";
     let probe: Probe;
+    let wait: number | null = null;
     try {
       const res = await fetch(url, {
         headers: { "User-Agent": UA, Accept: "application/json, text/csv, */*", ...headers },
@@ -69,8 +106,9 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ te
         latencyMs: Date.now() - t0,
         bytes: text.length,
         at: t0,
-        error: res.ok ? undefined : `HTTP ${res.status}: ${text.slice(0, 160)}`,
+        error: res.ok ? undefined : `HTTP ${res.status}: ${errorSnippet(text)}`,
       };
+      if (res.status === 429) wait = retryAfterMs(res.headers.get("retry-after")) ?? 1500 * 2 ** attempt;
     } catch (e) {
       probe = {
         url: redact(url),
@@ -87,7 +125,7 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ te
     if (probe.ok) return { text, probes };
     const retryable = probe.status === null || probe.status === 429 || probe.status >= 500;
     if (!retryable || attempt >= retries) throw new HttpError(probe.error ?? "falha HTTP", probes);
-    await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+    await new Promise((r) => setTimeout(r, wait ?? 400 * 2 ** attempt));
   }
 }
 

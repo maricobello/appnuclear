@@ -10,6 +10,7 @@ import { auditSource, crossPldCmo } from "../src/lib/audit/checks";
 import { SOURCES } from "../src/lib/sources/registry";
 import { brtDate } from "../src/lib/sources/time";
 import { PLD_LIMITS } from "../src/lib/market/brazil";
+import { errorSnippet, fetchJson, mapLimit, retryAfterMs } from "../src/lib/sources/http";
 
 /**
  * Contratos dos adaptadores: payloads no formato documentado de cada provedor
@@ -159,5 +160,40 @@ describe("contratos dos adaptadores (fetch mockado)", () => {
     const a = auditSource(SOURCES.ccee_pld, r);
     expect(a.status).toBe("down");
     expect(a.error).toContain("403");
+  });
+});
+
+describe("cliente HTTP", () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("resume páginas HTML de erro (WAF) pelo <title>", () => {
+    const html = "<!DOCTYPE html><html><head><title>Acesso bloqueado</title><style>p{}</style></head><body><p>Seu IP...</p></body></html>";
+    expect(errorSnippet(html)).toBe("Acesso bloqueado");
+    expect(errorSnippet("<html><body><h1>Forbidden</h1></body></html>")).toBe("Forbidden");
+    expect(errorSnippet('{"error":"rate"}')).toBe('{"error":"rate"}');
+  });
+
+  it("429 respeita Retry-After e tenta de novo", async () => {
+    let calls = 0;
+    vi.stubGlobal("fetch", vi.fn(async () => (++calls === 1 ? new Response("slow down", { status: 429, headers: { "Retry-After": "0" } }) : respond({ ok: 1 }))));
+    const r = await fetchJson<{ ok: number }>("https://example.test/x");
+    expect(r.json.ok).toBe(1);
+    expect(r.probes.map((p) => p.status)).toEqual([429, 200]);
+    expect(retryAfterMs("3")).toBe(3000);
+    expect(retryAfterMs("600")).toBe(8000);
+    expect(retryAfterMs(null)).toBeNull();
+  });
+
+  it("mapLimit respeita o limite de concorrência e a ordem", async () => {
+    let active = 0;
+    let peak = 0;
+    const out = await mapLimit([1, 2, 3, 4, 5, 6, 7], 3, async (x) => {
+      peak = Math.max(peak, ++active);
+      await new Promise((r) => setTimeout(r, 5));
+      active--;
+      return x * 2;
+    });
+    expect(out).toEqual([2, 4, 6, 8, 10, 12, 14]);
+    expect(peak).toBe(3);
   });
 });

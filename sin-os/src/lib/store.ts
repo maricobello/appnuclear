@@ -20,9 +20,11 @@ export interface PldDay {
   source: string;
 }
 
-type Mem = { runs: AuditRun[]; reports: AgentReport[]; pld: Map<string, PldDay> };
+// persisted: data → fonte já gravada no Firestore (evita reler os mesmos dias a cada requisição)
+type Mem = { runs: AuditRun[]; reports: AgentReport[]; pld: Map<string, PldDay>; persisted: Map<string, string> };
 const g = globalThis as typeof globalThis & { __sinMem?: Mem };
-g.__sinMem ??= { runs: [], reports: [], pld: new Map() };
+g.__sinMem ??= { runs: [], reports: [], pld: new Map(), persisted: new Map() };
+g.__sinMem.persisted ??= new Map();
 const mem = g.__sinMem;
 
 async function withDb<T>(op: (db: Firestore) => Promise<T>, fallback: () => T): Promise<T> {
@@ -72,23 +74,34 @@ export async function listAgentReports(limit = 5): Promise<AgentReport[]> {
   );
 }
 
-/** Grava dias completos de PLD ainda não persistidos (idempotente). */
+/** Oficial (CCEE) substitui estimado (CMO do ONS limitado); nunca o contrário. */
+const sourceRank = (s: string | undefined) => (s === "ccee" ? 2 : s ? 1 : 0);
+
+/** Grava dias completos de PLD ainda não persistidos ou só estimados (idempotente). */
 export async function savePldDays(days: PldDay[]): Promise<number> {
-  for (const d of days) mem.pld.set(d.date, d);
-  if (!days.length) return 0;
+  for (const d of days) {
+    if (sourceRank(d.source) >= sourceRank(mem.pld.get(d.date)?.source)) mem.pld.set(d.date, d);
+  }
+  const pending = days.filter((d) => sourceRank(d.source) > sourceRank(mem.persisted.get(d.date)));
+  if (!pending.length) return 0;
   return withDb(
     async (db) => {
-      const refs = days.map((d) => db.collection("pld_days").doc(d.date));
+      const refs = pending.map((d) => db.collection("pld_days").doc(d.date));
       const existing = await db.getAll(...refs);
       const batch = db.batch();
+      const kept: [string, string][] = [];
       let written = 0;
       existing.forEach((snap, i) => {
-        if (!snap.exists) {
-          batch.set(refs[i], days[i]);
+        const d = pending[i];
+        const current = snap.exists ? ((snap.get("source") as string | undefined) ?? "ccee") : undefined;
+        if (sourceRank(d.source) > sourceRank(current)) {
+          batch.set(refs[i], d);
           written++;
-        }
+          kept.push([d.date, d.source]);
+        } else kept.push([d.date, current!]);
       });
       if (written) await batch.commit();
+      for (const [date, source] of kept) mem.persisted.set(date, source);
       return written;
     },
     () => 0,

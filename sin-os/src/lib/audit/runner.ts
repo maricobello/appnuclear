@@ -9,7 +9,8 @@ import { SOURCES } from "../sources/registry";
 import type { SourceId, SourceResult, SubPanel } from "../sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "../sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "../sources/weather";
-import { panelToDays } from "../data";
+import { PLD_FROM_CMO, panelToDays } from "../data";
+import { pldFromCmo } from "../market/brazil";
 import { listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
 import { auditSource, crossFx, crossPldCmo } from "./checks";
 import type { AuditRun, SourceAudit } from "./types";
@@ -107,6 +108,8 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
   // cada auditoria também alimenta o histórico próprio de PLD (Firestore) — base do fallback "last known good"
   if (results.ccee_pld.ok && results.ccee_pld.data) {
     await savePldDays(panelToDays(results.ccee_pld.data as SubPanel, "ccee")).catch(() => 0);
+  } else if (results.ons_cmo.ok && results.ons_cmo.data) {
+    await savePldDays(panelToDays(pldFromCmo(results.ons_cmo.data as SubPanel), PLD_FROM_CMO)).catch(() => 0);
   }
   return { run, previous, results, shouldInvokeAgent, reasons };
 }

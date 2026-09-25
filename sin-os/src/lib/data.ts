@@ -48,6 +48,9 @@ async function withFallback<T>(id: SourceResult<T>["id"], live: () => Promise<So
   return simulated(id, make(), `simulação — fonte falhou: ${r.error ?? "erro"}`, r);
 }
 
+/** Fonte gravada em pld_days quando o PLD vem do CMO do ONS (CCEE indisponível). */
+export const PLD_FROM_CMO = "ons-cmo";
+
 export function panelToDays(panel: SubPanel, source: string): PldDay[] {
   const byDay = new Map<string, Record<Sub, (number | null)[]>>();
   panel.ts.forEach((t, i) => {
@@ -88,11 +91,16 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
   }
   const cmo = await fetchCmoHourly(daysBack);
   if (cmo.ok && cmo.data) {
-    return { ...cmo, id: "ccee_pld", data: pldFromCmo(cmo.data), fallback: `PLD estimado = CMO/DESSEM limitado (CCEE falhou: ${primary.error})`, error: primary.error };
+    const est = pldFromCmo(cmo.data);
+    // guarda o estimado no histórico; a CCEE sobrescreve quando voltar
+    savePldDays(panelToDays(est, PLD_FROM_CMO)).catch(() => undefined);
+    return { ...cmo, id: "ccee_pld", data: est, fallback: `PLD estimado = CMO/DESSEM limitado (CCEE falhou: ${primary.error})`, error: primary.error };
   }
   const lkg = await loadPldDays(daysBack).catch(() => []);
   if (lkg.length >= 30) {
-    return { ...primary, ok: true, data: daysToPanel(lkg), fallback: `último dado bom persistido (${lkg[lkg.length - 1].date})` };
+    const estimated = lkg.filter((d) => d.source !== "ccee").length;
+    const note = estimated ? `; ${estimated} dia(s) estimados pelo CMO` : "";
+    return { ...primary, ok: true, data: daysToPanel(lkg), fallback: `último dado bom persistido (${lkg[lkg.length - 1].date}${note})` };
   }
   if (mode === "live") return primary;
   return simulated("ccee_pld", sim.simPld(daysBack), `simulação — CCEE e ONS indisponíveis: ${primary.error}`, primary);
