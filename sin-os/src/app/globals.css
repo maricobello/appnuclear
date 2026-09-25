@@ -1,0 +1,102 @@
+@import "tailwindcss";
+
+/*
+ * SIN OS — terminal escuro. Paleta categórica e de status validada
+ * (scripts/validate_palette.js da skill de dataviz) contra a superfície #0f141b.
+ */
+:root {
+  color-scheme: dark;
+  --page: #0a0d12;
+  --surface: #0f141b;
+  --surface-2: #141b24;
+  --surface-3: #1a2330;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --grid: #1f2732;
+  --axis: #2b3441;
+  --ink: #f3f5f8;
+  --ink-2: #c3c9d3;
+  --muted: #8b95a5;
+  --accent: #f5a524;
+  --s1: #3987e5;
+  --s2: #d95926;
+  --s3: #199e70;
+  --s4: #c98500;
+  --s5: #d55181;
+  --s7: #9085e9;
+  --good: #0ca30c;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #d03b3b;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+  --color-critical: var(--critical);
+  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+html,
+body {
+  background: var(--page);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: var(--axis) transparent;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.live-dot {
+  animation: pulse-dot 1.6s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .live-dot {
+    animation: none;
+  }
+}
+
+.md h3 {
+  font-weight: 600;
+  margin: 0.25rem 0 0.5rem;
+}
+.md ul {
+  list-style: disc;
+  padding-left: 1.1rem;
+}
+.md li {
+  margin: 0.2rem 0;
+}
