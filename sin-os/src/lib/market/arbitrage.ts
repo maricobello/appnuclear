@@ -1,7 +1,8 @@
 import { adf, engleGranger, halfLife } from "../quant/cointegration";
 import { riskMetrics, type RiskMetrics } from "../quant/risk";
 import { mean, round, std } from "../quant/stats";
-import { optimizeStorageDP, valueStorageLSMC, type StorageSpec } from "../quant/storage";
+import { optimizeStorageLP } from "../quant/bess";
+import { valueStorageLSMC, type StorageSpec } from "../quant/storage";
 import type { ZonePrices } from "../sources/europe";
 import type { FxData } from "../sources/fx";
 import { brtDate } from "../sources/time";
@@ -83,16 +84,28 @@ export const DEFAULT_BESS: StorageSpec = {
 export interface StorageResult {
   spec: StorageSpec;
   horizonHours: number;
+  /** Intrínseco EXATO (LP/HiGHS) na curva a termo = E[preço] das trajetórias. */
   intrinsicRS: number;
+  /** Intrínseco exato + opcionalidade (LSMC). */
   lsmcRS: number;
   lsmcStdErr: number;
+  /** LSMC − intrínseco na mesma grade e na mesma distribuição (viés de grade se cancela). */
   extrinsicRS: number;
+  /** Média do ótimo exato (LP) trajetória a trajetória — teto teórico. */
   perfectForesightRS: number;
   risk: RiskMetrics;
   schedule: { ts: number; price: number; mw: number; soc: number }[];
-  publishedTomorrow: { date: string; valueRS: number; spreadRS: number } | null;
+  publishedTomorrow: {
+    date: string;
+    valueRS: number;
+    cashRS: number;
+    endSoc: number;
+    spreadRS: number;
+    schedule: { h: number; price: number; mw: number; soc: number }[];
+  } | null;
   perMWDayRS: number;
   pnlHistogram: { from: number; to: number; count: number }[];
+  solver: string;
 }
 
 function histogram(v: number[], bins = 24): StorageResult["pnlHistogram"] {
@@ -105,47 +118,104 @@ function histogram(v: number[], bins = 24): StorageResult["pnlHistogram"] {
   return counts.map((count, i) => ({ from: lo + i * w, to: lo + (i + 1) * w, count }));
 }
 
-export function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DEFAULT_BESS): StorageResult {
-  const prices = fc.horizon.lear;
-  const dp = optimizeStorageDP(prices, spec);
+/**
+ * Valor de continuação V(e) da energia deixada no fim de amanhã: ótimo exato na curva
+ * prevista dos dias seguintes para 5 níveis de SoC inicial. É côncavo em e (valor ótimo
+ * de LP em função do lado direito), então vira segmentos de valor marginal decrescente.
+ */
+async function continuationValue(curve: number[], spec: StorageSpec): Promise<{ mwh: number; value: number }[]> {
+  const levels = [0, 0.25, 0.5, 0.75, 1];
+  const W = await Promise.all(levels.map((f) => optimizeStorageLP(curve, { ...spec, socInit: f, socEnd: spec.socInit ?? 0.5 }).then((r) => r.value)));
+  const seg = spec.capacityMWh / (levels.length - 1);
+  let prev = Infinity;
+  return levels.slice(1).map((_, k) => {
+    const v = Math.min(prev, (W[k + 1] - W[k]) / seg); // concavidade (ruído numérico)
+    prev = v;
+    return { mwh: seg, value: v };
+  });
+}
+
+export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DEFAULT_BESS): Promise<StorageResult> {
   const half = Math.floor(fc.paths.length / 2);
-  let lsmc = { value: dp.value, stdErr: 0, intrinsic: dp.value, extrinsic: 0, perfectForesight: dp.value, pnl: [dp.value] };
-  if (half >= 50) lsmc = valueStorageLSMC(fc.paths.slice(0, half), fc.paths.slice(half), spec);
+  const mc = half >= 50;
+  // curva a termo = E[preço]: o LEAR é ajustado em asinh e estima a MEDIANA; o valor
+  // esperado de um despacho linear depende da média (desigualdade de Jensen)
+  const curve = mc ? fc.horizon.lear.map((_, t) => mean(fc.paths.map((p) => p[t]))) : fc.horizon.lear.slice();
+  const lp = await optimizeStorageLP(curve, spec);
+
+  let extrinsic = 0, stdErr = 0, pf = lp.value;
+  let pnl = [lp.value];
+  if (mc) {
+    const lsmc = valueStorageLSMC(fc.paths.slice(0, half), fc.paths.slice(half), spec);
+    extrinsic = Math.max(0, lsmc.value - lsmc.intrinsic);
+    stdErr = lsmc.stdErr;
+    // P&L da política LSMC, deslocado pelo viés da grade medido na curva média
+    pnl = lsmc.pnl.map((v) => v + (lp.value - lsmc.intrinsic));
+    const pfPaths = fc.paths.slice(half, half + 200);
+    const pfVals: number[] = [];
+    for (const p of pfPaths) pfVals.push((await optimizeStorageLP(p, spec)).value);
+    pf = mean(pfVals);
+  }
+
   const tomorrow = fc.publishedAhead[0];
   let publishedTomorrow: StorageResult["publishedTomorrow"] = null;
   if (tomorrow) {
-    const r = optimizeStorageDP(tomorrow.prices, { ...spec, socEnd: spec.socInit });
-    publishedTomorrow = { date: tomorrow.date, valueRS: r.value, spreadRS: Math.max(...tomorrow.prices) - Math.min(...tomorrow.prices) };
+    // rolling intrinsic: despacho exato de amanhã (preço publicado) com o SoC final
+    // valorizado pela previsão dos dias seguintes
+    const tv = await continuationValue(curve, spec);
+    const r = await optimizeStorageLP(tomorrow.prices, { ...spec, socEnd: 0 }, { terminalValue: tv });
+    const vAt = (e: number) => {
+      let left = e, v = 0;
+      for (const s of tv) { const x = Math.min(left, s.mwh); v += x * s.value; left -= x; }
+      return v;
+    };
+    const e0 = (spec.socInit ?? 0.5) * spec.capacityMWh;
+    const eT = r.soc[r.soc.length - 1] * spec.capacityMWh;
+    const cash = r.revenue - r.degradation;
+    publishedTomorrow = {
+      date: tomorrow.date,
+      valueRS: cash + vAt(eT) - vAt(e0),
+      cashRS: cash,
+      endSoc: r.soc[r.soc.length - 1],
+      spreadRS: Math.max(...tomorrow.prices) - Math.min(...tomorrow.prices),
+      schedule: tomorrow.prices.map((price, h) => ({ h, price, mw: r.dischargeMW[h] - r.chargeMW[h], soc: r.soc[h] })),
+    };
   }
+  const total = lp.value + extrinsic;
   return {
     spec,
-    horizonHours: prices.length,
-    intrinsicRS: dp.value,
-    lsmcRS: lsmc.value,
-    lsmcStdErr: lsmc.stdErr,
-    extrinsicRS: lsmc.value - dp.value,
-    perfectForesightRS: lsmc.perfectForesight,
-    risk: riskMetrics(lsmc.pnl),
-    schedule: dp.schedule.slice(0, 72).map((s, i) => ({ ts: fc.horizon.ts[i], price: s.price, mw: s.gridMW, soc: s.soc })),
+    horizonHours: curve.length,
+    intrinsicRS: lp.value,
+    lsmcRS: total,
+    lsmcStdErr: stdErr,
+    extrinsicRS: extrinsic,
+    perfectForesightRS: Math.max(pf, total),
+    risk: riskMetrics(pnl),
+    schedule: curve.slice(0, 72).map((price, i) => ({ ts: fc.horizon.ts[i], price, mw: lp.dischargeMW[i] - lp.chargeMW[i], soc: lp.soc[i] })),
     publishedTomorrow,
-    perMWDayRS: lsmc.value / spec.powerMW / (prices.length / 24),
-    pnlHistogram: histogram(lsmc.pnl),
+    perMWDayRS: total / spec.powerMW / (curve.length / 24),
+    pnlHistogram: histogram(pnl),
+    solver: `HiGHS ${lp.mip ? "MILP" : "LP"} (exato) + LSMC em grade`,
   };
 }
 
 // ---------------------------------------------------------------------------
 // 3) Europa — bateria 1 MW/2 MWh por zona e valor de congestionamento (FTR)
 // ---------------------------------------------------------------------------
+// dia de entrega do SDAC no horário de Bruxelas (CET/CEST — muda no horário de verão)
+const cetDay = new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Brussels", year: "numeric", month: "2-digit", day: "2-digit" });
+
 function lastFullDay(ts: number[], values: number[]) {
   const byDay = new Map<string, { ts: number[]; v: number[] }>();
   ts.forEach((t, i) => {
-    const d = new Date(t + 3600_000).toISOString().slice(0, 10); // ≈ dia de entrega CET
+    const d = cetDay.format(t);
     const e = byDay.get(d) ?? { ts: [], v: [] };
     e.ts.push(t);
     e.v.push(values[i]);
     byDay.set(d, e);
   });
-  const full = [...byDay.entries()].filter(([, e]) => e.v.length >= 23).sort(([a], [b]) => a.localeCompare(b));
+  const hoursOf = (e: { ts: number[] }) => (e.ts.length > 1 ? (e.ts.length * (e.ts[1] - e.ts[0])) / 3600_000 : 0);
+  const full = [...byDay.entries()].filter(([, e]) => hoursOf(e) >= 23).sort(([a], [b]) => a.localeCompare(b));
   const last = full[full.length - 1];
   return last ? { date: last[0], ...last[1] } : null;
 }
@@ -162,13 +232,14 @@ export interface EuZoneArb {
   resolutionMin: number;
 }
 
-export function euBattery(zones: ZonePrices): EuZoneArb[] {
+/** Bateria 1 MW / 2 MWh por zona no último dia completo — ótimo exato (MILP se houver preço negativo). */
+export async function euBattery(zones: ZonePrices): Promise<EuZoneArb[]> {
   const out: EuZoneArb[] = [];
   for (const [bzn, z] of Object.entries(zones)) {
     const day = lastFullDay(z.ts, z.values);
     if (!day) continue;
     const dtH = day.ts.length > 1 ? (day.ts[1] - day.ts[0]) / 3600_000 : 1;
-    const r = optimizeStorageDP(day.v, { capacityMWh: 2, powerMW: 1, etaCharge: 0.95, etaDischarge: 0.95, dtHours: dtH, socInit: 0, socEnd: 0, degradationCost: 5 });
+    const r = await optimizeStorageLP(day.v, { capacityMWh: 2, powerMW: 1, etaCharge: 0.95, etaDischarge: 0.95, dtHours: dtH, socInit: 0, socEnd: 0, degradationCost: 5 });
     out.push({
       bzn,
       name: z.name,

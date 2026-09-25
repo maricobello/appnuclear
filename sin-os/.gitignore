@@ -43,3 +43,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# dados baixados para a avaliação em dados reais (npm run eval:real)
+/data

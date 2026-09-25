@@ -1,4 +1,4 @@
-import { quantile, std } from "./stats";
+import { mulberry32, quantile, std } from "./stats";
 
 /**
  * HMM gaussiano univariado com K regimes, estimado por EM (Baum–Welch)
@@ -28,25 +28,38 @@ function logNorm(x: number, m: number, s: number): number {
   return -0.5 * (LOG2PI + 2 * Math.log(s) + z * z);
 }
 
-export function fitHmm(y: number[], k = 3, maxIter = 200, tol = 1e-6): HmmResult {
+interface EmState {
+  means: number[];
+  sds: number[];
+  A: number[][];
+  pi: number[];
+  alpha: number[][];
+  gamma: number[][];
+  logLik: number;
+  it: number;
+}
+
+/** Baum–Welch a partir de um chute de médias/desvios (emissões escalonadas em log). */
+function em(y: number[], k: number, initMeans: number[], initSds: number[], maxIter: number, tol: number, minSd: number): EmState {
   const T = y.length;
-  if (T < 10 * k) throw new Error("série curta demais para HMM");
-  // inicialização por quantis (estados ordenados por média)
-  let means = Array.from({ length: k }, (_, i) => quantile(y, (i + 0.5) / k));
-  const s0 = std(y) || 1;
-  let sds = new Array(k).fill(s0 / k + 1e-6);
+  let means = initMeans.slice();
+  let sds = initSds.slice();
   let A = Array.from({ length: k }, (_, i) => Array.from({ length: k }, (_, j) => (i === j ? 0.9 : 0.1 / (k - 1))));
   let pi = new Array(k).fill(1 / k);
-
   let alpha: number[][] = [];
   let beta: number[][] = [];
   let gamma: number[][] = [];
   let logLik = -Infinity;
   let it = 0;
-  const minSd = Math.max(1e-6, s0 * 1e-3);
 
   for (; it < maxIter; it++) {
-    const B = y.map((v) => means.map((m, j) => Math.exp(logNorm(v, m, sds[j]))));
+    // B_tj = exp(ℓ_tj − m_t): escalonar pelo máximo evita underflow em observações extremas
+    const shift = new Array<number>(T);
+    const B = y.map((v, t) => {
+      const l = means.map((m, j) => logNorm(v, m, sds[j]));
+      shift[t] = Math.max(...l);
+      return l.map((x) => Math.exp(x - shift[t]));
+    });
     // forward escalonado
     alpha = [];
     const c = new Array<number>(T);
@@ -78,7 +91,7 @@ export function fitHmm(y: number[], k = 3, maxIter = 200, tol = 1e-6): HmmResult
       }
       beta[t] = bt;
     }
-    const newLL = c.reduce((s, v) => s + Math.log(v), 0);
+    const newLL = c.reduce((s, v, t) => s + Math.log(v) + shift[t], 0);
     gamma = alpha.map((a, t) => {
       const g = a.map((v, j) => v * beta[t][j]);
       const z = g.reduce((s, v) => s + v, 0) || 1e-300;
@@ -114,6 +127,52 @@ export function fitHmm(y: number[], k = 3, maxIter = 200, tol = 1e-6): HmmResult
     if (Math.abs(newLL - logLik) < tol * Math.abs(newLL)) { logLik = newLL; break; }
     logLik = newLL;
   }
+  return { means, sds, A, pi, alpha, gamma, logLik, it };
+}
+
+/** k-means 1-D (Lloyd) — um dos pontos de partida do EM. */
+function kmeans1d(y: number[], k: number): { means: number[]; sds: number[] } {
+  let c = Array.from({ length: k }, (_, i) => quantile(y, (i + 0.5) / k));
+  let lab = new Array<number>(y.length).fill(0);
+  for (let it = 0; it < 50; it++) {
+    lab = y.map((v) => c.reduce((best, m, j) => (Math.abs(v - m) < Math.abs(v - c[best]) ? j : best), 0));
+    const next = c.map((m, j) => {
+      const pts = y.filter((_, t) => lab[t] === j);
+      return pts.length ? pts.reduce((s, v) => s + v, 0) / pts.length : m;
+    });
+    if (next.every((m, j) => Math.abs(m - c[j]) < 1e-10)) break;
+    c = next;
+  }
+  const sds = c.map((m, j) => std(y.filter((_, t) => lab[t] === j)) || std(y) / k || 1);
+  return { means: c, sds };
+}
+
+/**
+ * EM converge para ótimos locais: roda a partir de vários pontos (quantis, k-means e
+ * sorteios reprodutíveis) e fica com a maior verossimilhança.
+ */
+export function fitHmm(y: number[], k = 3, maxIter = 200, tol = 1e-6, restarts = 6): HmmResult {
+  const T = y.length;
+  if (T < 10 * k) throw new Error("série curta demais para HMM");
+  const s0 = std(y) || 1;
+  const minSd = Math.max(1e-6, s0 * 1e-3);
+  const inits: { means: number[]; sds: number[] }[] = [
+    { means: Array.from({ length: k }, (_, i) => quantile(y, (i + 0.5) / k)), sds: new Array(k).fill(s0 / k + 1e-6) },
+    kmeans1d(y, k),
+  ];
+  const rnd = mulberry32(1989);
+  for (let r = 0; r < restarts; r++) {
+    const qs = Array.from({ length: k }, () => rnd()).sort((a, b) => a - b);
+    inits.push({ means: qs.map((q) => quantile(y, q)), sds: Array.from({ length: k }, () => s0 * (0.2 + rnd())) });
+  }
+  let bestFit: EmState | null = null;
+  for (const init of inits) {
+    const fit = em(y, k, init.means, init.sds, maxIter, tol, minSd);
+    if (Number.isFinite(fit.logLik) && (!bestFit || fit.logLik > bestFit.logLik)) bestFit = fit;
+  }
+  if (!bestFit) throw new Error("HMM não convergiu");
+  let { means, sds, A, pi } = bestFit;
+  const { alpha, gamma, logLik, it } = bestFit;
 
   // ordenar estados pela média (0 = mais baixo)
   const order = means.map((m, i) => [m, i] as const).sort((a, b) => a[0] - b[0]).map(([, i]) => i);

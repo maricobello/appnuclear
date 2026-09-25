@@ -90,7 +90,7 @@ export default function PrevisaoPage() {
         <Stat label="rMAE vs ingênuo semanal" value={num(bt?.rmae, 3)} delta={bt ? (bt.rmae < 1 ? "supera o benchmark" : "não supera o benchmark") : null} deltaGood={bt ? bt.rmae < 1 : null} />
         <Stat label="Teste Diebold–Mariano" value={bt ? `p = ${num(bt.dm.pValue, 3)}` : "—"} delta={bt ? (bt.dm.pValue < 0.05 ? "ganho significativo (5%)" : "sem significância a 5%") : null} deltaGood={bt ? bt.dm.pValue < 0.05 : null} />
         <Stat label="Cobertura ACI (alvo 90%)" value={pct(bt ? 100 * bt.aci.coverage : null, 1)} hint={bt ? `Kupiec p = ${num(bt.aci.kupiecP, 3)} · ±${brl(bt.aci.halfWidth, 0)}` : undefined} />
-        <Stat label="CRPS (QRA)" value={num(bt?.qraCrps, 2)} unit="R$/MWh" hint="menor é melhor" />
+        <Stat label="CRPS QRA (fora da amostra)" value={num(bt?.qraCrps, 2)} unit="R$/MWh" hint={bt ? `cobertura 5–95%: ${pct(100 * bt.qraCoverage90, 0)} (alvo 90%) · menor é melhor` : undefined} />
         <Stat label="sMAPE" value={pct(bt?.smape, 1)} hint={bt ? `RMSE ${num(bt.rmse, 1)}` : undefined} />
       </div>
 
@@ -125,7 +125,7 @@ export default function PrevisaoPage() {
           {gar ? <EChart option={gar} height={200} label="Volatilidade projetada" /> : <p className="text-xs text-muted">Sem variação suficiente para estimar (preço no piso/teto).</p>}
           {f?.garch ? <p className="mt-2 text-[11px] text-muted">α = {num(f.garch.alpha, 3)} · β = {num(f.garch.beta, 3)} · n = {f.garch.n} dias</p> : null}
         </Panel>
-        <Panel title="Dinâmica estocástica — MRJD" subtitle="Reversão à média com saltos (Cartea–Figueroa) nos desvios da sazonalidade, espaço asinh">
+        <Panel title="Dinâmica estocástica — MRJD" subtitle={`Reversão à média com saltos (Cartea–Figueroa) calibrada nos ${f?.mrjd?.calibratedOn ?? "resíduos do LEAR"}, espaço asinh`}>
           {f?.mrjd ? (
             <Table
               head={["Parâmetro", "Valor", "Leitura"]}
@@ -142,7 +142,13 @@ export default function PrevisaoPage() {
           ) : (
             <Loading height={160} />
           )}
-          {f ? <p className="mt-2 text-[11px] text-muted">LEAR: {num(f.lear.activeFeatures, 1)} regressores ativos em média (de 103) · janela {f.lear.calibrationDays} dias</p> : null}
+          {f ? <p className="mt-2 text-[11px] text-muted">LEAR: {num(f.lear.activeFeatures, 1)} regressores ativos em média (de 103) · janela {f.lear.calibrationDays} dias · asinh-median por hora</p> : null}
+          {f?.backtest.horizonErrors.length ? (
+            <p className="mt-1 text-[11px] text-muted">
+              Erro fora da amostra por horizonte (MAE, R$/MWh):{" "}
+              {f.backtest.horizonErrors.map((h) => `D+${h.day} ${h.mae === null ? "—" : num(h.mae, 0)}`).join(" · ")} — a banda de cada dia é alargada nessa proporção (×{f.backtest.horizonErrors.map((h) => num(h.spread, 2)).join(" / ×")}).
+            </p>
+          ) : null}
         </Panel>
       </div>
 

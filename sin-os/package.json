@@ -8,13 +8,15 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "eval:real": "node scripts/fetch-ons.mjs && REAL=1 vitest run tests/real --reporter=verbose --silent=false"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.128.0",
     "echarts": "^6.1.0",
     "firebase-admin": "^14.5.0",
     "geist": "^1.7.2",
+    "highs": "^1.15.3",
     "lucide-react": "^1.48.0",
     "next": "16.3.6",
     "react": "19.2.8",
@@ -30,6 +32,7 @@
     "@types/react-dom": "^19",
     "eslint": "^9",
     "eslint-config-next": "16.3.6",
+    "hyparquet": "^1.31.1",
     "tailwindcss": "^4",
     "typescript": "^5",
     "vitest": "^5.0.1"

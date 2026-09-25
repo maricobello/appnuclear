@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { mean } from "../src/lib/quant/stats";
 import { buildForecast } from "../src/lib/market/forecast";
 import { bessArbitrage, euBattery, euBorders, globalLens, submarketSpreads } from "../src/lib/market/arbitrage";
 import { PLD_LIMITS, pldFromCmo, toDayMatrix } from "../src/lib/market/brazil";
@@ -20,7 +21,7 @@ describe("pipeline completo sobre dados simulados", () => {
     }
   });
 
-  it("previsão: LEAR + ACI + QRA + MC + HMM + GARCH", () => {
+  it("previsão: LEAR + ACI + QRA + MC + HMM + GARCH", async () => {
     const t0 = Date.now();
     const fc = buildForecast(pld, "SE", 7, 400);
     const ms = Date.now() - t0;
@@ -33,17 +34,27 @@ describe("pipeline completo sobre dados simulados", () => {
     expect(fc.paths.length).toBe(400);
     expect(ms).toBeLessThan(20_000);
 
-    const bess = bessArbitrage(fc);
+    // teto estrutural: nenhum dia previsto (LEAR) nem simulado (MRJD) acima da média permitida
+    for (let k = 0; k < 7; k++) {
+      expect(mean(fc.horizon.lear.slice(24 * k, 24 * k + 24))).toBeLessThanOrEqual(PLD_LIMITS.maxStructural + 0.01);
+      expect(fc.paths.every((p) => mean(p.slice(24 * k, 24 * k + 24)) <= PLD_LIMITS.maxStructural + 1e-6)).toBe(true);
+    }
+    expect(fc.backtest.qraCoverage90).toBeGreaterThan(0.5);
+
+    const bess = await bessArbitrage(fc);
     expect(bess.intrinsicRS).toBeGreaterThan(0);
-    expect(bess.perfectForesightRS).toBeGreaterThanOrEqual(bess.intrinsicRS - 1e-6);
+    // mesma curva e mesma distribuição: intrínseco ≤ com opcionalidade ≤ informação perfeita
+    expect(bess.lsmcRS).toBeGreaterThanOrEqual(bess.intrinsicRS - 1e-6);
+    expect(bess.perfectForesightRS).toBeGreaterThanOrEqual(bess.lsmcRS - 1e-6);
+    expect(bess.extrinsicRS).toBeLessThan(0.5 * bess.intrinsicRS);
     expect(bess.risk.cvar95).toBeGreaterThanOrEqual(bess.risk.var95 - 1e-6);
   });
 
-  it("spreads entre submercados, bateria europeia, fronteiras e lente global", () => {
+  it("spreads entre submercados, bateria europeia, fronteiras e lente global", async () => {
     const spreads = submarketSpreads(pld, 30);
     expect(spreads).toHaveLength(6);
     const eu = simEu(7);
-    const bat = euBattery(eu);
+    const bat = await euBattery(eu);
     expect(bat.length).toBeGreaterThan(5);
     expect(bat[0].bessEurPerMWDay).toBeGreaterThan(0);
     expect(euBorders(eu).length).toBeGreaterThan(3);
@@ -91,5 +102,22 @@ describe("PLD pela regra da ANEEL a partir do CMO", () => {
   it("aplica o piso e não mexe em dias incompletos além do teto horário", () => {
     expect(pld.slice(24, 48).every((v) => v === min)).toBe(true);
     expect(pld.slice(48).every((v) => v === maxHourly)).toBe(true);
+  });
+});
+
+describe("lacunas de dias inteiros na fonte (ONS)", () => {
+  it("interpola até 3 dias ausentes, marca como imputados e quebra a série em lacunas maiores", () => {
+    const mk = (days: number[]) => {
+      const ts = days.flatMap((d) => Array.from({ length: 24 }, (_, h) => brtToUtc(2026, 9, d, h)));
+      return { ts, unit: "R$/MWh", values: Object.fromEntries(SUBS.map((s) => [s, ts.map((t) => 100 + (t % 7))])) } as SubPanel;
+    };
+    const dm = toDayMatrix(mk([1, 2, 3, 5, 6, 7, 8]), "SE"); // falta o dia 4
+    expect(dm.dates).toHaveLength(8);
+    expect(dm.imputed).toEqual(["2026-09-04"]);
+    const row = dm.rows[3];
+    row.forEach((v, h) => expect(v).toBeCloseTo((dm.rows[2][h] + dm.rows[4][h]) / 2, 9));
+    const broken = toDayMatrix(mk([1, 2, 3, 8, 9, 10]), "SE"); // 4 dias ausentes
+    expect(broken.dates[0]).toBe("2026-09-08");
+    expect(broken.imputed).toEqual([]);
   });
 });

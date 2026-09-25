@@ -3,8 +3,8 @@ import { chi2Cdf, mulberry32, normCdf, normInv, quantile, randn, tCdf } from "..
 import { lassoIC } from "../src/lib/quant/lasso";
 import { lassoLarsIC } from "../src/lib/quant/lars";
 import { learBacktest } from "../src/lib/quant/lear";
-import { mae } from "../src/lib/quant/metrics";
-import { adaptiveConformal } from "../src/lib/quant/conformal";
+import { crpsFromQuantiles, mae } from "../src/lib/quant/metrics";
+import { adaptiveConformal, conformalQuantile } from "../src/lib/quant/conformal";
 import { quantileRegression } from "../src/lib/quant/qra";
 import { fitHmm } from "../src/lib/quant/hmm";
 import { fitGarch } from "../src/lib/quant/garch";
@@ -263,5 +263,64 @@ describe("Testes de previsão e risco", () => {
     const m = riskMetrics(pnl);
     expect(m.cvar95).toBeGreaterThan(m.var95);
     expect(m.var95).toBeCloseTo(-10 + 1.645 * 20, 0);
+  });
+});
+
+describe("correções da auditoria matemática", () => {
+  it("quantil conformal = estatística de ordem ⌈(n+1)(1−α)⌉; +∞ quando k > n", () => {
+    const s = Array.from({ length: 19 }, (_, i) => i + 1); // 1..19
+    expect(conformalQuantile(s, 0.1)).toBe(18); // k = ⌈20·0.9⌉ = 18
+    expect(conformalQuantile(s.slice(0, 5), 0.1)).toBe(Infinity); // k = 6 > 5
+  });
+
+  it("ACI em blocos de 24 h: α e o quantil só mudam entre blocos", () => {
+    const rnd = mulberry32(3);
+    const r = Array.from({ length: 24 * 30 }, () => randn(rnd));
+    const res = adaptiveConformal(r, 0.1, 0.01, 168, 24);
+    expect(res.evaluated % 24).toBe(0);
+    expect(res.violations).toBe(Math.round(res.evaluated * (1 - res.empiricalCoverage)));
+    expect(res.empiricalCoverage).toBeGreaterThan(0.8);
+  });
+
+  it("CRPS por quantis (trapézio) ≈ CRPS analítico da normal; média simples subestima", () => {
+    // previsão N(0,1) calibrada ⇒ E[CRPS] = 1/√π (Gneiting & Raftery, 2007)
+    const taus = [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
+    const qs = taus.map(normInv);
+    const rnd = mulberry32(7);
+    const ys = Array.from({ length: 20000 }, () => randn(rnd));
+    const trap = ys.reduce((s, y) => s + crpsFromQuantiles(y, qs, taus), 0) / ys.length;
+    const naive = ys.reduce((s, y) => s + (2 * taus.reduce((a, t, i) => a + (y - qs[i] >= 0 ? t : t - 1) * (y - qs[i]), 0)) / taus.length, 0) / ys.length;
+    const exact = 1 / Math.sqrt(Math.PI);
+    expect(Math.abs(trap - exact) / exact).toBeLessThan(0.06);
+    expect(Math.abs(naive - exact) / exact).toBeGreaterThan(0.15);
+  });
+
+  it("valor crítico de Engle–Granger 1% (MacKinnon 2010, N=2): β₂ = −33.527", () => {
+    expect(mackinnonCrit(100, 2)["1%"]).toBeCloseTo(-3.89644 - 10.9519 / 100 - 33.527 / 1e4, 10);
+  });
+
+  it("grade de SoC representa a potência nominal de carga e descarga (erro < 1%)", () => {
+    const spec = { capacityMWh: 120, powerMW: 30, etaCharge: 0.938, etaDischarge: 0.938, socInit: 0.5 };
+    // 2 h baratas / 2 h caras: só dá para aproveitar tudo carregando e descarregando na potência máxima
+    const prices = Array.from({ length: 48 }, (_, t) => (t % 4 < 2 ? 10 : 900));
+    const r = optimizeStorageDP(prices, spec);
+    const mw = r.schedule.map((s) => s.gridMW);
+    expect(Math.max(...mw)).toBeGreaterThan(0.99 * 30);
+    expect(Math.max(...mw)).toBeLessThanOrEqual(30 + 1e-9);
+    expect(Math.min(...mw)).toBeGreaterThanOrEqual(-30 - 1e-9);
+    expect(Math.min(...mw)).toBeLessThan(-0.99 * 30);
+  });
+
+  it("HMM com vários pontos de partida acha o ótimo global em regimes de variâncias distintas", () => {
+    const rnd = mulberry32(11);
+    const y: number[] = [];
+    let s = 0;
+    const mu = [0, 3, 10], sd = [0.3, 2.5, 0.5];
+    for (let t = 0; t < 1500; t++) {
+      if (rnd() < 0.03) s = Math.floor(rnd() * 3);
+      y.push(mu[s] + sd[s] * randn(rnd));
+    }
+    const fit = fitHmm(y, 3);
+    fit.means.forEach((m, i) => expect(Math.abs(m - mu[i])).toBeLessThan(0.6));
   });
 });

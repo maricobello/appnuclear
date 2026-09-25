@@ -1,3 +1,5 @@
+> **Espelho** do repositório principal [maricobello/sinos](https://github.com/maricobello/sinos) — é de lá que a Vercel publica https://sinos-iota.vercel.app. Os workflows em `sin-os/.github/` só rodam no repositório principal.
+
 # SIN OS — terminal de arbitragem e previsão do setor elétrico
 
 Terminal web (Next.js 16, pronto para a Vercel) que junta **APIs públicas do setor de energia**, **modelos
@@ -61,13 +63,62 @@ mostra — o auditor exibe os dois na tela **Agente auditor**.
 | GARCH(1,1) | Bollerslev (1986) | [arch](https://github.com/bashtage/arch) |
 | ADF, Engle–Granger, meia-vida | MacKinnon (2010); Engle & Granger (1987) | statsmodels |
 | Diebold–Mariano, Kupiec, CRPS | DM (1995), HLN (1997), Gneiting & Raftery (2007) | epftoolbox |
-| Armazenamento: DP + LSMC | Longstaff & Schwartz (2001); Boogert & de Jong (2008) | QuantLib |
+| Armazenamento: LP/MILP exato (HiGHS) + LSMC, rolling intrinsic no D+1 | Huangfu & Hall (2018); Longstaff & Schwartz (2001); Boogert & de Jong (2008) | [ERGO-Code/HiGHS](https://github.com/ERGO-Code/HiGHS), QuantLib |
 | CVaR / Expected Shortfall | Rockafellar & Uryasev (2000) | — |
 
-`npm test` roda 33 testes: recuperação de parâmetros em dados simulados (LASSO/LARS, HMM, GARCH, MRJD,
+`npm test` roda 45 testes: recuperação de parâmetros em dados simulados (LASSO/LARS, HMM, GARCH, MRJD,
 regressão quantílica), valores críticos de MacKinnon, cobertura do conformal, DP contra força bruta,
 LEAR superando o benchmark ingênuo com Diebold–Mariano significativo, contratos de payload de cada API
 e o caminho completo previsão → arbitragem.
+
+### Validação em dados reais (`npm run eval:real`)
+
+O comando baixa do bucket público do ONS o CMO semi-horário (2024–2026) e o CMO semanal do DECOMP,
+converte em PLD pela regra da ANEEL e roda duas avaliações fora da amostra, sem olhar o futuro:
+
+**1. Variantes do LEAR** — 87 dias (28/06–25/09/2026, sem os dias ausentes na fonte), MAE em R$/MWh,
+p-valor de Diebold–Mariano contra a configuração anterior:
+
+| Variante | SE | S | NE | N |
+|---|---|---|---|---|
+| asinh global, janela 90 d (anterior) | 30,79 | 33,25 | 28,44 | 32,05 |
+| **asinh por hora (epftoolbox) — adotada** | **29,72** (p=0,02) | **32,22** (p=0,04) | **28,08** (p=0,21) | **30,90** (p=0,02) |
+| ensemble de janelas 56/84/182/364 d | 29,72 (p=0,08) | 33,21 | 28,41 | 31,83 |
+| + CMO semanal do DECOMP (exógena) | 30,84 | 33,15 (p=0,02) | 28,33 | 32,35 |
+| ingênuo semanal (referência) | 32,02 | 33,36 | 30,67 | 35,28 |
+
+Ensemble de janelas e CMO semanal não trouxeram ganho consistente no D+1 e ficaram de fora. Em
+janelas curtas (ex.: 10 dias) o ingênuo pode ganhar — só amostras longas sustentam conclusões.
+
+**2. Calibração da incerteza** — a previsão completa rodada em 20 datas passadas só com os dados
+disponíveis em cada uma; cobertura das faixas contra o PLD realizado (alvo 90%):
+
+| Horizonte | D+1 | D+2 | D+3 | D+4 | D+5 | D+6 | D+7 |
+|---|---|---|---|---|---|---|---|
+| Banda conformal (SE) | 0,90 | 0,92 | 0,91 | 0,90 | 0,89 | 0,90 | 0,91 |
+| Monte Carlo 5–95% (SE) | 0,90 | 0,89 | 0,90 | 0,91 | 0,89 | 0,90 | 0,89 |
+| Banda conformal (N) | 0,91 | 0,91 | 0,91 | 0,91 | 0,91 | 0,90 | 0,91 |
+| Monte Carlo 5–95% (N) | 0,91 | 0,90 | 0,89 | 0,91 | 0,89 | 0,86 | 0,89 |
+
+Para chegar aí: o erro de cada horizonte é medido num backtest multi-horizonte (em SE o MAE sobe de
+~38 R$/MWh no D+1 para ~61 no D+7) e alarga a banda na proporção medida; o Monte Carlo (MRJD) é
+calibrado nos erros reais do LEAR, com a largura 5–95% casada com a dos resíduos.
+
+### Auditoria matemática (set/2026)
+
+Todos os modelos foram conferidos contra implementações de referência (scikit-learn, statsmodels, arch,
+hmmlearn, scipy): LARS/LASSO, asinh, ADF/Engle–Granger, GARCH, DM, Kupiec e as distribuições batem até
+1e-9. Correções aplicadas a partir dessa auditoria:
+- intrínseco da bateria calculado na curva E[preço] (o LEAR em asinh estima a mediana) — a
+  "opcionalidade" deixou de ser inflada; teto de informação perfeita por LP exato em cada trajetória;
+- teto estrutural do PLD (média diária) aplicado às previsões e às trajetórias de Monte Carlo;
+- grade de SoC que representa a potência nominal de carga e descarga (erro < 1%);
+- ACI avaliado em blocos de 24 h (sem informação do próprio dia) e quantil conformal por estatística de ordem;
+- CRPS pela regra do trapézio e QRA avaliado fora da amostra (com cobertura 5–95%);
+- HMM com vários pontos de partida (evita ótimos locais) e emissões escalonadas em log;
+- dias inteiros ausentes no arquivo do ONS (acontece) preenchidos por interpolação (até 3 dias) e
+  excluídos das métricas — antes a previsão caía por falta de histórico contíguo;
+- valor crítico de 1% de Engle–Granger (MacKinnon 2010) corrigido; dia de entrega europeu em CET/CEST.
 
 ## Agente auditor
 
@@ -83,15 +134,14 @@ e o caminho completo previsão → arbitragem.
 
 ## Deploy na Vercel
 
-1. Coloque o projeto num repositório próprio (veja abaixo) ou use este mesmo repositório.
-2. Em [vercel.com/new](https://vercel.com/new), importe o repositório.
-   - Se o projeto estiver na pasta `sin-os/` de outro repositório, defina **Root Directory = `sin-os`**.
-3. Framework: Next.js (detectado). Não precisa mudar build/output.
-4. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
+1. Em [vercel.com/new](https://vercel.com/new), importe o repositório `maricobello/sinos`.
+2. Framework: Next.js (detectado). Root Directory, build e output ficam no padrão.
+3. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
    `CRON_SECRET`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`.
-5. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.
-6. Abra **Agente auditor → Rodar auditoria** para a primeira execução.
-7. A auditoria a cada 15 min roda pelo GitHub Actions contra a produção. Se criar `CRON_SECRET` na Vercel,
+   Dá para adicionar depois e fazer redeploy.
+4. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.
+5. Abra **Agente auditor → Rodar auditoria** para a primeira execução.
+6. A auditoria a cada 15 min roda pelo GitHub Actions contra a produção. Se criar `CRON_SECRET` na Vercel,
    cadastre o mesmo valor como segredo `CRON_SECRET` no GitHub (e `SIN_OS_URL` se mudar o domínio).
 
 ## Firebase (Firestore) — passo a passo
@@ -110,6 +160,12 @@ Coleções criadas: `audit_runs`, `agent_reports`, `pld_days` (histórico própr
 também usado como fallback se a CCEE cair) e `eu_prices` (último download de cada zona europeia). O plano gratuito (Spark) cobre com folga: 50 mil leituras e
 20 mil gravações por dia, 1 GiB de armazenamento; auditoria a cada 15 min grava ~100 documentos/dia.
 
+### Firebase MCP (Claude Code)
+
+O repositório traz `.mcp.json` com o servidor MCP oficial do Firebase (`firebase-tools mcp`).
+Na sua máquina, rode `npx firebase-tools@latest login` uma vez; ao abrir o Claude Code nesta pasta,
+aprove o servidor `firebase` e o Claude passa a criar/consultar projeto, Firestore e regras direto.
+
 ### Firebase × Supabase
 
 | | Firebase (Firestore) | Supabase |
@@ -126,14 +182,6 @@ Para este app o Firebase atende bem: o volume é pequeno, o acesso é só pelo s
 Se no futuro quiser SQL para backtests pesados, dá para pausar um dos projetos do Supabase ou trocar a
 camada `src/lib/store.ts` (é o único arquivo que fala com o banco).
 
-## Mover para um repositório próprio
-
-```bash
-# a partir do repositório atual
-git subtree split --prefix sin-os -b sin-os-only
-git push git@github.com:<usuario>/sin-os.git sin-os-only:main
-```
-
 ## Desenvolvimento
 
 ```bash
@@ -141,6 +189,7 @@ npm install
 cp .env.example .env.local   # opcional
 npm run dev                  # http://localhost:3000
 npm test && npm run lint && npm run typecheck && npm run build
+npm run eval:real            # avaliação em dados reais do ONS (baixa ~7 MB; alguns minutos)
 DATA_MODE=demo npm run dev   # tudo simulado (sem internet)
 ```
 

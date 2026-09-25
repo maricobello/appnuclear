@@ -40,19 +40,34 @@ interface Grid {
 }
 
 /**
- * Grade de SoC: por padrão escolhe ΔE ≈ (P·dt·η_c)/4 para que a potência máxima seja
- * representada por ~4 passos da grade (erro de discretização < 5%).
+ * Grade de SoC: escolhe o menor N (8…120) em que a potência nominal de carga
+ * (P·Δt·η_c por passo) e de descarga (P·Δt/η_d) caibam em múltiplos inteiros de ΔE com
+ * erro < 1% — senão fica com o N de menor erro. Arredondar para baixo garante que a
+ * grade nunca exceda a potência. O despacho exato (sem grade) está em bess.ts (LP).
  */
 function grid(spec: StorageSpec): Grid {
   const dt = spec.dtHours ?? 1;
-  const auto = Math.round(spec.capacityMWh / ((spec.powerMW * dt * spec.etaCharge) / 4));
-  const N = spec.levels ?? Math.min(60, Math.max(8, auto));
+  const eUp = spec.powerMW * dt * spec.etaCharge;
+  const eDn = (spec.powerMW * dt) / spec.etaDischarge;
+  let N = spec.levels ?? 0;
+  if (!N) {
+    let best = Infinity;
+    for (let n = 8; n <= 120; n++) {
+      const d = spec.capacityMWh / n;
+      const err = Math.max(
+        Math.abs(Math.floor(eUp / d + 1e-9) * d - eUp) / eUp,
+        Math.abs(Math.floor(eDn / d + 1e-9) * d - eDn) / eDn,
+      );
+      if (err < best - 1e-12) { best = err; N = n; }
+      if (err < 0.01) break;
+    }
+  }
   const dE = spec.capacityMWh / N;
   return {
     N,
     dE,
-    kUp: Math.max(1, Math.floor((spec.powerMW * dt * spec.etaCharge) / dE + 0.05)),
-    kDown: Math.max(1, Math.floor((spec.powerMW * dt) / (spec.etaDischarge * dE) + 0.05)),
+    kUp: Math.max(1, Math.floor(eUp / dE + 1e-9)),
+    kDown: Math.max(1, Math.floor(eDn / dE + 1e-9)),
     i0: Math.round((spec.socInit ?? 0.5) * N),
     iEnd: Math.round((spec.socEnd ?? spec.socInit ?? 0.5) * N),
     deg: spec.degradationCost ?? 0,

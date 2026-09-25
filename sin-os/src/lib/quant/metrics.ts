@@ -36,11 +36,17 @@ export function pinball(y: number, q: number, tau: number): number {
 }
 
 /**
- * CRPS aproximado por uma grade de quantis: CRPS ≈ 2·mean_τ pinball_τ
- * (Gneiting & Raftery, 2007, JASA 102(477)).
+ * CRPS a partir de quantis: CRPS = 2∫₀¹ ρ_τ(y − q_τ) dτ (Gneiting & Raftery, 2007,
+ * JASA 102(477); Laio & Tamea, 2007). A integral é aproximada pela regra do trapézio
+ * sobre a grade de τ (pinball = 0 em τ = 0 e 1) — a média simples de 2·pinball só vale
+ * para τ uniformemente espaçados e subestima o CRPS com grades como 5–95%.
  */
 export function crpsFromQuantiles(y: number, qs: number[], taus: number[]): number {
-  return 2 * mean(taus.map((t, i) => pinball(y, qs[i], t)));
+  const tt = [0, ...taus, 1];
+  const ls = [0, ...taus.map((t, i) => pinball(y, qs[i], t)), 0];
+  let s = 0;
+  for (let i = 1; i < tt.length; i++) s += 0.5 * (ls[i] + ls[i - 1]) * (tt[i] - tt[i - 1]);
+  return 2 * s;
 }
 
 export interface DmResult {

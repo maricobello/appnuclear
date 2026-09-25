@@ -32,9 +32,9 @@ export async function GET(req: Request) {
     const [br, gl, { fc, simulated }] = await Promise.all([getBrazilBundle(), getGlobalBundle(), getForecast(sub)]);
     const key = `arb:${sub}:${fc.generatedAt}:${JSON.stringify(spec)}`;
     const { value } = await cached(key, 15 * 60_000, async () => ({
-      bess: bessArbitrage(fc, spec),
+      bess: await bessArbitrage(fc, spec),
       spreads: br.pld.data ? submarketSpreads(br.pld.data, 30) : [],
-      eu: gl.eu.data ? euBattery(gl.eu.data) : [],
+      eu: gl.eu.data ? await euBattery(gl.eu.data) : [],
       borders: gl.eu.data ? euBorders(gl.eu.data) : [],
       lens: br.pld.data ? globalLens(br.pld.data, gl.eu.data, gl.ukMid.data, gl.fx.data as FxData | null) : [],
     }));

@@ -168,10 +168,10 @@ export default function ArbitragemPage() {
       </div>
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Valor LSMC (7 dias)" value={brl(b?.lsmcRS, 0)} hint={b ? `± ${brl(1.96 * b.lsmcStdErr, 0)} (IC 95%)` : undefined} />
-        <Stat label="Intrínseco (DP na curva P50)" value={brl(b?.intrinsicRS, 0)} />
+        <Stat label="Valor com opcionalidade (7 dias)" value={brl(b?.lsmcRS, 0)} hint={b ? `intrínseco + LSMC · ± ${brl(1.96 * b.lsmcStdErr, 0)} (IC 95%)` : undefined} />
+        <Stat label="Intrínseco (LP exato, curva média)" value={brl(b?.intrinsicRS, 0)} hint={b?.solver} />
         <Stat label="Opcionalidade (extrínseco)" value={brl(b?.extrinsicRS, 0)} delta={b && b.intrinsicRS ? `${signed((100 * b.extrinsicRS) / Math.abs(b.intrinsicRS), 0)}% sobre o intrínseco` : null} />
-        <Stat label="Informação perfeita (teto)" value={brl(b?.perfectForesightRS, 0)} hint="limite superior teórico" />
+        <Stat label="Informação perfeita (teto)" value={brl(b?.perfectForesightRS, 0)} hint="LP exato por trajetória · limite superior" />
         <Stat label="Receita por MW·dia" value={brl(b?.perMWDayRS, 0)} />
         <Stat
           label="P&L médio no pior 5% (CVaR 95%)"
@@ -199,12 +199,12 @@ export default function ArbitragemPage() {
             {histOpt ? <EChart option={histOpt} height={220} label="Distribuição de P&L" /> : <Loading height={220} />}
             {b ? <p className="mt-2 text-[11px] text-muted">P05 {brl(b.risk.p05, 0)} · mediana {brl(b.risk.p50, 0)} · P95 {brl(b.risk.p95, 0)} · média na cauda 5% {brl(-b.risk.cvar95, 0)}</p> : null}
           </Panel>
-          <Panel title="D+1 já publicado" subtitle="Arbitragem com preço conhecido (sem risco de previsão)">
+          <Panel title="D+1 já publicado" subtitle="Despacho exato no preço conhecido; energia que sobra no fim do dia valorizada pela previsão dos dias seguintes">
             {b?.publishedTomorrow ? (
               <div className="flex flex-col gap-1 text-xs">
                 <div className="text-2xl font-semibold text-ink">{brl(b.publishedTomorrow.valueRS, 0)}</div>
                 <div className="text-muted">
-                  {b.publishedTomorrow.date} · spread intradiário {brl(b.publishedTomorrow.spreadRS, 0)}/MWh · ciclo fechando no SoC inicial
+                  {b.publishedTomorrow.date} · caixa do dia {brl(b.publishedTomorrow.cashRS, 0)} · SoC final {pct(100 * b.publishedTomorrow.endSoc, 0)} · spread intradiário {brl(b.publishedTomorrow.spreadRS, 0)}/MWh
                 </div>
               </div>
             ) : (

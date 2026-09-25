@@ -78,12 +78,12 @@ const MODELS: Model[] = [
     validation: "Testes unitários: p-valores nos valores críticos de MacKinnon, continuidade da superfície, distinção passeio aleatório × AR(1), detecção de cointegração.",
   },
   {
-    name: "Armazenamento: DP de Bellman + Least-Squares Monte Carlo",
-    role: "Despacho ótimo de bateria (BESS) e valor da opcionalidade sob incerteza de preço.",
-    math: "V_t(s) = max_{s'} [CF(s→s', p_t) + E(V_{t+1}(s') | p_t)] ; E(·|p_t) ≈ regressão em [1, z, z², z³] ; política avaliada fora da amostra",
-    refs: ["Bellman (1957)", "Longstaff & Schwartz (2001), Review of Financial Studies 14(1)", "Boogert & de Jong (2008), Journal of Derivatives 15(3)"],
-    code: [{ label: "QuantLib (LSMC)", href: "https://github.com/lballabio/QuantLib" }],
-    validation: "Testes unitários: DP = força bruta; intrínseco ≤ LSMC ≤ informação perfeita.",
+    name: "Armazenamento: LP/MILP exato (HiGHS) + Least-Squares Monte Carlo",
+    role: "Despacho ótimo de bateria (BESS), valor da opcionalidade sob incerteza de preço e despacho de D+1 com o SoC final valorizado pela previsão (rolling intrinsic).",
+    math: "max Σ p_t(d_t − c_t)Δt − κ(η_c c_t + d_t/η_d)Δt + V(e_T) s.a. e_t = e_{t−1} + η_c c_tΔt − d_tΔt/η_d, 0 ≤ c,d ≤ P, E_min ≤ e ≤ E_max (binária u_t se p < 0) ; intrínseco na curva E[p] ; extrínseco = LSMC − DP na mesma grade: V_t(s) = max_{s'} [CF + E(V_{t+1}(s') | p_t)]",
+    refs: ["Huangfu & Hall (2018), Math. Programming Computation 10 — HiGHS", "Bellman (1957)", "Longstaff & Schwartz (2001), Review of Financial Studies 14(1)", "Boogert & de Jong (2008), Journal of Derivatives 15(3)"],
+    code: [{ label: "HiGHS", href: "https://github.com/ERGO-Code/HiGHS" }, { label: "highs-js (WASM)", href: "https://github.com/lovasoa/highs-js" }, { label: "QuantLib (LSMC)", href: "https://github.com/lballabio/QuantLib" }],
+    validation: "Testes unitários: LP ≥ DP e converge para ela com grade fina; balanço de energia, potência, SoC, rampa e ciclos respeitados; MILP sem carga/descarga simultâneas com preço negativo; intrínseco ≤ com opcionalidade ≤ informação perfeita (LP por trajetória).",
   },
   {
     name: "Risco: VaR, CVaR (Expected Shortfall) e Ômega",

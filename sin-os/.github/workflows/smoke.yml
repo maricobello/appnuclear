@@ -1,0 +1,46 @@
+name: Smoke test da produção
+
+# Chama todas as rotas de API da produção e falha se alguma responder erro.
+# Roda sob demanda (Actions → Run workflow) e uma vez por dia.
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 12 * * *"
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    env:
+      URL: ${{ vars.SIN_OS_URL || 'https://sinos-iota.vercel.app' }}
+    steps:
+      - name: Rotas de API
+        run: |
+          fail=0
+          for path in "/api/status" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
+                      "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE"; do
+            code=$(curl -s -o body.json -w '%{http_code}' --max-time 120 "$URL$path")
+            echo "== $path → HTTP $code"
+            python3 - "$path" <<'PY' || true
+          import json, sys
+          path = sys.argv[1]
+          try:
+              d = json.load(open("body.json"))
+          except Exception as e:
+              print("   resposta não é JSON:", e); sys.exit(0)
+          if "error" in d and d["error"]:
+              print("   erro:", str(d["error"])[:300])
+          if path.startswith("/api/previsao"):
+              f = d.get("forecast") or d
+              bt = f.get("backtest") or {}
+              print("   backtest dias:", bt.get("days"), "MAE:", bt.get("maeLear"), "rMAE:", bt.get("rmae"), "cobertura ACI:", (bt.get("aci") or {}).get("coverage"))
+              for w in f.get("warnings") or []:
+                  print("   aviso:", w)
+          if path.startswith("/api/arbitragem"):
+              b = d.get("bess") or {}
+              print("   intrínseco:", b.get("intrinsicRS"), "opcionalidade:", b.get("extrinsicRS"), "teto:", b.get("perfectForesightRS"), "solver:", b.get("solver"))
+          if path == "/api/status":
+              print("  ", json.dumps(d)[:400])
+          PY
+            if [ "$code" -ge 400 ]; then fail=1; fi
+          done
+          exit $fail

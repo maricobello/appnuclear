@@ -9,7 +9,7 @@ import { solve, transposeMul, transposeVec, type Matrix } from "./linalg";
  * Computational Statistics 30(3):791–803 — combina previsões pontuais em
  * previsões quantílicas; vencedor de faixas da GEFCom2014.
  */
-export function quantileRegression(X: Matrix, y: number[], tau: number, maxIter = 200, eps = 1e-6): number[] {
+export function quantileRegression(X: Matrix, y: number[], tau: number, maxIter = 1000, eps = 1e-6): number[] {
   const n = X.length;
   const ones = new Array<number>(n).fill(1);
   const X1 = transposeVec(X, ones);
@@ -27,7 +27,7 @@ export function quantileRegression(X: Matrix, y: number[], tau: number, maxIter 
     let delta = 0;
     for (let j = 0; j < beta.length; j++) delta = Math.max(delta, Math.abs(next[j] - beta[j]));
     beta = next;
-    if (delta < 1e-8) break;
+    if (delta < 1e-9) break;
   }
   return beta;
 }
