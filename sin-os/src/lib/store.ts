@@ -2,6 +2,7 @@ import "server-only";
 import type { Firestore } from "firebase-admin/firestore";
 import { clearFirestoreError, firestore, firestoreHealthy, reportFirestoreError } from "./firebase";
 import type { AgentReport, AuditRun } from "./audit/types";
+import { memoryZoneStore, type ZoneSnapshot, type ZoneStore } from "./sources/europe";
 import { SUBS, type Sub } from "./sources/types";
 
 /**
@@ -13,6 +14,8 @@ import { SUBS, type Sub } from "./sources/types";
  *   agent_reports/{id}    relatórios do agente IA
  *   pld_days/{YYYY-MM-DD} PLD horário por submercado — histórico próprio e
  *                         "last known good" se a CCEE ficar fora do ar
+ *   eu_prices/{zona}      último download day-ahead por zona (a API limita a 2 req/min;
+ *                         as instâncias compartilham o que já foi baixado)
  */
 export interface PldDay {
   date: string;
@@ -120,3 +123,15 @@ export async function loadPldDays(n = 120): Promise<PldDay[]> {
 
 export const isCompleteDay = (v: Record<Sub, (number | null)[]>) =>
   SUBS.every((s) => v[s].length === 24 && v[s].every((x) => x !== null && Number.isFinite(x)));
+
+export const euZoneStore: ZoneStore = {
+  load: () =>
+    withDb(
+      async (db) => (await db.collection("eu_prices").get()).docs.map((d) => d.data() as ZoneSnapshot),
+      () => [],
+    ).then(async (fromDb) => (fromDb.length ? fromDb : memoryZoneStore.load())),
+  save: async (z) => {
+    await memoryZoneStore.save(z);
+    await withDb((db) => db.collection("eu_prices").doc(z.bzn).set(z).then(() => undefined), () => undefined);
+  },
+};

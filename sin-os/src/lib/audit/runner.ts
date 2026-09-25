@@ -11,7 +11,7 @@ import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "../sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "../sources/weather";
 import { PLD_FROM_CMO, panelToDays } from "../data";
 import { pldFromCmo } from "../market/brazil";
-import { listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
+import { euZoneStore, listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
 import { auditSource, crossFx, crossPldCmo } from "./checks";
 import type { AuditRun, SourceAudit } from "./types";
 
@@ -24,7 +24,7 @@ export async function probeAll(): Promise<Record<SourceId, SourceResult<unknown>
     fetchEarDaily(30),
     fetchEnaDaily(30),
     fetchLoadHourly(10),
-    fetchEuPrices(3),
+    fetchEuPrices(3, { store: euZoneStore, probe: true }),
     fetchUkMid(2),
     fetchUkSystemPrices(),
     fetchUkCarbon(),
@@ -44,7 +44,7 @@ export async function probeOne(id: SourceId): Promise<SourceResult<unknown>> {
     ons_ear: () => fetchEarDaily(30),
     ons_ena: () => fetchEnaDaily(30),
     ons_carga: () => fetchLoadHourly(10),
-    energy_charts: () => fetchEuPrices(3),
+    energy_charts: () => fetchEuPrices(3, { store: euZoneStore, probe: true }),
     elexon_mid: () => fetchUkMid(2),
     elexon_sysprice: () => fetchUkSystemPrices(),
     uk_carbon: () => fetchUkCarbon(),

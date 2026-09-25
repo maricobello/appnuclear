@@ -78,20 +78,6 @@ export function retryAfterMs(h: string | null, now = Date.now()): number | null 
   return Number.isFinite(ms) ? Math.min(RETRY_AFTER_MAX_MS, Math.max(0, ms)) : null;
 }
 
-/** map com no máximo `limit` tarefas simultâneas (evita 429 em APIs com limite de taxa). */
-export async function mapLimit<T, R>(items: readonly T[], limit: number, fn: (x: T, i: number) => Promise<R>): Promise<R[]> {
-  const out = new Array<R>(items.length);
-  let next = 0;
-  const worker = async () => {
-    while (next < items.length) {
-      const i = next++;
-      out[i] = await fn(items[i], i);
-    }
-  };
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
-  return out;
-}
-
 export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ text: string; probes: Probe[] }> {
   const { timeoutMs = 20_000, retries = 2, headers = {} } = opts;
   const probes: Probe[] = [];

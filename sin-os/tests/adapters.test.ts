@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidate } from "../src/lib/cache";
 import { fetchPldHourly } from "../src/lib/sources/ccee";
 import { fetchCmoHourly, fetchEarDaily } from "../src/lib/sources/ons";
-import { fetchEuPrices } from "../src/lib/sources/europe";
+import { EU_ZONES, fetchEuPrices, resetEcThrottle } from "../src/lib/sources/europe";
 import { fetchUkMid } from "../src/lib/sources/uk";
 import { fetchFx } from "../src/lib/sources/fx";
 import { fetchWeather, HUBS } from "../src/lib/sources/weather";
@@ -10,7 +10,7 @@ import { auditSource, crossPldCmo } from "../src/lib/audit/checks";
 import { SOURCES } from "../src/lib/sources/registry";
 import { brtDate } from "../src/lib/sources/time";
 import { PLD_LIMITS } from "../src/lib/market/brazil";
-import { errorSnippet, fetchJson, mapLimit, retryAfterMs } from "../src/lib/sources/http";
+import { errorSnippet, fetchJson, retryAfterMs } from "../src/lib/sources/http";
 
 /**
  * Contratos dos adaptadores: payloads no formato documentado de cada provedor
@@ -138,9 +138,10 @@ describe("contratos dos adaptadores (fetch mockado)", () => {
   });
 
   it("Energy-Charts, Elexon, BCB e Open-Meteo", async () => {
+    resetEcThrottle();
     const eu = await fetchEuPrices(3);
     expect(eu.ok).toBe(true);
-    expect(Object.keys(eu.data!).length).toBeGreaterThan(5);
+    expect(Object.keys(eu.data!).length).toBe(2);
     const uk = await fetchUkMid(1);
     expect(uk.ok).toBe(true);
     expect(uk.data!.values.length).toBe(48);
@@ -161,6 +162,45 @@ describe("contratos dos adaptadores (fetch mockado)", () => {
     expect(a.status).toBe("down");
     expect(a.error).toContain("403");
     expect(a.error).toContain("atendimento@ccee.org.br");
+  });
+});
+
+describe("Energy-Charts dentro do limite de 2 req/min", () => {
+  const ecCalls = () => vi.mocked(fetch).mock.calls.filter(([u]) => String(u).includes("energy-charts")).length;
+  beforeEach(() => {
+    resetEcThrottle();
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => router(String(input))));
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+    vi.unstubAllGlobals();
+  });
+
+  it("carrega 2 zonas por minuto, guarda e completa as 12 aos poucos", async () => {
+    const first = await fetchEuPrices(7);
+    expect(Object.keys(first.data!)).toHaveLength(2);
+    expect(first.quality.schemaIssues.join()).toContain("10 zona(s) aguardando carga");
+    const again = await fetchEuPrices(7);
+    expect(ecCalls()).toBe(2); // mesma janela de 60 s: nenhuma chamada extra
+    expect(Object.keys(again.data!)).toHaveLength(2);
+    for (let m = 1; m <= 5; m++) {
+      vi.setSystemTime(Date.now() + 61_000);
+      await fetchEuPrices(7);
+    }
+    const all = await fetchEuPrices(7);
+    expect(Object.keys(all.data!)).toHaveLength(EU_ZONES.length);
+    expect(ecCalls()).toBe(EU_ZONES.length);
+    expect(all.quality.schemaIssues).toEqual([]);
+  });
+
+  it("429: não re-tenta e entra em espera", async () => {
+    vi.stubGlobal("fetch", vi.fn(async () => new Response("Too Many Requests", { status: 429 })));
+    const r = await fetchEuPrices(7);
+    expect(r.ok).toBe(false);
+    expect(r.probes).toHaveLength(1);
+    await fetchEuPrices(7);
+    expect(vi.mocked(fetch).mock.calls).toHaveLength(1);
   });
 });
 
@@ -185,18 +225,5 @@ describe("cliente HTTP", () => {
     expect(retryAfterMs("3")).toBe(3000);
     expect(retryAfterMs("600")).toBe(8000);
     expect(retryAfterMs(null)).toBeNull();
-  });
-
-  it("mapLimit respeita o limite de concorrência e a ordem", async () => {
-    let active = 0;
-    let peak = 0;
-    const out = await mapLimit([1, 2, 3, 4, 5, 6, 7], 3, async (x) => {
-      peak = Math.max(peak, ++active);
-      await new Promise((r) => setTimeout(r, 5));
-      active--;
-      return x * 2;
-    });
-    expect(out).toEqual([2, 4, 6, 8, 10, 12, 14]);
-    expect(peak).toBe(3);
   });
 });

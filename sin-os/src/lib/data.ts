@@ -11,7 +11,7 @@ import { brtDate, brtHour } from "./sources/time";
 import { SUBS, type SourceResult, type Sub, type SubPanel } from "./sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "./sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "./sources/weather";
-import { isCompleteDay, loadPldDays, savePldDays, type PldDay } from "./store";
+import { euZoneStore, isCompleteDay, loadPldDays, savePldDays, type PldDay } from "./store";
 
 /**
  * Orquestra as fontes com a política de fallback definida por DATA_MODE:
@@ -125,7 +125,7 @@ export async function getBrazilBundle() {
 export async function getGlobalBundle() {
   const { value } = await cached("bundle:global", TTL, async () => {
     const [eu, ukMid, ukSys, carbon, fx, eia] = await Promise.all([
-      withFallback("energy_charts", () => fetchEuPrices(7), () => sim.simEu(7)),
+      withFallback("energy_charts", () => fetchEuPrices(7, { store: euZoneStore }), () => sim.simEu(7)),
       withFallback("elexon_mid", () => fetchUkMid(7), () => sim.simUkMid(7)),
       withFallback("elexon_sysprice", () => fetchUkSystemPrices(), () => sim.simUkSys()),
       withFallback("uk_carbon", () => fetchUkCarbon(), () => sim.simCarbon()),
