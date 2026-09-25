@@ -32,7 +32,7 @@ Todas gratuitas e sem cadastro, exceto a EIA (chave gratuita, opcional).
 | Fonte | Dados | Uso |
 |---|---|---|
 | **CCEE — Dados Abertos** (CKAN) | PLD horário por submercado | preço de referência, alvo dos modelos |
-| **ONS — Dados Abertos** (CKAN + S3) | CMO semi-horário (DESSEM), EAR, ENA, carga horária | formação do preço, fallback e auditoria do PLD, drivers hidrológicos |
+| **ONS — Dados Abertos** (S3 direto + CKAN) | CMO semi-horário (DESSEM), EAR, ENA, carga horária | formação do preço, fallback e auditoria do PLD, drivers hidrológicos |
 | **Energy-Charts** (Fraunhofer ISE) | preços day-ahead de 12 zonas europeias (limite de 2 req/min: o app atualiza 2 zonas por vez e guarda no Firestore) | arbitragem de bateria e de fronteira |
 | **Elexon BMRS** | Market Index Price e System Buy/Sell Price (GB) | preço de curto prazo e escassez |
 | **NESO Carbon Intensity** | gCO₂/kWh e mix de geração (GB) | contexto de mercado |
@@ -45,9 +45,14 @@ na média diária) **→ histórico no Firestore → simulação sinalizada**. Q
 alerta amarelo na tela.
 
 **CCEE bloqueando o servidor (HTTP 403 "Acesso bloqueado")**: o portal de dados abertos da CCEE recusa
-acessos que não atendem à política de segurança dela — em produção isso acontece com os IPs da Vercel.
-O app não tenta contornar o bloqueio; ele segue com o PLD calculado a partir do CMO e grava esse histórico
-(fonte `ons-cmo`), que é substituído pelo oficial quando a CCEE volta. Para liberar, abra chamado na CCEE
+acessos que não atendem à política de segurança dela — em produção isso acontece com os IPs da nuvem
+(Vercel e também GitHub Actions). O app **não tenta contornar o bloqueio** (sem troca de IP, sem
+navegador forjado, sem burlar o WAF): ele segue com o PLD calculado a partir do **CMO do ONS**, lido
+direto do **bucket público S3 do ONS** (CC-BY, sem bloqueio) com a API CKAN como reserva, e grava esse
+histórico (fonte `ons-cmo`), substituído pelo oficial quando a CCEE é liberada. Para ter o número oficial
+da CCEE de forma legítima: IP fixo (ex.: VM always-free da Oracle Cloud, ou Lightsail ~US$5/mês) + chamado
+pedindo a liberação; ou a Plataforma de Integração CCEE (certificado ICP-Brasil); ou o download manual do
+Painel de Preços. Para liberar, abra chamado na CCEE
 (atendimento@ccee.org.br · 0800 591 4185) informando o código do erro e o IP que a página de bloqueio
 mostra — o auditor exibe os dois na tela **Agente auditor**.
 

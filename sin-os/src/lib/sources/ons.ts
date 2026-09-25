@@ -21,13 +21,8 @@ import {
  * https://dados.ons.org.br
  */
 export const ONS_BASE = "https://dados.ons.org.br/api/3/action";
-
-async function onsYearCsvs(pkg: string, years: number) {
-  const { resources, probes } = await ckanPackage(ONS_BASE, pkg);
-  const csvs = byYearDesc(resources, (r) => /csv/i.test(r.format ?? "") || /\.csv(\?|$)/i.test(r.url));
-  if (!csvs.length) throw new Error(`nenhum CSV anual em ${pkg}`);
-  return { files: csvs.slice(0, years).map((x) => x.r.url), probes };
-}
+/** Bucket público de dados abertos do ONS (CC-BY, sem autenticação, atualizado diariamente). */
+export const ONS_S3 = "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset";
 
 async function loadCsv(url: string, ttlMs: number) {
   const { value } = await cached(`csv:${url}`, ttlMs, async () => {
@@ -35,6 +30,31 @@ async function loadCsv(url: string, ttlMs: number) {
     return { ...parseCsv(text, ";"), probes };
   });
   return value;
+}
+
+/**
+ * Resolve os CSVs anuais de um conjunto do ONS. Quando há mapeamento direto para o S3
+ * (`s3`), lê do bucket público — menos peças e mais estável que a API CKAN — e só cai
+ * para o CKAN se o S3 falhar. Sem mapeamento, usa o CKAN (package_show).
+ */
+async function onsYearCsvs(pkg: string, years: number, ttlMs: number, s3?: { prefix: string; file: string }) {
+  const probes: Probe[] = [];
+  if (s3) {
+    const yr = new Date().getUTCFullYear();
+    const urls = Array.from({ length: years }, (_, k) => `${ONS_S3}/${s3.prefix}/${s3.file}_${yr - k}.csv`);
+    try {
+      const first = await loadCsv(urls[0], ttlMs); // valida e já popula o cache do arquivo mais recente
+      probes.push(...first.probes);
+      return { files: urls, probes };
+    } catch (e) {
+      probes.push(...probesOf(e)); // S3 indisponível → segue para o CKAN
+    }
+  }
+  const { resources, probes: cp } = await ckanPackage(ONS_BASE, pkg);
+  probes.push(...cp);
+  const csvs = byYearDesc(resources, (r) => /csv/i.test(r.format ?? "") || /\.csv(\?|$)/i.test(r.url));
+  if (!csvs.length) throw new Error(`nenhum CSV anual em ${pkg}`);
+  return { files: csvs.slice(0, years).map((x) => x.r.url), probes };
 }
 
 interface Parsed<T> {
@@ -47,9 +67,9 @@ type RowParser = (header: string[]) => {
   parse: (row: string[]) => { sub: Sub; ts: number; values: number[] } | null;
 };
 
-async function loadSeries(pkg: string, years: number, ttlMs: number, parser: RowParser) {
+async function loadSeries(pkg: string, years: number, ttlMs: number, parser: RowParser, s3?: { prefix: string; file: string }) {
   const probes: Probe[] = [];
-  const { files, probes: p0 } = await onsYearCsvs(pkg, years);
+  const { files, probes: p0 } = await onsYearCsvs(pkg, years, ttlMs, s3);
   probes.push(...p0);
   const out: { sub: Sub; ts: number; values: number[] }[] = [];
   const quality = emptyQuality();
@@ -158,6 +178,7 @@ export const fetchCmoHourly = (daysBack = 120) =>
       yearsNeeded(daysBack),
       30 * 60_000,
       subTimeValue([/^din_instante$/, /instante/, /^dat/], [[/^val_cmo$/, /cmo/]]),
+      { prefix: "cmo_tm", file: "CMO_SEMIHORARIO" },
     );
     const p = hourlyPanel(rows, daysBack, "R$/MWh", quality);
     p.quality.range = [-1, 5000];

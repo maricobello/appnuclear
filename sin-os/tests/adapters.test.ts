@@ -60,7 +60,7 @@ function router(url: string): Response {
       { id: "a", name: `${pkg}-2026`, url: `https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/${pkg}_2026.csv`, format: "CSV" },
     ] } });
   }
-  if (url.includes("cmo-semi-horario_2026.csv")) {
+  if (url.includes("CMO_SEMIHORARIO_2026.csv") || url.includes("cmo-semi-horario_2026.csv")) {
     const lines = ["id_subsistema;nom_subsistema;din_instante;val_cmo"];
     days.forEach(({ iso }, di) => {
       for (let h = 0; h < 24; h++) for (const mm of ["00", "30"]) SUBS_ONS.forEach((s, k) => lines.push(`${s};X;${iso} ${String(h).padStart(2, "0")}:${mm}:00;${price(di, h, k).toFixed(2)}`));
@@ -151,6 +151,28 @@ describe("contratos dos adaptadores (fetch mockado)", () => {
     const wx = await fetchWeather();
     expect(wx.ok).toBe(true);
     expect(wx.data!.length).toBe(HUBS.length);
+  });
+
+  it("ONS CMO: lê direto do bucket S3 e cai para o CKAN se o S3 falhar", async () => {
+    const calls: string[] = [];
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => { calls.push(String(input)); return router(String(input)); }));
+    const r = await fetchCmoHourly(30);
+    expect(r.ok).toBe(true);
+    expect(calls.some((u) => u.includes("/cmo_tm/CMO_SEMIHORARIO_2026.csv"))).toBe(true); // S3 direto
+    expect(calls.some((u) => u.includes("package_show"))).toBe(false); // não precisou do CKAN
+
+    invalidate("");
+    calls.length = 0;
+    // S3 fora do ar → precisa cair para o CKAN e ainda assim resolver
+    vi.stubGlobal("fetch", vi.fn(async (input: string | URL) => {
+      const u = String(input);
+      calls.push(u);
+      if (u.includes("CMO_SEMIHORARIO")) return respond("bloqueado", 503);
+      return router(u);
+    }));
+    const r2 = await fetchCmoHourly(30);
+    expect(r2.ok).toBe(true);
+    expect(calls.some((u) => u.includes("package_show"))).toBe(true); // usou o CKAN como fallback
   });
 
   it("auditor detecta HTTP 403 (bloqueio/WAF) sem retentar", async () => {
