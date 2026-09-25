@@ -1,15 +1,18 @@
 import "server-only";
-import { firestore } from "./firebase";
+import type { Firestore } from "firebase-admin/firestore";
+import { clearFirestoreError, firestore, firestoreHealthy, reportFirestoreError } from "./firebase";
 import type { AgentReport, AuditRun } from "./audit/types";
 import { SUBS, type Sub } from "./sources/types";
 
 /**
- * Persistência: Firestore quando configurado; memória do processo como fallback
- * (não durável — a UI avisa). Coleções:
- *   audit_runs/{id}      execuções do auditor (sem séries brutas)
- *   agent_reports/{id}   relatórios do agente IA
+ * Persistência: Firestore quando configurado e saudável; memória do processo como
+ * fallback (não durável — a UI avisa). Uma falha do Firestore (API desativada, banco
+ * inexistente, cota) nunca derruba a rota: a operação cai para a memória e o erro
+ * aparece em /api/status e na tela do auditor. Coleções:
+ *   audit_runs/{id}       execuções do auditor (sem séries brutas)
+ *   agent_reports/{id}    relatórios do agente IA
  *   pld_days/{YYYY-MM-DD} PLD horário por submercado — histórico próprio e
- *                        "last known good" se a CCEE ficar fora do ar
+ *                         "last known good" se a CCEE ficar fora do ar
  */
 export interface PldDay {
   date: string;
@@ -22,67 +25,84 @@ const g = globalThis as typeof globalThis & { __sinMem?: Mem };
 g.__sinMem ??= { runs: [], reports: [], pld: new Map() };
 const mem = g.__sinMem;
 
-export const storageKind = (): "firestore" | "memory" => (firestore() ? "firestore" : "memory");
+async function withDb<T>(op: (db: Firestore) => Promise<T>, fallback: () => T): Promise<T> {
+  const db = firestore();
+  if (!db) return fallback();
+  try {
+    const v = await op(db);
+    clearFirestoreError();
+    return v;
+  } catch (e) {
+    reportFirestoreError(e);
+    return fallback();
+  }
+}
+
+export const storageKind = (): "firestore" | "memory" => (firestoreHealthy() ? "firestore" : "memory");
 
 export async function saveAuditRun(run: AuditRun): Promise<void> {
-  const db = firestore();
-  if (db) await db.collection("audit_runs").doc(run.id).set(run);
   mem.runs.unshift(run);
   mem.runs.splice(200);
+  await withDb((db) => db.collection("audit_runs").doc(run.id).set(run).then(() => undefined), () => undefined);
 }
 
 export async function listAuditRuns(limit = 20): Promise<AuditRun[]> {
-  const db = firestore();
-  if (db) {
-    const snap = await db.collection("audit_runs").orderBy("startedAt", "desc").limit(limit).get();
-    return snap.docs.map((d) => d.data() as AuditRun);
-  }
-  return mem.runs.slice(0, limit);
+  return withDb(
+    async (db) => {
+      const snap = await db.collection("audit_runs").orderBy("startedAt", "desc").limit(limit).get();
+      return snap.docs.map((d) => d.data() as AuditRun);
+    },
+    () => mem.runs.slice(0, limit),
+  );
 }
 
 export async function saveAgentReport(r: AgentReport): Promise<void> {
-  const db = firestore();
-  if (db) await db.collection("agent_reports").doc(r.id).set(r);
   mem.reports.unshift(r);
   mem.reports.splice(50);
+  await withDb((db) => db.collection("agent_reports").doc(r.id).set(r).then(() => undefined), () => undefined);
 }
 
 export async function listAgentReports(limit = 5): Promise<AgentReport[]> {
-  const db = firestore();
-  if (db) {
-    const snap = await db.collection("agent_reports").orderBy("createdAt", "desc").limit(limit).get();
-    return snap.docs.map((d) => d.data() as AgentReport);
-  }
-  return mem.reports.slice(0, limit);
+  return withDb(
+    async (db) => {
+      const snap = await db.collection("agent_reports").orderBy("createdAt", "desc").limit(limit).get();
+      return snap.docs.map((d) => d.data() as AgentReport);
+    },
+    () => mem.reports.slice(0, limit),
+  );
 }
 
 /** Grava dias completos de PLD ainda não persistidos (idempotente). */
 export async function savePldDays(days: PldDay[]): Promise<number> {
-  const db = firestore();
-  let written = 0;
-  if (db) {
-    const refs = days.map((d) => db.collection("pld_days").doc(d.date));
-    const existing = refs.length ? await db.getAll(...refs) : [];
-    const batch = db.batch();
-    existing.forEach((snap, i) => {
-      if (!snap.exists) {
-        batch.set(refs[i], days[i]);
-        written++;
-      }
-    });
-    if (written) await batch.commit();
-  }
   for (const d of days) mem.pld.set(d.date, d);
-  return written;
+  if (!days.length) return 0;
+  return withDb(
+    async (db) => {
+      const refs = days.map((d) => db.collection("pld_days").doc(d.date));
+      const existing = await db.getAll(...refs);
+      const batch = db.batch();
+      let written = 0;
+      existing.forEach((snap, i) => {
+        if (!snap.exists) {
+          batch.set(refs[i], days[i]);
+          written++;
+        }
+      });
+      if (written) await batch.commit();
+      return written;
+    },
+    () => 0,
+  );
 }
 
 export async function loadPldDays(n = 120): Promise<PldDay[]> {
-  const db = firestore();
-  if (db) {
-    const snap = await db.collection("pld_days").orderBy("date", "desc").limit(n).get();
-    return snap.docs.map((d) => d.data() as PldDay).reverse();
-  }
-  return [...mem.pld.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-n);
+  return withDb(
+    async (db) => {
+      const snap = await db.collection("pld_days").orderBy("date", "desc").limit(n).get();
+      return snap.docs.map((d) => d.data() as PldDay).reverse();
+    },
+    () => [...mem.pld.values()].sort((a, b) => a.date.localeCompare(b.date)).slice(-n),
+  );
 }
 
 export const isCompleteDay = (v: Record<Sub, (number | null)[]>) =>

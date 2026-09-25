@@ -29,6 +29,18 @@ function readServiceAccount(): ServiceAccount | null {
 
 let cachedDb: Firestore | null | undefined;
 let initError: string | null = null;
+let opError: { message: string; at: number } | null = null;
+
+/** Registra falha de operação (ex.: API do Firestore desativada, banco inexistente). */
+export function reportFirestoreError(e: unknown) {
+  opError = { message: e instanceof Error ? e.message.slice(0, 300) : String(e), at: Date.now() };
+}
+
+export function clearFirestoreError() {
+  opError = null;
+}
+
+export const firestoreHealthy = () => !!firestore() && !opError;
 
 export function firestore(): Firestore | null {
   if (cachedDb !== undefined) return cachedDb;
@@ -54,6 +66,6 @@ export function firebaseStatus() {
   return {
     configured: !!db,
     projectId: db ? (readServiceAccount()?.projectId ?? null) : null,
-    error: initError,
+    error: initError ?? opError?.message ?? null,
   };
 }
