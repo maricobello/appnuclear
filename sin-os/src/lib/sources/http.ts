@@ -64,10 +64,13 @@ export function errorSnippet(text: string): string {
   const body = clean(
     t.replace(/<head[\s\S]*?<\/head>/i, " ").replace(/<(script|style)[\s\S]*?<\/\1>/gi, " ").replace(/<[^>]+>/g, " "),
   );
-  const code = [...body.matchAll(/(?:error\s*code|c[óo]digo(?:\s+do\s+erro)?)\W{0,3}([\w-]+)/gi)].map((m) => m[1]).find((x) => /\d/.test(x));
+  // códigos de referência de WAF/CDN costumam ter pontos (ex.: 18.5e2b3b17.1727272727.1a2b3c)
+  const code = [...body.matchAll(/(?:error\s*code|c[óo]digo(?:\s+do\s+erro)?|reference)\W{0,3}([\w.#-]+)/gi)]
+    .map((m) => m[1].replace(/\.+$/, ""))
+    .find((x) => /\d/.test(x));
   const ip = /\b(?:\d{1,3}\.){3}\d{1,3}\b/.exec(body)?.[0] ?? /\b(?:[0-9a-f]{1,4}:){3,7}[0-9a-f]{1,4}\b/i.exec(body)?.[0];
   const ids = [code && `Error Code ${code}`, ip && `IP ${ip}`].filter(Boolean).join(" · ");
-  if (ids) return `${title || "HTML"} (${ids})`;
+  if (ids) return `${title || "HTML"} (${ids}) — …${body.slice(-160)}`;
   // sem código/IP reconhecíveis: o fim da página costuma trazer os detalhes
   return title ? `${title} — ${body.length > 250 ? "…" : ""}${body.slice(-250)}` : body.slice(0, 300);
 }

@@ -211,8 +211,8 @@ describe("cliente HTTP", () => {
     const html =
       '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>Acesso bloqueado</title><style>body{font:13px Arial}</style></head>' +
       "<body><h1>Acesso bloqueado</h1><p>Abra um chamado informando o Error Code e o IP exibidos abaixo.</p>" +
-      "<p>Error Code</p><p>a7f3-15815</p><p>IP&nbsp;203.0.113.7</p><script>x()</script></body></html>";
-    expect(errorSnippet(html)).toBe("Acesso bloqueado (Error Code a7f3-15815 · IP 203.0.113.7)");
+      "<p>Error Code: 0.5e2b3b17.1727272727.1a2b3c.</p><p>IP&nbsp;203.0.113.7</p><script>x()</script></body></html>";
+    expect(errorSnippet(html).split(" — ")[0]).toBe("Acesso bloqueado (Error Code 0.5e2b3b17.1727272727.1a2b3c · IP 203.0.113.7)");
     expect(errorSnippet("<html><head><title>Acesso bloqueado</title></head><body>sem detalhes</body></html>")).toBe("Acesso bloqueado — sem detalhes");
     expect(errorSnippet("<html><body><h1>Forbidden</h1></body></html>")).toBe("Forbidden");
     expect(errorSnippet('{"error":"rate"}')).toBe('{"error":"rate"}');
