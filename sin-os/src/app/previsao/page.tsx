@@ -160,6 +160,12 @@ export default function PrevisaoPage() {
               {f.backtest.horizonErrors.map((h) => `D+${h.day} ${h.mae === null ? "—" : num(h.mae, 0)}`).join(" · ")} — a banda de cada dia é alargada nessa proporção (×{f.backtest.horizonErrors.map((h) => num(h.spread, 2)).join(" / ×")}).
             </p>
           ) : null}
+          {f?.backtest.regimeMae ? (
+            <p className="mt-1 text-[11px] text-muted">
+              MAE por regime: no piso {f.backtest.regimeMae.floor === null ? "—" : `${num(f.backtest.regimeMae.floor, 1)} R$/MWh`} · fora do piso{" "}
+              {f.backtest.regimeMae.offFloor === null ? "—" : `${num(f.backtest.regimeMae.offFloor, 1)} R$/MWh`} ({pct(100 * f.backtest.regimeMae.floorShare, 0)} das horas no piso). A banda agora varia por hora do dia (heterocedasticidade pico/fora-de-pico).
+            </p>
+          ) : null}
         </Panel>
       </div>
 

@@ -50,8 +50,9 @@ export interface MrjdParams {
   nJumps: number;
 }
 
-export function calibrateMRJD(x: number[], dt = 1, threshold = 3): MrjdParams {
-  const dx = x.slice(1).map((v, i) => v - x[i]);
+/** Núcleo: calibra o MRJD a partir de transições (from→to) já pareadas. */
+function calibrateFromPairs(from: number[], to: number[], dt: number, threshold: number): MrjdParams {
+  const dx = to.map((v, i) => v - from[i]);
   let isJump = new Array<boolean>(dx.length).fill(false);
   for (let iter = 0; iter < 10; iter++) {
     const clean = dx.filter((_, i) => !isJump[i]);
@@ -65,8 +66,8 @@ export function calibrateMRJD(x: number[], dt = 1, threshold = 3): MrjdParams {
   const Y: number[] = [];
   for (let t = 0; t < dx.length; t++) {
     if (isJump[t]) continue;
-    X.push([1, x[t]]);
-    Y.push(x[t + 1]);
+    X.push([1, from[t]]);
+    Y.push(to[t]);
   }
   const { beta, resid } = ols(X, Y);
   const b = Math.min(0.9999, Math.max(1e-4, beta[1]));
@@ -85,6 +86,22 @@ export function calibrateMRJD(x: number[], dt = 1, threshold = 3): MrjdParams {
     halfLife: Math.log(2) / kappa,
     nJumps: jumps.length,
   };
+}
+
+export function calibrateMRJD(x: number[], dt = 1, threshold = 3): MrjdParams {
+  return calibrateFromPairs(x.slice(0, -1), x.slice(1), dt, threshold);
+}
+
+/**
+ * Como calibrateMRJD, mas em segmentos (ex.: dias): usa só transições DENTRO de cada
+ * segmento, ignorando o salto artificial entre o fim de um segmento e o início do outro
+ * (a fronteira 23h→0h contaminava κ/σ/λ com um "salto" espúrio).
+ */
+export function calibrateMRJDSegments(segments: number[][], dt = 1, threshold = 3): MrjdParams {
+  const from: number[] = [];
+  const to: number[] = [];
+  for (const seg of segments) for (let i = 0; i < seg.length - 1; i++) { from.push(seg[i]); to.push(seg[i + 1]); }
+  return calibrateFromPairs(from, to, dt, threshold);
 }
 
 /**

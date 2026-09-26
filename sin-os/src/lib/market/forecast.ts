@@ -3,7 +3,7 @@ import { fitGarch } from "../quant/garch";
 import { fitHmm, hmmStateLabel, regimeForecast } from "../quant/hmm";
 import { learBacktest, learFit, learForecast, naiveForecast } from "../quant/lear";
 import { crpsFromQuantiles, dieboldMariano, kupiec, mae, rmae, rmse, smape } from "../quant/metrics";
-import { calibrateMRJD, fitSeasonality, simulateMRJD } from "../quant/ou";
+import { calibrateMRJD, calibrateMRJDSegments, fitSeasonality, simulateMRJD } from "../quant/ou";
 import { fitQRA, predictQRA } from "../quant/qra";
 import { mean, mulberry32, quantile, round } from "../quant/stats";
 import { asinhFwd, asinhInv, fitAsinh } from "../quant/transforms";
@@ -42,6 +42,8 @@ export interface ForecastResult {
     qraCoverage90: number;
     /** Erro fora da amostra por horizonte (D+1…D+7) e o fator de alargamento da banda. */
     horizonErrors: { day: number; mae: number | null; n: number; spread: number }[];
+    /** MAE separado por regime: horas no piso vs. fora do piso (e a fração no piso). */
+    regimeMae: { floor: number | null; offFloor: number | null; floorShare: number };
   };
   regime: {
     labels: string[];
@@ -118,6 +120,23 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   // day-ahead: as 24 horas saem juntas ⇒ ACI em blocos de 24 h (sem informação do próprio dia)
   const aci = adaptiveConformal(resid, 0.1, 0.01, 168, 24);
   const kup = kupiec(aci.violations, Math.max(1, aci.evaluated), 0.1);
+  // heterocedasticidade intradiária: fator por hora-do-dia (q90 do |erro| relativo à média),
+  // normalizado para média 1 — redistribui a largura da banda entre pico e fora-de-pico sem
+  // mudar a cobertura global. Sample pequeno ⇒ limita a [0.5, 2].
+  const byHour: number[][] = Array.from({ length: 24 }, () => []);
+  resid.forEach((r, i) => byHour[i % 24].push(Math.abs(r)));
+  const q90h = byHour.map((e) => (e.length ? quantile(e, 0.9) : 0));
+  const meanQ90 = mean(q90h.filter((v) => v > 0)) || 1;
+  const hourScale = q90h.map((v) => Math.min(2, Math.max(0.5, (v || meanQ90) / meanQ90)));
+  // MAE por regime: horas coladas no piso vs. fora do piso (o MAE agrupado esconde onde falha)
+  const floorLvl = PLD_LIMITS.min * 1.01;
+  const rg = { floorErr: [] as number[], offErr: [] as number[] };
+  bt.actuals.forEach((a, d) => a.forEach((v, h) => (v <= floorLvl ? rg.floorErr : rg.offErr).push(Math.abs(v - bt.forecasts[d][h]))));
+  const regimeMae = {
+    floor: rg.floorErr.length ? mean(rg.floorErr) : null,
+    offFloor: rg.offErr.length ? mean(rg.offErr) : null,
+    floorShare: act.length ? rg.floorErr.length / act.length : 0,
+  };
   // QRA avaliado fora da amostra: ajusta na 1ª metade dos dias do backtest, mede na 2ª
   const cut = 24 * Math.floor(bt.actuals.length / 2);
   const qraCal = fitQRA(fL.slice(0, cut).map((f, i) => [f, fN[i]]), act.slice(0, cut), QRA_TAUS);
@@ -140,19 +159,21 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   const hTs = futureDates.flatMap((d) => Array.from({ length: 24 }, (_, h) => Date.parse(`${d}T${String(h).padStart(2, "0")}:00:00-03:00`)));
   const learFlat = fut.flat();
   // banda conformal de D+1 (ACI) alargada pelo crescimento MEDIDO do erro em cada horizonte
-  const aciLo = learFlat.map((f, i) => clipPld(f - aci.halfWidth * growth[Math.floor(i / 24)]));
-  const aciHi = learFlat.map((f, i) => clipPld(f + aci.halfWidth * growth[Math.floor(i / 24)]));
+  const band = (i: number) => aci.halfWidth * growth[Math.floor(i / 24)] * hourScale[i % 24];
+  const aciLo = learFlat.map((f, i) => clipPld(f - band(i)));
+  const aciHi = learFlat.map((f, i) => clipPld(f + band(i)));
 
   // ---- MRJD calibrado nos ERROS do LEAR (espaço asinh) → Monte Carlo em torno do LEAR.
   // Cenários com a dispersão real da previsão; a dispersão por horizonte segue o backtest.
   const recent = dm.rows.slice(-60).flat();
   const scaler = fitAsinh(recent);
   const y = recent.map((p) => asinhFwd(scaler, p));
-  const residAsinh = bt.actuals.flatMap((a, d) => a.map((v, h) => asinhFwd(scaler, v) - asinhFwd(scaler, bt.forecasts[d][h])));
+  const residDays = bt.actuals.map((a, d) => a.map((v, h) => asinhFwd(scaler, v) - asinhFwd(scaler, bt.forecasts[d][h])));
+  const residAsinh = residDays.flat();
   let mrjd: ForecastResult["mrjd"] = null;
   let paths: number[][] = [];
   try {
-    let params = residAsinh.length >= 24 * 10 ? calibrateMRJD(residAsinh) : null;
+    let params = residDays.length >= 10 ? calibrateMRJDSegments(residDays) : null;
     let calibratedOn: "resíduos do LEAR" | "desvios sazonais" = "resíduos do LEAR";
     if (!params || !Number.isFinite(params.kappa) || params.kappa <= 0 || params.sigma <= 0) {
       const seas = fitSeasonality(y);
@@ -281,6 +302,7 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
       qraCrps,
       qraCoverage90,
       horizonErrors,
+      regimeMae,
     },
     regime,
     garch,

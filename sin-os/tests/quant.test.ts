@@ -8,7 +8,7 @@ import { adaptiveConformal, conformalQuantile } from "../src/lib/quant/conformal
 import { quantileRegression } from "../src/lib/quant/qra";
 import { fitHmm } from "../src/lib/quant/hmm";
 import { fitGarch } from "../src/lib/quant/garch";
-import { calibrateMRJD, simulateMRJD } from "../src/lib/quant/ou";
+import { calibrateMRJD, calibrateMRJDSegments, simulateMRJD } from "../src/lib/quant/ou";
 import { adf, engleGranger, halfLife, mackinnonCrit, mackinnonP } from "../src/lib/quant/cointegration";
 import { optimizeStorageDP, valueStorageLSMC } from "../src/lib/quant/storage";
 import { dieboldMariano, kupiec } from "../src/lib/quant/metrics";
@@ -324,3 +324,25 @@ describe("correções da auditoria matemática", () => {
     fit.means.forEach((m, i) => expect(Math.abs(m - mu[i])).toBeLessThan(0.6));
   });
 });
+
+describe("MRJD por segmentos (sem salto de fronteira)", () => {
+  it("não conta a transição entre dias como salto e recupera κ intra-dia", () => {
+    const rnd = mulberry32(9);
+    // dias OU revertendo a 0 (σ pequeno), mas cada dia COMEÇA num nível novo ~N(0,5):
+    // a fronteira fim→início vira uma descontinuidade grande (média zero, então o pooling é válido).
+    const kappa = 0.3, s = 0.4;
+    const a = Math.exp(-kappa);
+    const segs: number[][] = [];
+    for (let d = 0; d < 40; d++) {
+      let x = 5 * randn(rnd);
+      const day = [x];
+      for (let h = 1; h < 24; h++) { x = a * x + s * randn(rnd); day.push(x); }
+      segs.push(day);
+    }
+    const seg = calibrateMRJDSegments(segs);
+    const flat = calibrateMRJD(segs.flat());
+    expect(seg.kappa).toBeGreaterThan(0.1);
+    expect(seg.kappa).toBeLessThan(0.6);
+    expect(seg.nJumps).toBeLessThan(flat.nJumps); // o flat inventa saltos nas fronteiras 23h→0h
+  });
+})
