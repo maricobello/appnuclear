@@ -1,7 +1,7 @@
 import { adf, engleGranger, halfLife } from "../quant/cointegration";
 import { riskMetrics, type RiskMetrics } from "../quant/risk";
 import { mean, round, std } from "../quant/stats";
-import { optimizeStorageLP } from "../quant/bess";
+import { naiveDayValue, optimizeStorageLP } from "../quant/bess";
 import { valueStorageLSMC, type StorageSpec } from "../quant/storage";
 import type { ZonePrices } from "../sources/europe";
 import type { FxData } from "../sources/fx";
@@ -114,21 +114,6 @@ export interface StorageResult {
   realized: { days: number; perMWDayRS: number; naivePerMWDayRS: number; captureRatio: number } | null;
 }
 
-/** Política ingênua de 1 ciclo/dia: carrega nas horas mais baratas, descarrega nas mais caras. */
-function naiveDayValue(prices: number[], spec: StorageSpec): number {
-  const dt = spec.dtHours ?? 1;
-  const hFill = Math.max(1, Math.round(spec.capacityMWh / (spec.powerMW * dt)));
-  const order = prices.map((p, i) => [p, i] as const).sort((a, b) => a[0] - b[0]);
-  const buy = new Set(order.slice(0, hFill).map(([, i]) => i));
-  const sell = new Set(order.slice(-hFill).map(([, i]) => i));
-  const k = spec.degradationCost ?? 0;
-  let cash = 0;
-  for (let i = 0; i < prices.length; i++) {
-    if (buy.has(i) && !sell.has(i)) cash -= prices[i] * spec.powerMW * dt + k * spec.etaCharge * spec.powerMW * dt;
-    else if (sell.has(i) && !buy.has(i)) cash += prices[i] * spec.etaCharge * spec.etaDischarge * spec.powerMW * dt - (k * spec.powerMW * dt) / spec.etaDischarge;
-  }
-  return cash;
-}
 
 function histogram(v: number[], bins = 24): StorageResult["pnlHistogram"] {
   if (v.length < 2) return [];
@@ -207,15 +192,16 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
   let realized: StorageResult["realized"] = null;
   const days = (fc.realizedDaily ?? []).filter((d) => d.length === 24);
   if (days.length >= 5) {
-    const daySpec = { ...spec, dtHours: 1, socInit: 0.5, socEnd: 0.5 };
+    // arbitragem intradiária pura: começa e termina vazia (mesmo enquadramento para teto e ingênua)
+    const daySpec = { ...spec, dtHours: 1, socInit: 0, socEnd: 0 };
     let pfSum = 0, naiveSum = 0;
     for (const d of days) {
-      pfSum += (await optimizeStorageLP(d, daySpec)).value;
+      pfSum += Math.max(0, (await optimizeStorageLP(d, daySpec)).value);
       naiveSum += Math.max(0, naiveDayValue(d, daySpec));
     }
     const perMW = pfSum / days.length / spec.powerMW;
     const naivePerMW = naiveSum / days.length / spec.powerMW;
-    realized = { days: days.length, perMWDayRS: perMW, naivePerMWDayRS: naivePerMW, captureRatio: perMW > 0 ? naivePerMW / perMW : 0 };
+    realized = { days: days.length, perMWDayRS: perMW, naivePerMWDayRS: naivePerMW, captureRatio: perMW > 0 ? Math.min(1, naivePerMW / perMW) : 0 };
   }
   const total = lp.value + extrinsic;
   return {

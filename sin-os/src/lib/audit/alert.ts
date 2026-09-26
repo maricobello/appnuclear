@@ -14,31 +14,51 @@ export interface Health {
 
 const EXPECTED_DOWN = new Set(["ccee_pld"]);
 const minScore = () => Number(process.env.ALERT_MIN_SCORE ?? 70);
+/** Idade máxima do último run antes de considerar o auditor parado (min). Cron roda a cada 15. */
+export const maxAgeMin = () => Number(process.env.HEALTH_MAX_AGE_MIN ?? 60);
 
 export function healthOf(run: AuditRun): Health {
   const reasons: string[] = [];
   if (run.overallScore < minScore()) reasons.push(`score ${run.overallScore} < ${minScore()}`);
   for (const s of run.sources) {
     if (s.status === "down" && !EXPECTED_DOWN.has(s.id)) reasons.push(`${s.id} fora do ar: ${s.error ?? "sem dados"}`);
+    // série que ainda faz parse mas está muito atrasada (freshness=fail = idade > 2×SLA): também degrada a saúde
+    else if (!EXPECTED_DOWN.has(s.id) && s.checks.some((c) => c.id === "freshness" && c.status === "fail")) {
+      reasons.push(`${s.id} desatualizada: ${s.ageHours === null ? "sem timestamp" : `${s.ageHours.toFixed(0)} h`}`);
+    }
   }
   for (const c of run.cross) if (c.status === "fail") reasons.push(`integridade ${c.id}: ${c.detail}`);
   if (run.storage !== "firestore") reasons.push("persistência caiu para memória (Firestore indisponível)");
   return { healthy: reasons.length === 0, score: run.overallScore, reasons };
 }
 
+/** Saúde incluindo a idade do run: um auditor parado (run antigo) fica não-saudável. */
+export function healthWithAge(run: AuditRun, now = Date.now()): Health & { ageMinutes: number } {
+  const base = healthOf(run);
+  const ageMinutes = Math.round((now - run.startedAt) / 60_000);
+  const reasons = [...base.reasons];
+  if (ageMinutes > maxAgeMin()) reasons.push(`auditoria parada há ${ageMinutes} min (SLA ${maxAgeMin()} min)`);
+  return { healthy: reasons.length === 0, score: base.score, reasons, ageMinutes };
+}
+
 /**
- * Notifica um webhook quando a saúde piora. Compatível com Slack/Discord/ntfy/Teams
- * (payload `{text, content}`). Só dispara em transição para não-saudável (evita spam) e
- * nunca lança — falha de alerta não pode derrubar a auditoria. Opt-in por ALERT_WEBHOOK_URL.
+ * Notifica um webhook em MUDANÇA de saúde (degradou, ou recuperou). Compatível com
+ * Slack/Discord/ntfy/Teams (payload `{text, content}`). Só dispara na transição (evita
+ * spam), nunca lança e é opt-in por ALERT_WEBHOOK_URL.
  */
-export async function notifyIfDegraded(run: AuditRun, previous: AuditRun | null): Promise<boolean> {
+export async function notifyHealthChange(run: AuditRun, previous: AuditRun | null): Promise<boolean> {
   const url = process.env.ALERT_WEBHOOK_URL;
   if (!url) return false;
   const now = healthOf(run);
-  if (now.healthy) return false;
-  if (previous && !healthOf(previous).healthy) return false; // já estava ruim: não repete
+  const was = previous ? healthOf(previous) : null;
   const base = process.env.SIN_OS_URL ?? "https://sinos-iota.vercel.app";
-  const text = `⚠️ SIN OS — auditoria degradada (score ${run.overallScore}/100)\n• ${now.reasons.join("\n• ")}\n${base}/auditoria`;
+  let text: string | null = null;
+  if (!now.healthy && (!was || was.healthy)) {
+    text = `⚠️ SIN OS — auditoria degradada (score ${run.overallScore}/100)\n• ${now.reasons.join("\n• ")}\n${base}/auditoria`;
+  } else if (now.healthy && was && !was.healthy) {
+    text = `✅ SIN OS — auditoria recuperada (score ${run.overallScore}/100)\n${base}/auditoria`;
+  }
+  if (!text) return false;
   try {
     await fetch(url, {
       method: "POST",

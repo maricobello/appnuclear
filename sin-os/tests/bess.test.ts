@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { optimizeStorageLP } from "../src/lib/quant/bess";
+import { naiveDayValue, optimizeStorageLP } from "../src/lib/quant/bess";
 import { optimizeStorageDP, type StorageSpec } from "../src/lib/quant/storage";
 
 const spec: StorageSpec = { capacityMWh: 4, powerMW: 1, etaCharge: 0.95, etaDischarge: 0.95, socInit: 0.5, socEnd: 0.5, degradationCost: 3 };
@@ -56,3 +56,17 @@ describe("despacho exato de armazenamento (LP/HiGHS)", () => {
     expect(sell.soc.at(-1)!).toBeCloseTo(0, 6); // vende a 100, vale 50 amanhã
   });
 });
+
+describe("backtest realizado: política ingênua nunca supera o teto (capture ≤ 1)", () => {
+  it("ingênua ≤ informação perfeita em curvas variadas, no mesmo enquadramento", async () => {
+    const specR: StorageSpec = { capacityMWh: 4, powerMW: 1, etaCharge: 0.95, etaDischarge: 0.95, dtHours: 1, socInit: 0, socEnd: 0, degradationCost: 5 };
+    const mk = (s: number) => Array.from({ length: 24 }, (_, h) => 120 + 90 * Math.sin((2 * Math.PI * (h - 6)) / 24) + 40 * Math.sin(h * s) + 20 * Math.cos(h * s * 1.7));
+    for (let s = 1; s <= 12; s++) {
+      const prices = mk(s / 3);
+      const pf = (await optimizeStorageLP(prices, specR)).value;
+      const naive = naiveDayValue(prices, specR);
+      expect(naive).toBeLessThanOrEqual(pf + 1e-6); // viável ⇒ nunca supera o ótimo
+      expect(naive).toBeGreaterThanOrEqual(-1e-6);
+    }
+  });
+})

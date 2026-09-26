@@ -114,6 +114,36 @@ export function buildBessLp(prices: number[], spec: StorageSpec, opts: BessLpOpt
   return { lp, mip };
 }
 
+/**
+ * Política ingênua de 1 ciclo/dia: pré-seleciona as horas mais baratas para carregar e as
+ * mais caras para descarregar e SIMULA hora a hora respeitando o SoC (0..capacidade),
+ * partindo de bateria vazia. Por ser um despacho VIÁVEL, seu valor é sempre ≤ ao ótimo do
+ * LP no mesmo enquadramento — o que garante capture ratio ≤ 1.
+ */
+export function naiveDayValue(prices: number[], spec: StorageSpec): number {
+  const dt = spec.dtHours ?? 1;
+  const cap = spec.capacityMWh;
+  const P = spec.powerMW;
+  const k = spec.degradationCost ?? 0;
+  const hFill = Math.max(1, Math.round(cap / (P * dt)));
+  const order = prices.map((p, i) => [p, i] as const).sort((a, b) => a[0] - b[0]);
+  const buy = new Set(order.slice(0, hFill).map(([, i]) => i));
+  const sell = new Set(order.slice(-hFill).map(([, i]) => i));
+  let soc = 0; // parte vazia (mesmo enquadramento do teto LP: socInit=0)
+  let cash = 0;
+  for (let i = 0; i < prices.length; i++) {
+    if (buy.has(i) && !sell.has(i)) {
+      const room = cap - soc;
+      const charge = Math.min(P * dt, room / spec.etaCharge); // energia retirada da rede
+      if (charge > 0) { soc += spec.etaCharge * charge; cash -= prices[i] * charge + k * spec.etaCharge * charge; }
+    } else if (sell.has(i) && !buy.has(i)) {
+      const draw = Math.min(P * dt, soc * spec.etaDischarge); // energia entregue à rede
+      if (draw > 0) { soc -= draw / spec.etaDischarge; cash += prices[i] * draw - (k * draw) / spec.etaDischarge; }
+    }
+  }
+  return cash;
+}
+
 export async function optimizeStorageLP(prices: number[], spec: StorageSpec, opts: BessLpOpts = {}): Promise<BessLpResult> {
   const T = prices.length;
   const dt = spec.dtHours ?? 1;
