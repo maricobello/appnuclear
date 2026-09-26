@@ -202,13 +202,13 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   resid.forEach((r, i) => byHour[i % 24].push(Math.abs(r)));
   const q90h = byHour.map((e) => (e.length ? quantile(e, 0.9) : 0));
   const meanQ90 = mean(q90h.filter((v) => v > 0)) || 1;
-  const hourScale = q90h.map((v) => Math.min(2, Math.max(0.5, (v || meanQ90) / meanQ90)));
+  const hourScale = q90h.map((v) => Math.min(3, Math.max(0.5, (v || meanQ90) / meanQ90)));
   // day-ahead: as 24 horas saem juntas ⇒ ACI em blocos de 24 h (sem informação do próprio
   // dia). O escore é |erro|/fator_da_hora, então a cobertura medida é a da banda publicada
   // (half-width × fator), não a de uma banda plana.
   const aci = adaptiveConformal(resid.map((r, i) => r / hourScale[i % 24]), 0.1, 0.01, 168, 24);
   const kup = kupiecBlocks(aci.hits, 24, 0.1);
-  const chr = christoffersen(aci.hits, 24);
+  const chr = christoffersen(aci.hits, 24, kup.deff);
   // MAE por regime: horas coladas no piso vs. fora do piso (o MAE agrupado esconde onde falha)
   const floorLvl = PLD_LIMITS.min * 1.01;
   const rg = { floorErr: [] as number[], offErr: [] as number[] };
@@ -258,7 +258,7 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   let paths: number[][] = [];
   try {
     let params: TwoFactorParams | null = residDays.length >= 10 ? calibrateTwoFactor(residDays) : null;
-    let calibratedOn: "resíduos do LEAR" | "desvios sazonais" = "resíduos do LEAR";
+    let calibratedOn = "resíduos do backtest (marginais empíricas + dependência de dois fatores)";
     if (!params || !Number.isFinite(params.kappa) || params.kappa <= 0 || params.sigma <= 0) {
       const seas = fitSeasonality(y);
       const one = calibrateMRJD(y.map((v, t) => v - seas.predict(t)));
@@ -278,20 +278,79 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
       dayPhi: params.dayPhi,
       calibratedOn,
     };
-    const center = learFlat.map((p) => asinhFwd(scaler, p));
-    // dois fatores: nível do dia (AR(1) entre dias) + intradiário OU com saltos (aquecido)
-    const devPaths = simulateTwoFactor(params, center.length, nPaths, mulberry32(20260925));
-    // casamento de quantis (guarda): a faixa 5–95% simulada em D+1 passa a ter a largura
-    // da faixa 5–95% dos erros reais do LEAR
-    let c = 1;
-    if (calibratedOn === "resíduos do LEAR") {
+    const H = learFlat.length;
+    // Marginais EMPÍRICAS por horizonte: erros reais (R$/MWh) da previsão publicada em D+k,
+    // normalizados pelo fator da hora. O modelo de dois fatores só fornece a DEPENDÊNCIA
+    // (postos) entre horas e dias — cópula empírica. Assim o centro e a dispersão de cada
+    // hora batem com o erro observado (antes, a volta do espaço asinh deslocava as
+    // trajetórias 27–67 R$/MWh para cima e inflava a variação intradiária).
+    const pools = errByH.map((e) => e.map((v, j) => v / hourScale[j % 24]).sort((a, b) => a - b));
+    for (let k = 1; k < pools.length; k++) if (pools[k].length < 24 * 5) pools[k] = pools[k - 1].map((v) => v * (growth[k] / (growth[k - 1] || 1)));
+    // os erros dos ~28 dias do backtest subestimam a dispersão fora da amostra nos horizontes
+    // longos (validação real: 5–95% em D+7 ≈ 0,80): cada horizonte fica pelo menos tão largo
+    // quanto a banda conformal ADAPTATIVA publicada (meia-largura ACI × crescimento medido)
+    pools.forEach((pool, k) => {
+      if (!pool.length) return;
+      const q90 = quantile(pool.map(Math.abs), 0.9);
+      const s = q90 > 0 ? Math.min(3, Math.max(1, (aci.halfWidth * growth[k]) / q90)) : 1;
+      if (s > 1) pools[k] = pool.map((v) => v * s);
+    });
+    const empirical = pools[0].length >= 24 * 8 && params.kappa > 0;
+    if (!empirical && calibratedOn.startsWith("resíduos do backtest")) calibratedOn = "resíduos no espaço asinh (poucos dias de backtest)";
+    const qf = (pool: number[], u: number) => {
+      const x = u * (pool.length - 1);
+      const i = Math.floor(x);
+      return pool[i] + (pool[Math.min(pool.length - 1, i + 1)] - pool[i]) * (x - i);
+    };
+    // postos → marginal empírica, hora a hora (+ regra do PLD: piso/teto e teto estrutural)
+    const mapPaths = (dev: number[][], steps: number) => {
+      const out = dev.map(() => new Array<number>(steps));
+      const idx = dev.map((_, m) => m);
+      for (let t = 0; t < steps; t++) {
+        idx.sort((a, b) => dev[a][t] - dev[b][t]);
+        const pool = pools[Math.floor(t / 24)];
+        idx.forEach((m, r) => (out[m][t] = clipPld(learFlat[t] + hourScale[t % 24] * qf(pool, (r + 0.5) / dev.length))));
+      }
+      return out.map((p) => capDailyMeans(p));
+    };
+    if (empirical) {
+      // Calibração em dois níveis, em D+1, por busca em grade:
+      //  - multiplicador do fator DIÁRIO → dispersão da média do dia = dayQ (conformal 90%);
+      //  - multiplicador de κ (com σ ajustado para manter a variância intradiária) → variação
+      //    total intradiária Σ|p_{h+1} − p_h| mediana = a dos dias reais recentes (sem isso as
+      //    trajetórias oscilavam ~1,5× mais que o PLD real e inflavam o valor da bateria).
+      const base = params.dayVar > 1e-9 ? params.dayVar : (params.sigma ** 2 / (2 * params.kappa)) || 1e-4;
+      const target = dayQ[0];
+      const tv = (a: number[]) => a.slice(1).reduce((acc, v, h) => acc + Math.abs(v - a[h]), 0);
+      const tvReal = quantile(dm.rows.slice(-28).map(tv), 0.5);
+      if (Number.isFinite(target) && target > 0) {
+        const pt0 = mean(learFlat.slice(0, 24));
+        let best = { m: params.dayVar / base, k: 1, err: Infinity };
+        for (const k of [0.03125, 0.0625, 0.125, 0.25, 0.5, 1]) {
+          for (const m of [0, 0.25, 0.5, 1, 2, 4, 8, 16, 32]) {
+            const trial = { ...params, kappa: params.kappa * k, sigma: params.sigma * Math.sqrt(k), dayVar: base * m };
+            const sim = mapPaths(simulateTwoFactor(trial, 24, 400, mulberry32(7)), 24);
+            const q = quantile(sim.map((p) => Math.abs(mean(p) - pt0)), 0.9);
+            const tvSim = quantile(sim.map(tv), 0.5);
+            const err = Math.abs(q - target) / target + (tvReal > 0 ? Math.abs(tvSim - tvReal) / tvReal : 0);
+            if (err < best.err) best = { m, k, err };
+          }
+        }
+        params = { ...params, kappa: params.kappa * best.k, sigma: params.sigma * Math.sqrt(best.k), halfLife: params.halfLife / best.k, dayVar: base * best.m };
+        mrjd = { ...mrjd, kappaPerHour: params.kappa, halfLifeHours: params.halfLife, sigma: params.sigma };
+      }
+      paths = mapPaths(simulateTwoFactor(params, H, nPaths, mulberry32(20260925)), H);
+    } else {
+      const center = learFlat.map((p) => asinhFwd(scaler, p));
+      const devPaths = simulateTwoFactor(params, H, nPaths, mulberry32(20260925));
+      let c = 1;
       const sim = devPaths.flatMap((d) => d.slice(0, 24));
       const wSim = quantile(sim, 0.95) - quantile(sim, 0.05);
       const wEmp = quantile(residAsinh, 0.95) - quantile(residAsinh, 0.05);
       if (wSim > 0 && wEmp > 0) c = Math.min(3, Math.max(0.3, wEmp / wSim));
+      paths = devPaths.map((d) => capDailyMeans(d.map((x, t) => clipPld(asinhInv(scaler, center[t] + c * x * growth[Math.floor(t / 24)])))));
     }
-    // cada trajetória obedece à regra completa do PLD: piso/teto horário e teto estrutural diário
-    paths = devPaths.map((d) => capDailyMeans(d.map((x, t) => clipPld(asinhInv(scaler, center[t] + c * x * growth[Math.floor(t / 24)])))));
+    mrjd = { ...mrjd, dayLevelSd: Math.sqrt(params.dayVar), calibratedOn };
   } catch (e) {
     warnings.push(`MRJD indisponível: ${e instanceof Error ? e.message : e}`);
     paths = [learFlat.slice()];

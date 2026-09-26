@@ -131,6 +131,7 @@ export interface SourceMetaView {
   ok: boolean;
   simulated: boolean;
   fallback: string | null;
+  note?: string | null;
   error: string | null;
   latestTs: number | null;
 }
@@ -157,9 +158,9 @@ export function SourceTag({ meta, label }: { meta?: SourceMetaView | null; label
       </span>
     );
   return (
-    <span className="inline-flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-ink-2" title={`última observação ${ago(meta.latestTs)}`}>
+    <span className="inline-flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-ink-2" title={`${meta.note ? `${meta.note} · ` : ""}última observação ${ago(meta.latestTs)}`}>
       <span className="live-dot inline-block h-1.5 w-1.5 rounded-full bg-good" aria-hidden />
-      {label ? `${label} · ` : ""}ao vivo · {ago(meta.latestTs)}
+      {label ? `${label} · ` : ""}{meta.note?.startsWith("PLD oficial") ? "oficial CCEE · " : ""}ao vivo · {ago(meta.latestTs)}
     </span>
   );
 }

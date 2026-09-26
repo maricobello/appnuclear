@@ -1,7 +1,8 @@
 import "server-only";
 import { cached } from "./cache";
-import { pldFromCmo } from "./market/brazil";
+import { overlayPanel, pldFromCmo } from "./market/brazil";
 import { fetchPldHourly } from "./sources/ccee";
+import { ccePiConfigured, fetchPldPI } from "./sources/ccee-pi";
 import { fetchEia } from "./sources/eia";
 import { fetchEuPrices } from "./sources/europe";
 import { fetchFx } from "./sources/fx";
@@ -78,8 +79,9 @@ function daysToPanel(days: PldDay[]): SubPanel {
 
 /**
  * PLD com cadeia de resiliência:
- * CCEE (oficial) → ONS CMO limitado ao piso/teto (mesma regra de formação)
- * → Firestore "last known good" → simulação sinalizada.
+ * CCEE Dados Abertos → [CCEE Plataforma de Integração (oficial, agentes) sobre o histórico]
+ * → ONS CMO limitado ao piso/teto (mesma regra de formação) → Firestore "last known good"
+ * → simulação sinalizada.
  */
 export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
   const mode = dataMode();
@@ -89,12 +91,30 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
     savePldDays(panelToDays(primary.data, "ccee")).catch(() => undefined);
     return primary;
   }
+  // PLD oficial pela Plataforma de Integração (se configurada): últimos 14 dias + D+1
+  const pi = ccePiConfigured() ? await cached("pld:pi", 10 * 60_000, () => fetchPldPI(14)).then((r) => r.value) : null;
+  if (pi?.ok && pi.data) savePldDays(panelToDays(pi.data, "ccee")).catch(() => undefined);
   const cmo = await fetchCmoHourly(daysBack);
   if (cmo.ok && cmo.data) {
     const est = pldFromCmo(cmo.data);
+    if (pi?.ok && pi.data) {
+      const since = brtDate(pi.data.ts[0]);
+      return {
+        ...pi,
+        id: "ccee_pld",
+        data: overlayPanel(est, pi.data),
+        probes: [...pi.probes, ...cmo.probes],
+        note: `PLD oficial da CCEE (Plataforma de Integração) desde ${since}; histórico anterior calculado pelo CMO/DESSEM (ONS)`,
+      };
+    }
     // guarda o estimado no histórico; a CCEE sobrescreve quando voltar
     savePldDays(panelToDays(est, PLD_FROM_CMO)).catch(() => undefined);
     return { ...cmo, id: "ccee_pld", data: est, fallback: `PLD calculado pela regra da ANEEL a partir do CMO/DESSEM (ONS) — CCEE indisponível: ${(primary.error ?? "erro").split(" — ")[0]}`, error: primary.error };
+  }
+  if (pi?.ok && pi.data) {
+    const lkgPi = await loadPldDays(daysBack).catch(() => []);
+    const data = lkgPi.length ? overlayPanel(daysToPanel(lkgPi), pi.data) : pi.data;
+    return { ...pi, id: "ccee_pld", data, note: "PLD oficial da CCEE (Plataforma de Integração)" + (lkgPi.length ? " sobre o histórico persistido" : "") };
   }
   const lkg = await loadPldDays(daysBack).catch(() => []);
   if (lkg.length >= 30) {
@@ -155,6 +175,7 @@ export function publicMeta<T>(r: SourceResult<T>) {
     ok: r.ok,
     simulated: r.simulated,
     fallback: r.fallback ?? null,
+    note: r.note ?? null,
     error: r.error ?? null,
     latestTs: r.quality.latestTs,
     fetchedAt: r.fetchedAt,

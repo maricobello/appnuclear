@@ -1,5 +1,6 @@
 export type SourceId =
   | "ccee_pld"
+  | "ccee_pi"
   | "ons_cmo"
   | "ons_ear"
   | "ons_ena"
@@ -64,6 +65,8 @@ export interface SourceResult<T> {
   simulated: boolean;
   /** Descrição do caminho de fallback usado, se houver. */
   fallback?: string;
+  /** Procedência informativa (não é fallback), ex.: "PLD oficial da CCEE desde …". */
+  note?: string;
   fetchedAt: number;
 }
 

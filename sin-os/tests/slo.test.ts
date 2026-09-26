@@ -59,3 +59,26 @@ describe("SLO a partir do histórico do auditor", () => {
     expect(alertRequest("https://example.com/hook", deg, "ntfy").headers.Title).toBeTruthy();
   });
 });
+
+describe("aviso de publicação do PLD", () => {
+  it("resume média/mín/máx e hora do pico por submercado, com fonte e alerta de limiar", async () => {
+    const { pldPublishedMessage } = await import("../src/lib/audit/pld-alert");
+    const flat = (v: number) => Array.from({ length: 24 }, (_, h) => (h === 19 ? v * 3 : v));
+    const msg = pldPublishedMessage({ date: "2026-09-27", values: { SE: flat(100), S: flat(90), NE: flat(60), N: flat(60) }, official: true }, "2026-09-26", "https://x", 250);
+    expect(msg.kind).toBe("pld");
+    expect(msg.title).toContain("amanhã (27/09)");
+    expect(msg.title).toContain("oficial CCEE");
+    expect(/^[\x20-\x7e]*$/.test(msg.title.normalize("NFD").replace(/[̀-ͯ]/g, ""))).toBe(true);
+    expect(msg.text).toContain("SE: média R$ 108,33");
+    expect(msg.text).toContain("máx R$ 300,00 às 19h ⚠");
+    expect(msg.text).not.toContain("NE: média R$ 65,00 · mín R$ 60,00 · máx R$ 180,00 às 19h ⚠");
+    expect(alertRequest("https://ntfy.sh/t", msg, undefined).headers.Tags).toBe("zap");
+  });
+});
+
+describe("título do ntfy com acento", () => {
+  it("vai em RFC 2047 (UTF-8/base64) para não corromper o cabeçalho", () => {
+    const r = alertRequest("https://ntfy.sh/t", { kind: "pld", title: "PLD de amanhã", text: "x" }, undefined);
+    expect(r.headers.Title).toBe(`=?UTF-8?B?${Buffer.from("PLD de amanhã").toString("base64")}?=`);
+  });
+});

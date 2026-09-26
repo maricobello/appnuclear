@@ -46,12 +46,12 @@ const MODELS: Model[] = [
     validation: "Teste unitário recupera inclinação e quantil 90% de DGP conhecido. Avaliação por CRPS (Gneiting & Raftery, 2007).",
   },
   {
-    name: "Dois fatores: nível diário + MRJD intradiário",
+    name: "Monte Carlo: cópula empírica + dois fatores (nível diário + MRJD intradiário)",
     role: "Cenários estocásticos (1.000 trajetórias) em torno da previsão publicada — base do Monte Carlo, do CVaR e do LSMC.",
-    math: "r_{d,h} = m_d + u_{d,h} ; m_d = φ m_{d−1} + η_d ; du = −κu dt + σ dW + J dN ; κ pelo AR(1) within com correção do viés de Nickell ; saltos no resíduo do AR(1) (3σ iterativo) ; Var(m) descontada da parte intradiária",
+    math: "r_{d,h} = m_d + u_{d,h} ; m_d = φ m_{d−1} + η_d ; du = −κu dt + σ dW + J dN ; κ pelo AR(1) within com correção de Nickell ; saltos no resíduo do AR(1) (limiar 4,5·MAD) ; postos simulados → quantis empíricos dos erros reais por horizonte (y = ŷ + s_h·Q_k(u)) ; fator diário e κ calibrados em grade (dispersão da média do dia e variação intradiária)",
     refs: ["Schwartz (1997), Journal of Finance 52(3)", "Cartea & Figueroa (2005), Applied Mathematical Finance 12(4)", "Nickell (1981), Econometrica 49(6)", "Weron (2014), Int. J. Forecasting — revisão de EPF"],
     code: [{ label: "statsmodels (AR/OU)", href: "https://github.com/statsmodels/statsmodels" }],
-    validation: "Teste unitário: recupera κ, a variância e o AR(1) do nível diário de um painel sintético onde o AR(1) agrupado antigo subestimava κ. Em 56 origens reais por submercado, a cobertura 5–95% horária em D+7 subiu de 0,84–0,87 para 0,88–0,91.",
+    validation: "Testes unitários: recupera κ, a variância e o AR(1) do nível diário de painéis sintéticos, inclusive com saltos. Em dados reais (56 origens por submercado): cobertura 5–95% horária 0,93 em D+1 e 0,85–0,91 em D+2–D+7; média diária realizada abaixo do p05 simulado em 2–7% dos dias (antes 14–24%). Em aberto: variação intradiária simulada ~1,3× a real.",
   },
   {
     name: "Markov-switching / HMM gaussiano (3 regimes)",

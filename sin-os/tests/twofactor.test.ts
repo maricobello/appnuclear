@@ -3,8 +3,8 @@ import { christoffersen, dieboldMariano, kupiecBlocks } from "../src/lib/quant/m
 import { calibrateMRJDSegments, calibrateTwoFactor, correctNickell, nickellBias, simulateTwoFactor } from "../src/lib/quant/ou";
 import { mean, mulberry32, randn, std } from "../src/lib/quant/stats";
 
-/** Painel sintético: nível diário AR(1) + OU intradiário (sem saltos). */
-function panel(days: number, b: number, sdU: number, sdDay: number, phi: number, seed: number) {
+/** Painel sintético: nível diário AR(1) + OU intradiário (+ saltos opcionais). */
+function panel(days: number, b: number, sdU: number, sdDay: number, phi: number, seed: number, jump = { p: 0, sd: 0 }) {
   const rng = mulberry32(seed);
   const segs: number[][] = [];
   let lvl = sdDay * randn(rng);
@@ -14,6 +14,7 @@ function panel(days: number, b: number, sdU: number, sdDay: number, phi: number,
     const row: number[] = [];
     for (let h = 0; h < 24; h++) {
       u = b * u + sdU * randn(rng);
+      if (jump.p > 0 && rng() < jump.p) u += jump.sd * randn(rng);
       row.push(lvl + u);
     }
     segs.push(row);
@@ -47,6 +48,20 @@ describe("MRJD de dois fatores (nível diário + intradiário)", () => {
     const sdObsDay = std(segs.map((s) => mean(s)));
     expect(sdSimDay / sdObsDay).toBeGreaterThan(0.8);
     expect(sdSimDay / sdObsDay).toBeLessThan(1.25);
+  });
+});
+
+describe("dois fatores com saltos (resíduos reais têm caudas pesadas)", () => {
+  it("filtro robusto não confunde o nível do dia com saltos: κ e dayVar sobrevivem", () => {
+    const b = Math.exp(-0.3);
+    const sdU = 0.1;
+    const vU = sdU ** 2 / (1 - b * b);
+    const segs = panel(200, b, sdU, Math.sqrt(vU), 0.4, 17, { p: 0.04, sd: 0.6 });
+    const tf = calibrateTwoFactor(segs);
+    expect(tf.kappa).toBeGreaterThan(0.2);
+    expect(tf.kappa).toBeLessThan(0.42);
+    expect(tf.dayVar / vU).toBeGreaterThan(0.4);
+    expect(tf.lambda * 24).toBeLessThan(2); // ~1 salto/dia simulado, não 2–2,5 espúrios
   });
 });
 

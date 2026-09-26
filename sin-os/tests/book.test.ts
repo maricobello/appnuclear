@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bookSummary, hoursInMonth, markToForward, monthlyPldFromPanel, monthsBetween, openExposure, parseContracts, settleContract, type Contract } from "../src/lib/market/book";
+import { bookSummary, hoursInMonth, isMonthComplete, markToForward, monthlyPldFromPanel, monthsBetween, openExposure, parseContracts, settleContract, type Contract } from "../src/lib/market/book";
 import { brtToUtc } from "../src/lib/sources/time";
 import { SUBS, type SubPanel } from "../src/lib/sources/types";
 
@@ -97,5 +97,12 @@ describe("carteira: liquidação e MtM contra o PLD", () => {
     expect(r.partialRS).toBeCloseTo(50 * 744, 6); // julho estimado pela média até agora
     expect(r.months[1].settlementRS).toBeNull();
     expect(openExposure(bookSummary([r.contract], m).results).map((x) => x.month)).toEqual(["2026-07"]);
+  });
+
+  it("mês passado com dias faltando na fonte (≥95% das horas) liquida; o corrente não", () => {
+    const m = { byMonth: { "2025-05": { SE: 100 }, "2025-06": { SE: 100 } }, months: ["2025-05", "2025-06"], hours: { "2025-05": { SE: 720 }, "2025-06": { SE: 500 } } };
+    expect(isMonthComplete(m, "2025-05", "SE", Date.parse("2026-01-10T12:00:00Z"))).toBe(true); // 720/744 = 96,8%
+    expect(isMonthComplete(m, "2025-06", "SE", Date.parse("2026-01-10T12:00:00Z"))).toBe(false); // 500/720
+    expect(isMonthComplete({ ...m, hours: { "2025-05": { SE: 744 } } }, "2025-05", "SE", Date.parse("2025-05-20T12:00:00Z"))).toBe(false); // mês corrente
   });
 });

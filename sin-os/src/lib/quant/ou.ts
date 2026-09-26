@@ -1,5 +1,5 @@
 import { ols } from "./linalg";
-import { mean, randn, std, type Rng } from "./stats";
+import { mean, median, randn, std, type Rng } from "./stats";
 
 /**
  * Difusão com reversão à média e saltos (MRJD) para preços de eletricidade.
@@ -176,7 +176,7 @@ export interface TwoFactorParams extends MrjdParams {
  *   4) Var(m) descontada da parte que o próprio u deixa na média do dia:
  *      dayVar = max(0, Var(m̄) − v_u/T·[1 + 2Σ_{k<T}(1−k/T) b^k]);  φ = ACF₁(m̄).
  */
-export function calibrateTwoFactor(segments: number[][], dt = 1, threshold = 3): TwoFactorParams {
+export function calibrateTwoFactor(segments: number[][], dt = 1, threshold = 4.5): TwoFactorParams {
   const segs = segments.filter((s) => s.length >= 4);
   const T = Math.round(mean(segs.map((s) => s.length)));
   const m = segs.map((s) => mean(s));
@@ -195,9 +195,11 @@ export function calibrateTwoFactor(segments: number[][], dt = 1, threshold = 3):
   let b = slope(all);
   for (let iter = 0; iter < 10; iter++) {
     const e = to.map((v, i) => v - b * from[i]);
-    const clean = e.filter((_, i) => !isJump[i]);
-    const mu = mean(clean);
-    const sd = std(clean);
+    // escala ROBUSTA (1,4826·MAD) e limiar alto: com desvio-padrão e 3σ o filtro marcava
+    // 2–2,5 "saltos"/dia nos resíduos reais, inflava a variância intradiária e zerava o
+    // fator diário (reauditoria set/2026)
+    const mu = median(e);
+    const sd = 1.4826 * median(e.map((v) => Math.abs(v - mu))) || std(e);
     const next = e.map((v) => Math.abs(v - mu) > threshold * sd);
     const changed = next.some((v, i) => v !== isJump[i]);
     isJump = next;
@@ -205,7 +207,8 @@ export function calibrateTwoFactor(segments: number[][], dt = 1, threshold = 3):
     if (!changed) break;
   }
   const bWithin = b;
-  const bc = correctNickell(bWithin, T);
+  // T−1 transições por dia entram na regressão within
+  const bc = correctNickell(bWithin, T - 1);
   const kappa = -Math.log(bc) / dt;
   const eAll = to.map((v, i) => v - bc * from[i]);
   const eClean = eAll.filter((_, i) => !isJump[i]);

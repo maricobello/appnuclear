@@ -89,6 +89,19 @@ export function monthlyPldFromPanel(panel: SubPanel): MonthlyPld {
   return { byMonth, months: [...Object.keys(byMonth)].sort(), hours };
 }
 
+/**
+ * Mês fechado para liquidação: sem contagem de horas (compatibilidade) ou com ≥ 95% das
+ * horas do calendário E já encerrado. A fonte (ONS) às vezes pula dias inteiros: um mês
+ * passado com 720/744 h é fechado, não parcial; o mês corrente é sempre parcial até virar.
+ */
+export function isMonthComplete(pld: MonthlyPld, month: string, sub: Sub, now = Date.now()): boolean {
+  const n = pld.hours?.[month]?.[sub];
+  if (n === undefined) return true;
+  const current = brtDate(now).slice(0, 7);
+  if (month >= current) return false;
+  return n >= 0.95 * hoursInMonth(month);
+}
+
 export interface MonthResult {
   month: string;
   pld: number | null; // PLD médio do submercado no mês (null = sem dado realizado)
@@ -120,8 +133,7 @@ export function settleContract(c: Contract, pld: MonthlyPld): ContractResult {
     const energyMWh = c.volumeMWm * hoursInMonth(month);
     const p = pld.byMonth[month]?.[c.submarket];
     const has = p !== undefined && Number.isFinite(p);
-    const n = pld.hours?.[month]?.[c.submarket];
-    const complete = has && (n === undefined || n >= hoursInMonth(month));
+    const complete = has && isMonthComplete(pld, month, c.submarket);
     const value = has ? dirSign(c.side) * (p! - c.priceRS) * energyMWh : null;
     return {
       month,

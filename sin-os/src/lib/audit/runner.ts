@@ -1,6 +1,7 @@
 import "server-only";
 import { invalidate } from "../cache";
 import { fetchPldHourly } from "../sources/ccee";
+import { fetchPldPI } from "../sources/ccee-pi";
 import { fetchEia } from "../sources/eia";
 import { fetchEuPrices } from "../sources/europe";
 import { fetchFx, type FxData } from "../sources/fx";
@@ -9,9 +10,12 @@ import { SOURCES } from "../sources/registry";
 import type { SourceId, SourceResult, SubPanel } from "../sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "../sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "../sources/weather";
-import { PLD_FROM_CMO, panelToDays } from "../data";
+import { getPld, PLD_FROM_CMO, panelToDays } from "../data";
+import { brtDate } from "../sources/time";
+import { postAlert } from "./alert";
+import { pldPublishedMessage } from "./pld-alert";
 import { pldFromCmo } from "../market/brazil";
-import { euZoneStore, listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
+import { claimSlot, euZoneStore, listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
 import { notifyHealthChange } from "./alert";
 import { auditSource, crossFx, crossPldCmo } from "./checks";
 import type { AuditRun, SourceAudit } from "./types";
@@ -21,6 +25,7 @@ export async function probeAll(): Promise<Record<SourceId, SourceResult<unknown>
   invalidate("");
   const entries = await Promise.all([
     fetchPldHourly(30),
+    fetchPldPI(3),
     fetchCmoHourly(10),
     fetchEarDaily(30),
     fetchEnaDaily(30),
@@ -41,6 +46,7 @@ export async function probeOne(id: SourceId): Promise<SourceResult<unknown>> {
   invalidate("");
   const map: Record<SourceId, () => Promise<SourceResult<unknown>>> = {
     ccee_pld: () => fetchPldHourly(30),
+    ccee_pi: () => fetchPldPI(3),
     ons_cmo: () => fetchCmoHourly(10),
     ons_ear: () => fetchEarDaily(30),
     ons_ena: () => fetchEnaDaily(30),
@@ -113,5 +119,29 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
   } else if (results.ons_cmo.ok && results.ons_cmo.data) {
     await savePldDays(panelToDays(pldFromCmo(results.ons_cmo.data as SubPanel), PLD_FROM_CMO)).catch(() => 0);
   }
+  await notifyPldPublished().catch(() => 0);
   return { run, previous, results, shouldInvokeAgent, reasons };
+}
+
+/**
+ * Avisa (uma vez por data, trava global no Firestore) quando o PLD completo de hoje ou de
+ * amanhã fica disponível. Opt-in por ALERT_WEBHOOK_URL; PLD_ALERTS=off desliga;
+ * PLD_ALERT_ABOVE marca submercados com máximo acima do valor.
+ */
+export async function notifyPldPublished(now = Date.now()): Promise<number> {
+  const url = process.env.ALERT_WEBHOOK_URL;
+  if (!url || process.env.PLD_ALERTS === "off") return 0;
+  const pld = await getPld(10);
+  if (!pld.ok || !pld.data || pld.simulated) return 0;
+  const today = brtDate(now);
+  const official = !pld.fallback;
+  const days = panelToDays(pld.data, official ? "ccee" : PLD_FROM_CMO).filter((d) => d.date >= today).slice(-2);
+  const above = Number(process.env.PLD_ALERT_ABOVE);
+  let sent = 0;
+  for (const d of days) {
+    if (!(await claimSlot(`pldpub_${d.date}_${official ? "oficial" : "cmo"}`, 400 * 86400_000, now))) continue;
+    const msg = pldPublishedMessage({ date: d.date, values: d.values, official }, today, process.env.SIN_OS_URL ?? "https://sinos-iota.vercel.app", Number.isFinite(above) ? above : undefined);
+    if (await postAlert(url, msg)) sent++;
+  }
+  return sent;
 }

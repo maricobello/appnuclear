@@ -124,8 +124,9 @@ export function kupiecBlocks(hits: number[], block: number, expectedRate: number
  * Independência de Christoffersen (1998) com defasagem L: transições I_{t−L} → I_t.
  * Com L = 24 compara a mesma hora em dias consecutivos (violação ontem ⇒ violação hoje?).
  * Retorna LR_ind ~ χ²₁ e π01/π11 (probabilidade de violação sem/com violação L passos antes).
+ * `deff` (efeito de desenho do Kupiec por blocos) corrige o tamanho do teste.
  */
-export function christoffersen(hits: number[], lag = 1): { lr: number; pValue: number; pi01: number; pi11: number } {
+export function christoffersen(hits: number[], lag = 1, deff = 1): { lr: number; pValue: number; pi01: number; pi11: number } {
   let n00 = 0, n01 = 0, n10 = 0, n11 = 0;
   for (let t = lag; t < hits.length; t++) {
     const a = hits[t - lag], b = hits[t];
@@ -140,6 +141,8 @@ export function christoffersen(hits: number[], lag = 1): { lr: number; pValue: n
   const pi = (n01 + n11) / Math.max(1, n00 + n01 + n10 + n11);
   const l0 = xlogy(n00 + n10, 1 - pi) + xlogy(n01 + n11, pi);
   const l1 = xlogy(n00, 1 - pi01) + xlogy(n01, pi01) + xlogy(n10, 1 - pi11) + xlogy(n11, pi11);
-  const lr = Math.max(0, -2 * (l0 - l1));
+  // com violações agrupadas no dia (deff > 1) o LR sob H0 fica inflado: divide pelo efeito
+  // de desenho (correção de Rao–Scott), como no Kupiec por blocos
+  const lr = Math.max(0, -2 * (l0 - l1)) / Math.max(1, deff);
   return { lr, pValue: 1 - chi2Cdf(lr, 1), pi01, pi11 };
 }

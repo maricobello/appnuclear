@@ -64,7 +64,7 @@ mostra — o auditor exibe os dois na tela **Agente auditor**.
 | LEAR (LASSO por LARS, AICc, transformação asinh) | Lago et al. (2021) *Applied Energy*; Efron et al. (2004) | [jeslago/epftoolbox](https://github.com/jeslago/epftoolbox) |
 | Adaptive Conformal Inference | Gibbs & Candès (2021) *NeurIPS* | [MAPIE](https://github.com/scikit-learn-contrib/MAPIE) |
 | Quantile Regression Averaging | Nowotarski & Weron (2015) | statsmodels QuantReg |
-| Dois fatores: nível diário AR(1) + MRJD intradiário (κ com correção de Nickell) | Cartea & Figueroa (2005); Schwartz (1997); Nickell (1981) | — |
+| Monte Carlo: cópula empírica (marginais = erros reais) + dois fatores (nível diário AR(1) + MRJD intradiário, κ com correção de Nickell, saltos por MAD) | Cartea & Figueroa (2005); Schwartz (1997); Nickell (1981) | — |
 | Combinação LEAR ⊕ ingênuo (média simples) | Smith & Wallis (2009); Lago et al. (2021) | epftoolbox |
 | HMM / Markov-switching (3 regimes) | Hamilton (1989); Janczura & Weron (2010) | [hmmlearn](https://github.com/hmmlearn/hmmlearn) |
 | GARCH(1,1) | Bollerslev (1986) | [arch](https://github.com/bashtage/arch) |
@@ -104,14 +104,23 @@ realizado (alvo 90%, média dos 4 submercados):
 | Horizonte | D+1 | D+2 | D+3 | D+4 | D+5 | D+6 | D+7 |
 |---|---|---|---|---|---|---|---|
 | Banda horária conformal | 0,92 | 0,88 | 0,88 | 0,89 | 0,88 | 0,88 | 0,87 |
-| Monte Carlo 5–95% (horário) | 0,93 | 0,92 | 0,94 | 0,92 | 0,91 | 0,94 | 0,93 |
+| Monte Carlo 5–95% (horário) | 0,93 | 0,89 | 0,90 | 0,89 | 0,89 | 0,89 | 0,87 |
 | Faixa da média diária (conformal) | 0,95 | 0,92 | 0,94 | 0,91 | 0,93 | 0,93 | 0,89 |
 
 No D+1 a previsão publicada (LEAR ⊕ ingênuo) teve MAE 5–9% menor que o LEAR sozinho nos 4
 submercados (SE 37,0 vs 39,1 R$/MWh). O Kupiec com efeito de desenho diário não rejeitou a cobertura
 em nenhuma origem; o teste de Christoffersen na mesma hora de dias consecutivos rejeita em 34–50%
 delas — as violações se repetem de um dia para o outro, sinal de que a banda reage devagar a mudança
-de regime (limitação conhecida, exibida na tela). O Monte Carlo ficou levemente conservador (0,91–0,94).
+de regime (limitação conhecida, exibida na tela; o teste agora é corrigido pelo efeito de desenho).
+
+O Monte Carlo usa **marginais empíricas** por horizonte (erros reais da previsão publicada, pelo menos
+tão largas quanto a banda conformal) e o modelo de dois fatores só para a **dependência** entre horas e
+dias (cópula empírica). O fator diário e a persistência intradiária são calibrados em grade para
+reproduzir a dispersão real da média do dia e a variação intradiária recente. Resultado em 136 dias
+por submercado: a média diária realizada fica abaixo do p05 simulado em 2–7% dos dias (antes 14–24%,
+trajetórias deslocadas para cima). Ainda em aberto: a variação intradiária simulada é ~1,3× a real
+(dias colados no piso quase não variam; os voláteis variam muito) — o valor da bateria tende a sair
+um pouco otimista.
 
 ### Auditoria matemática (set/2026)
 
@@ -150,6 +159,28 @@ completas, 3.996 dias de bateria no HiGHS) e apontou, com números, o que estava
 Validado sem problemas: bateria (0 dias com política simples acima do LP em 3.996), sinal e exatidão
 da liquidação da carteira, teto estrutural, QRA, ACI em blocos de 24 h e CRPS. Ainda em aberto: fator
 por tipo de dia (sábado sub-coberto, 0,74–0,84) e a faixa de D+5–D+7, que fica perto de 85%.
+
+## PLD oficial "em tempo real" — CCEE Plataforma de Integração
+
+O PLD é horário e sai **na véspera** (D+1), calculado pela CCEE a partir do DESSEM; não existe um PLD
+que muda minuto a minuto. "Tempo real" aqui é ter o PLD de **hoje** desde 0h e o de **amanhã** assim
+que publicado. Sem credencial, o app calcula o PLD pelo CMO do ONS (mesma regra da ANEEL), que o ONS
+atualiza no fim da manhã do próprio dia — de madrugada o app ainda não tem o dia corrente.
+
+Com acesso de **agente da CCEE** (ou consultoria com representação total), o app usa o web service
+oficial `listarPLD` (PLDBSv1) da [Plataforma de Integração](https://github.com/devccee/postman-collections):
+
+1. Na CCEE, habilite a Plataforma de Integração para o seu agente e cadastre o certificado digital
+   ICP-Brasil (e-CNPJ A1, `.pfx`) — atendimento 0800 591 4185.
+2. Na Vercel (Settings → Environment Variables, tipo **Sensitive**): `CCEE_PI_USERNAME`,
+   `CCEE_PI_PASSWORD`, `CCEE_PI_PERFIL` (código do perfil do agente), `CCEE_PI_CERT_PFX`
+   (`base64 -w0 certificado.pfx`) e `CCEE_PI_CERT_PASSPHRASE`. Redeploy.
+3. O PLD oficial dos últimos 14 dias + D+1 passa a sobrepor o calculado pelo CMO; os dias oficiais
+   ficam gravados no Firestore. A fonte `ccee_pi` entra no agente auditor e no `/api/status`.
+
+**Aviso de publicação:** com `ALERT_WEBHOOK_URL` (ntfy), cada dia de PLD que aparece (hoje/amanhã)
+gera uma notificação com média, mínimo, máximo e hora do pico por submercado. `PLD_ALERT_ABOVE=500`
+marca submercados com máximo acima do valor; `PLD_ALERTS=off` desliga.
 
 ## Agente auditor
 

@@ -118,6 +118,25 @@ export function toDayMatrix(panel: SubPanel, sub: Sub): DayMatrix {
   };
 }
 
+/**
+ * Sobrepõe um painel (ex.: PLD oficial recente) a outro (ex.: histórico calculado pelo
+ * CMO): união das horas, com o valor de `top` prevalecendo onde existir.
+ */
+export function overlayPanel(base: SubPanel, top: SubPanel): SubPanel {
+  const map = new Map<number, Partial<Record<Sub, number | null>>>();
+  base.ts.forEach((t, i) => map.set(t, Object.fromEntries(SUBS.map((s) => [s, base.values[s][i]]))));
+  top.ts.forEach((t, i) => {
+    const row = map.get(t) ?? {};
+    for (const s of SUBS) {
+      const v = top.values[s][i];
+      if (v !== null && Number.isFinite(v)) row[s] = v;
+    }
+    map.set(t, row);
+  });
+  const ts = [...map.keys()].sort((a, b) => a - b);
+  return { ts, unit: base.unit, values: Object.fromEntries(SUBS.map((s) => [s, ts.map((t) => map.get(t)?.[s] ?? null)])) as SubPanel["values"] };
+}
+
 export function latestBySub(panel: SubPanel, atOrBefore = Date.now()) {
   const out: Partial<Record<Sub, { ts: number; value: number }>> = {};
   for (const s of SUBS) {

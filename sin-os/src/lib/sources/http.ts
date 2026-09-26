@@ -20,7 +20,7 @@ export function recentTelemetry(): Probe[] {
   return g.__sinTelemetry!.slice();
 }
 
-function record(p: Probe) {
+export function recordProbe(p: Probe) {
   const ring = g.__sinTelemetry!;
   ring.push(p);
   if (ring.length > RING_MAX) ring.splice(0, ring.length - RING_MAX);
@@ -119,7 +119,7 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ te
         error: describeError(e),
       };
     }
-    record(probe);
+    recordProbe(probe);
     probes.push(probe);
     if (probe.ok) return { text, probes };
     const retryable = probe.status === null || probe.status === 429 || probe.status >= 500;
