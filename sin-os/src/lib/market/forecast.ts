@@ -64,6 +64,7 @@ export interface ForecastResult {
 export interface ForecastInternal extends ForecastResult {
   paths: number[][]; // trajetórias MC em R$/MWh (M × H)
   publishedAhead: { date: string; prices: number[] }[]; // dias futuros já publicados (ex.: D+1)
+  realizedDaily: number[][]; // últimos dias realizados (matriz dia×24h) — base do backtest de P&L realizado
 }
 
 const clipPld = (v: number) => Math.min(PLD_LIMITS.maxHourly, Math.max(PLD_LIMITS.min, v));
@@ -311,12 +312,14 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     warnings,
     paths,
     publishedAhead,
+    realizedDaily: dm.rows.slice(-30),
   };
 }
 
 export function publicForecast(f: ForecastInternal): ForecastResult {
-  const { paths: _p, publishedAhead: _a, ...rest } = f;
+  const { paths: _p, publishedAhead: _a, realizedDaily: _r, ...rest } = f;
   void _p;
   void _a;
+  void _r;
   return rest;
 }

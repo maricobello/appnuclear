@@ -106,6 +106,28 @@ export interface StorageResult {
   perMWDayRS: number;
   pnlHistogram: { from: number; to: number; count: number }[];
   solver: string;
+  /**
+   * Backtest ex-post sobre o PLD REALIZADO recente: teto de informação perfeita por dia
+   * (LP) e uma política simples de limiar; capture = política / teto. Mostra o que uma
+   * bateria teria capturado de fato — não é P&L transacionável (ver aviso na tela).
+   */
+  realized: { days: number; perMWDayRS: number; naivePerMWDayRS: number; captureRatio: number } | null;
+}
+
+/** Política ingênua de 1 ciclo/dia: carrega nas horas mais baratas, descarrega nas mais caras. */
+function naiveDayValue(prices: number[], spec: StorageSpec): number {
+  const dt = spec.dtHours ?? 1;
+  const hFill = Math.max(1, Math.round(spec.capacityMWh / (spec.powerMW * dt)));
+  const order = prices.map((p, i) => [p, i] as const).sort((a, b) => a[0] - b[0]);
+  const buy = new Set(order.slice(0, hFill).map(([, i]) => i));
+  const sell = new Set(order.slice(-hFill).map(([, i]) => i));
+  const k = spec.degradationCost ?? 0;
+  let cash = 0;
+  for (let i = 0; i < prices.length; i++) {
+    if (buy.has(i) && !sell.has(i)) cash -= prices[i] * spec.powerMW * dt + k * spec.etaCharge * spec.powerMW * dt;
+    else if (sell.has(i) && !buy.has(i)) cash += prices[i] * spec.etaCharge * spec.etaDischarge * spec.powerMW * dt - (k * spec.powerMW * dt) / spec.etaDischarge;
+  }
+  return cash;
 }
 
 function histogram(v: number[], bins = 24): StorageResult["pnlHistogram"] {
@@ -181,6 +203,20 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
       schedule: tomorrow.prices.map((price, h) => ({ h, price, mw: r.dischargeMW[h] - r.chargeMW[h], soc: r.soc[h] })),
     };
   }
+  // backtest ex-post no PLD realizado: teto (informação perfeita) vs. política ingênua
+  let realized: StorageResult["realized"] = null;
+  const days = (fc.realizedDaily ?? []).filter((d) => d.length === 24);
+  if (days.length >= 5) {
+    const daySpec = { ...spec, dtHours: 1, socInit: 0.5, socEnd: 0.5 };
+    let pfSum = 0, naiveSum = 0;
+    for (const d of days) {
+      pfSum += (await optimizeStorageLP(d, daySpec)).value;
+      naiveSum += Math.max(0, naiveDayValue(d, daySpec));
+    }
+    const perMW = pfSum / days.length / spec.powerMW;
+    const naivePerMW = naiveSum / days.length / spec.powerMW;
+    realized = { days: days.length, perMWDayRS: perMW, naivePerMWDayRS: naivePerMW, captureRatio: perMW > 0 ? naivePerMW / perMW : 0 };
+  }
   const total = lp.value + extrinsic;
   return {
     spec,
@@ -196,6 +232,7 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
     perMWDayRS: total / spec.powerMW / (curve.length / 24),
     pnlHistogram: histogram(pnl),
     solver: `HiGHS ${lp.mip ? "MILP" : "LP"} (exato) + LSMC em grade`,
+    realized,
   };
 }
 

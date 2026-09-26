@@ -192,6 +192,14 @@ export default function ArbitragemPage() {
         />
       </div>
 
+      {b?.realized ? (
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+          <Stat label="Teto realizado (últimos dias)" value={brl(b.realized.perMWDayRS, 0)} unit="R$/MW·dia" hint={`informação perfeita no PLD realizado · ${b.realized.days} dias`} />
+          <Stat label="Política simples (limiar)" value={brl(b.realized.naivePerMWDayRS, 0)} unit="R$/MW·dia" hint="carrega barato / descarrega caro, 1 ciclo/dia" />
+          <Stat label="Capture ratio" value={pct(100 * b.realized.captureRatio, 0)} hint="política simples / teto realizado" deltaGood={b.realized.captureRatio >= 0.5} delta={b.realized.captureRatio >= 0.5 ? "captura a maior parte" : "muito abaixo do teto"} />
+        </div>
+      ) : null}
+
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title="Despacho ótimo — próximas 72 h" subtitle="Preço previsto, potência na rede e estado de carga (gráficos separados, mesmo eixo de tempo)" right={<SourceTag meta={a?.meta.pld} label="PLD" />}>
           {priceOpt && dispatchOpt && socOpt ? (

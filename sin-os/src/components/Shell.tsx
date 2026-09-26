@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
-import { ArrowLeftRight, Atom, BookOpen, CloudSun, Gauge, Globe, Menu, ShieldCheck, TrendingUp, X, Zap } from "lucide-react";
+import { ArrowLeftRight, Atom, BookOpen, CloudSun, Gauge, Globe, Menu, ShieldCheck, TrendingUp, Wallet, X, Zap } from "lucide-react";
 import { useApi } from "@/lib/useApi";
 import { Badge } from "./ui";
 
@@ -12,6 +12,7 @@ const NAV = [
   { href: "/sin", label: "SIN · Brasil", Icon: Zap },
   { href: "/previsao", label: "Previsão", Icon: TrendingUp },
   { href: "/arbitragem", label: "Arbitragem", Icon: ArrowLeftRight },
+  { href: "/carteira", label: "Carteira", Icon: Wallet },
   { href: "/global", label: "Mercados globais", Icon: Globe },
   { href: "/clima", label: "Clima & hidrologia", Icon: CloudSun },
   { href: "/auditoria", label: "Agente auditor", Icon: ShieldCheck },
