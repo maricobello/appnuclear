@@ -196,6 +196,18 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
       schedule: tomorrow.prices.map((price, h) => ({ h, price, mw: r.dischargeMW[h] - r.chargeMW[h], soc: r.soc[h] })),
     };
   }
+  // coerência do Monte Carlo com o PLD real: variação intradiária Σ|p_{h+1} − p_h| mediana
+  // das trajetórias (D+1) contra a dos últimos dias reais — se o MC oscila mais que o real,
+  // a opcionalidade (LSMC) e o teto por trajetória saem otimistas
+  if (mc && (fc.realizedDaily?.length ?? 0) >= 7) {
+    const tv = (a: number[]) => a.slice(1).reduce((s, v, h) => s + Math.abs(v - a[h]), 0);
+    const med = (a: number[]) => { const b = a.slice().sort((x, y) => x - y); return b[Math.floor(b.length / 2)]; };
+    const tvReal = med(fc.realizedDaily.filter((d) => d.length === 24).map(tv));
+    const tvSim = med(fc.paths.map((p) => tv(p.slice(0, 24))));
+    if (tvReal > 0 && tvSim > 1.15 * tvReal) {
+      notes.push(`As trajetórias oscilam ${(tvSim / tvReal).toFixed(1).replace(".", ",")}× mais dentro do dia que o PLD real dos últimos dias: a opcionalidade e o teto por trajetória tendem a sair otimistas — use o intrínseco e o backtest realizado como referência.`);
+    }
+  }
   // backtest ex-post no PLD realizado: teto (informação perfeita) vs. política ingênua
   let realized: StorageResult["realized"] = null;
   const days = (fc.realizedDaily ?? []).filter((d) => d.length === 24);

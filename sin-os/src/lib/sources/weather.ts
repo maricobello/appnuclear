@@ -74,7 +74,9 @@ export async function fetchWeather(): Promise<SourceResult<HubForecast[]>> {
       `${OM_FORECAST}?latitude=${lat}&longitude=${lon}` +
       `&hourly=temperature_2m,shortwave_radiation,wind_speed_100m,precipitation&daily=precipitation_sum` +
       `&wind_speed_unit=ms&forecast_days=16&timezone=America%2FSao_Paulo`;
-    const { value } = await cached("om:forecast", 30 * 60_000, () => fetchJson<OmResponse | OmResponse[]>(url));
+    // orçamento de tempo < maxDuration da rota (60 s): 2 tentativas × 20 s; se o Open-Meteo
+    // estiver lento, a rota responde com o fallback sinalizado em vez de estourar em 504
+    const { value } = await cached("om:forecast", 30 * 60_000, () => fetchJson<OmResponse | OmResponse[]>(url, { timeoutMs: 20_000, retries: 1 }));
     const arr = Array.isArray(value.json) ? value.json : [value.json];
     if (arr.length !== HUBS.length) quality.schemaIssues.push(`esperava ${HUBS.length} locais, recebeu ${arr.length}`);
     const out: HubForecast[] = arr.map((r, i) => {
@@ -120,7 +122,7 @@ export async function fetchBasinEnsemble(): Promise<SourceResult<BasinEnsemble[]
       `${OM_ENSEMBLE}?latitude=${basins.map((b) => b.lat).join(",")}&longitude=${basins.map((b) => b.lon).join(",")}` +
       `&hourly=precipitation&models=ecmwf_ifs025&forecast_days=15&timezone=America%2FSao_Paulo`;
     const { value } = await cached("om:ensemble", 60 * 60_000, () =>
-      fetchJson<{ hourly: Record<string, (number | null)[]> & { time: string[] } } | { hourly: Record<string, (number | null)[]> & { time: string[] } }[]>(url, { timeoutMs: 30_000 }),
+      fetchJson<{ hourly: Record<string, (number | null)[]> & { time: string[] } } | { hourly: Record<string, (number | null)[]> & { time: string[] } }[]>(url, { timeoutMs: 25_000, retries: 1 }),
     );
     const arr = Array.isArray(value.json) ? value.json : [value.json];
     const out: BasinEnsemble[] = arr.map((r, i) => {
