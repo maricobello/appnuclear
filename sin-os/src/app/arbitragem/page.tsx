@@ -146,10 +146,20 @@ export default function ArbitragemPage() {
     <div className="flex flex-col gap-4">
       <PageHeader
         title="Arbitragem"
-        subtitle="Temporal (armazenamento: DP de Bellman para o valor intrínseco e Least-Squares Monte Carlo para a opcionalidade), espacial (spreads entre submercados com ADF, cointegração e meia-vida) e europeia (bateria por zona e valor de congestionamento em fronteiras)."
+        subtitle="Temporal (armazenamento: LP exato + Least-Squares Monte Carlo), espacial (spreads entre submercados) e europeia. Métricas de decisão/risco, não P&L transacionável."
         right={<Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />}
       />
       <SimBanner metas={[a?.meta.pld, a?.meta.eu, a?.meta.fx]} />
+      <div role="note" className="flex items-start gap-2 rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
+        <span aria-hidden>ℹ️</span>
+        <span>
+          <strong className="text-ink-2">Como ler estes números.</strong> No SIN não existe mercado spot contínuo onde se compre/venda no PLD à vontade
+          (a liquidação é ex-post, mensal, sobre a exposição líquida). O valor de bateria em R$/MW·dia é um <strong>teto prospectivo</strong> do
+          potencial de arbitragem — não P&L realizável hoje — e não inclui encargos, TUST/TUSD nem tributos. Receita real de BESS vem de leilão de
+          reserva de capacidade, serviços ancilares ou behind-the-meter. O spread entre submercados é <strong>indicador de risco</strong> (não há FTR no SIN);
+          “reversão esperada” é leitura estatística, não uma operação executável.
+        </span>
+      </div>
       {error && !a ? <ErrorBox error={error} /> : null}
 
       <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3">
@@ -215,7 +225,7 @@ export default function ArbitragemPage() {
       </div>
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
-        <Panel title="Spreads entre submercados (30 dias)" subtitle="z-score, % de horas descoladas, ADF (estacionariedade), Engle–Granger e meia-vida (OU)">
+        <Panel title="Spreads entre submercados (30 dias)" subtitle="Risco de descolamento entre submercados (não é arbitragem: não há FTR no SIN). z-score, % de horas descoladas, ADF, Engle–Granger e meia-vida (OU)">
           {a ? (
             <Table
               head={["Par", "Atual", "z", "Descolado", "Meia-vida", "ADF p", "Coint.", "Sinal"]}

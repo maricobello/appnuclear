@@ -80,7 +80,18 @@ export default function PrevisaoPage() {
       <PageHeader
         title="Previsão probabilística do PLD"
         subtitle="Ensemble auditável: LEAR (LASSO via LARS, benchmark do epftoolbox) para o ponto, intervalos conformais adaptativos (ACI), QRA para quantis do D+1, Monte Carlo com difusão de reversão à média com saltos (MRJD), regimes por HMM e volatilidade GARCH(1,1). Avaliação fora da amostra com re-estimação diária."
-        right={<Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />}
+        right={
+          <div className="flex items-center gap-3">
+            <a
+              href={`/api/previsao?sub=${sub}&format=csv`}
+              className="rounded-md border border-line px-2.5 py-1 text-xs text-ink-2 hover:bg-surface-2"
+              title="Baixar a curva horária prevista (LEAR, banda e quantis) em CSV"
+            >
+              ↓ CSV
+            </a>
+            <Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />
+          </div>
+        }
       />
       {f ? <SimBanner metas={[{ id: "ccee_pld", ok: true, simulated: f.simulated, fallback: f.fallback, error: null, latestTs: null }]} /> : null}
       {error && !f ? <ErrorBox error={error} /> : null}

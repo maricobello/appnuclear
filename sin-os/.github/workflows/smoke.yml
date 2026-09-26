@@ -16,7 +16,7 @@ jobs:
       - name: Rotas de API
         run: |
           fail=0
-          for path in "/api/status" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
+          for path in "/api/status" "/api/health" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
                       "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE"; do
             code=$(curl -s -o body.json -w '%{http_code}' --max-time 120 "$URL$path")
             echo "== $path → HTTP $code"

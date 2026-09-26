@@ -119,7 +119,7 @@ export default function Home() {
 
   return (
     <div className="flex flex-col gap-4">
-      <SimBanner metas={[d?.meta.pld, d?.meta.ear]} />
+      <SimBanner metas={[d?.meta.pld, d?.meta.cmo, d?.meta.ear, d?.meta.ena, d?.meta.load]} />
       {br.error && !d ? <ErrorBox error={br.error} /> : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">

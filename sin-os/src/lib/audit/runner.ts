@@ -12,6 +12,7 @@ import { fetchBasinEnsemble, fetchWeather } from "../sources/weather";
 import { PLD_FROM_CMO, panelToDays } from "../data";
 import { pldFromCmo } from "../market/brazil";
 import { euZoneStore, listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
+import { notifyIfDegraded } from "./alert";
 import { auditSource, crossFx, crossPldCmo } from "./checks";
 import type { AuditRun, SourceAudit } from "./types";
 
@@ -105,6 +106,7 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
     agentTriggered: shouldInvokeAgent,
   };
   await saveAuditRun(run);
+  await notifyIfDegraded(run, previous).catch(() => false);
   // cada auditoria também alimenta o histórico próprio de PLD (Firestore) — base do fallback "last known good"
   if (results.ccee_pld.ok && results.ccee_pld.data) {
     await savePldDays(panelToDays(results.ccee_pld.data as SubPanel, "ccee")).catch(() => 0);
