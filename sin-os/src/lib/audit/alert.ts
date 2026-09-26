@@ -14,8 +14,8 @@ export interface Health {
 
 const EXPECTED_DOWN = new Set(["ccee_pld"]);
 const minScore = () => Number(process.env.ALERT_MIN_SCORE ?? 70);
-/** Idade máxima do último run antes de considerar o auditor parado (min). Cron roda a cada 15. */
-export const maxAgeMin = () => Number(process.env.HEALTH_MAX_AGE_MIN ?? 60);
+/** Idade máxima do último run antes de considerar o auditor parado (min). O cron garantido é o diário da Vercel; o de 15 min do GitHub é best-effort e costuma atrasar, então o limite tolera ~1 dia. */
+export const maxAgeMin = () => Number(process.env.HEALTH_MAX_AGE_MIN ?? 1500);
 
 export function healthOf(run: AuditRun): Health {
   const reasons: string[] = [];
