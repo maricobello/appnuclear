@@ -1,18 +1,43 @@
 import { brtDate, brtHour } from "../sources/time";
 import { SUBS, type Sub, type SubPanel } from "../sources/types";
 
+export interface PldLimits {
+  year: number;
+  min: number;
+  maxStructural: number;
+  maxHourly: number;
+  source: string;
+}
+
 /**
  * Limites regulatórios do PLD para 2026 — ANEEL, Despacho nº 3.850/2025
  * (publicado em 23/12/2025): mínimo = maior entre TEO e TEO Itaipu.
  * Atualize anualmente (variáveis de ambiente sobrescrevem).
  */
-export const PLD_LIMITS = {
+export const PLD_LIMITS: PldLimits = {
   year: 2026,
   min: Number(process.env.PLD_MIN ?? 57.31),
   maxStructural: Number(process.env.PLD_MAX_ESTRUTURAL ?? 785.27),
   maxHourly: Number(process.env.PLD_MAX_HORARIO ?? 1611.04),
   source: "ANEEL — Despacho nº 3.850/2025",
 };
+
+/**
+ * Limites de anos anteriores (homologados pela ANEEL para cada ano civil). O histórico
+ * de PLD reconstruído a partir do CMO precisa do limite do PRÓPRIO ano: aplicar os de
+ * 2026 a 2024–25 distorcia a média mensal em até ~R$ 28/MWh (auditoria set/2026).
+ */
+const PAST_LIMITS: PldLimits[] = [
+  { year: 2024, min: 61.07, maxStructural: 716.8, maxHourly: 1470.57, source: "ANEEL — limites do PLD 2024" },
+  { year: 2025, min: 58.6, maxStructural: 751.73, maxHourly: 1542.23, source: "ANEEL — limites do PLD 2025" },
+];
+
+/** Limites vigentes no ano (anos sem tabela usam o mais próximo disponível). */
+export function limitsFor(year: number): PldLimits {
+  if (year >= PLD_LIMITS.year) return PLD_LIMITS;
+  const past = PAST_LIMITS.filter((l) => l.year <= year).pop();
+  return past ?? PAST_LIMITS[0];
+}
 
 export const clampPld = (v: number) => Math.min(PLD_LIMITS.maxHourly, Math.max(PLD_LIMITS.min, v));
 
@@ -110,8 +135,8 @@ export function latestBySub(panel: SubPanel, atOrBefore = Date.now()) {
  * de forma uniforme e proporcional acima do piso até a média ficar igual ao teto,
  * mantendo o perfil horário. Vale para PLD observado, estimado e previsto.
  */
-export function capDailyMean(day: number[]): number[] {
-  const { min, maxStructural } = PLD_LIMITS;
+export function capDailyMean(day: number[], limits: PldLimits = PLD_LIMITS): number[] {
+  const { min, maxStructural } = limits;
   const m = day.reduce((a, b) => a + b, 0) / day.length;
   if (m <= maxStructural) return day;
   const k = (maxStructural - min) / (m - min);
@@ -132,8 +157,9 @@ export function capDailyMeans(hourly: number[]): number[] {
  * Dias incompletos só recebem o passo 1.
  */
 export function pldFromCmo(cmo: SubPanel): SubPanel {
+  const lim = cmo.ts.map((t) => limitsFor(Number(brtDate(t).slice(0, 4))));
   const values = Object.fromEntries(
-    SUBS.map((s) => [s, cmo.values[s].map((v) => (v === null ? null : clampPld(v)))]),
+    SUBS.map((s) => [s, cmo.values[s].map((v, i) => (v === null ? null : Math.min(lim[i].maxHourly, Math.max(lim[i].min, v))))]),
   ) as SubPanel["values"];
   const days = new Map<string, number[]>();
   cmo.ts.forEach((t, i) => {
@@ -145,7 +171,7 @@ export function pldFromCmo(cmo: SubPanel): SubPanel {
     for (const s of SUBS) {
       const day = idx.map((i) => values[s][i]);
       if (day.some((v) => v === null)) continue;
-      const capped = capDailyMean(day as number[]);
+      const capped = capDailyMean(day as number[], lim[idx[0]]);
       idx.forEach((i, h) => (values[s][i] = capped[h]));
     }
   }

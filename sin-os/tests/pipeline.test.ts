@@ -26,6 +26,7 @@ describe("pipeline completo sobre dados simulados", () => {
     const fc = buildForecast(pld, "SE", 7, 400);
     const ms = Date.now() - t0;
     expect(fc.horizon.lear).toHaveLength(168);
+    expect(fc.horizon.point).toHaveLength(168);
     expect(fc.horizon.mc.p05.every((v, i) => v <= fc.horizon.mc.p95[i] + 1e-9)).toBe(true);
     expect(fc.horizon.qraNextDay.quantiles).toHaveLength(24);
     expect(fc.backtest.days).toBeGreaterThan(5);
@@ -37,6 +38,7 @@ describe("pipeline completo sobre dados simulados", () => {
     // teto estrutural: nenhum dia previsto (LEAR) nem simulado (MRJD) acima da média permitida
     for (let k = 0; k < 7; k++) {
       expect(mean(fc.horizon.lear.slice(24 * k, 24 * k + 24))).toBeLessThanOrEqual(PLD_LIMITS.maxStructural + 0.01);
+      expect(mean(fc.horizon.point.slice(24 * k, 24 * k + 24))).toBeLessThanOrEqual(PLD_LIMITS.maxStructural + 0.01);
       expect(fc.paths.every((p) => mean(p.slice(24 * k, 24 * k + 24)) <= PLD_LIMITS.maxStructural + 1e-6)).toBe(true);
     }
     expect(fc.backtest.qraCoverage90).toBeGreaterThan(0.5);

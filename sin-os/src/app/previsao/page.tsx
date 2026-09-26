@@ -17,7 +17,7 @@ function fan(f: PrevisaoResp): ChartOption {
   return {
     ...baseOption(),
     tooltip: { ...baseOption().tooltip, valueFormatter: (v: number) => brl(v) },
-    legend: { ...baseOption().legend, data: ["Realizado", "LEAR (ponto)", "Mediana MC", "ACI 90% (conformal)", "MC P05–P95", "MC P25–P75"] },
+    legend: { ...baseOption().legend, data: ["Realizado", "Previsão (LEAR ⊕ ingênuo)", "LEAR sozinho", "Mediana MC", "ACI 90% (conformal)", "MC P05–P95", "MC P25–P75"] },
     xAxis: timeAxis(),
     yAxis: valueAxis("R$/MWh"),
     dataZoom: [{ type: "inside" }],
@@ -25,7 +25,8 @@ function fan(f: PrevisaoResp): ChartOption {
       ...band("MC P05–P95", h.ts, h.mc.p05, h.mc.p95, color, 0.1, "a"),
       ...band("MC P25–P75", h.ts, h.mc.p25, h.mc.p75, color, 0.2, "b"),
       line("Realizado", f.history.ts.map((t, i) => [t, f.history.values[i]]), C.ink2),
-      line("LEAR (ponto)", h.ts.map((t, i) => [t, h.lear[i]]), color),
+      line("Previsão (LEAR ⊕ ingênuo)", h.ts.map((t, i) => [t, (h.point ?? h.lear)[i]]), color),
+      line("LEAR sozinho", h.ts.map((t, i) => [t, h.lear[i]]), C.series[4], { lineStyle: { width: 1, color: C.series[4], type: [2, 3] } }),
       line("Mediana MC", h.ts.map((t, i) => [t, h.mc.p50[i]]), C.series[6], { lineStyle: { width: 1.5, color: C.series[6] } }),
       line("ACI 90% (conformal)", h.ts.map((t, i) => [t, h.aciHi[i]]), C.muted, { lineStyle: { width: 1, color: C.muted, type: [4, 3] } }),
       line("ACI 90% (conformal)", h.ts.map((t, i) => [t, h.aciLo[i]]), C.muted, { lineStyle: { width: 1, color: C.muted, type: [4, 3] } }),
@@ -97,17 +98,27 @@ export default function PrevisaoPage() {
       {error && !f ? <ErrorBox error={error} /> : null}
 
       <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="MAE LEAR (fora da amostra)" value={num(bt?.maeLear, 2)} unit="R$/MWh" hint={bt ? `${bt.days} dias · ingênuo ${num(bt.maeNaive, 2)}` : undefined} />
-        <Stat label="rMAE vs ingênuo semanal" value={num(bt?.rmae, 3)} delta={bt ? (bt.rmae < 1 ? "supera o benchmark" : "não supera o benchmark") : null} deltaGood={bt ? bt.rmae < 1 : null} />
+        <Stat label="MAE da previsão (fora da amostra)" value={num(bt?.maeModel ?? bt?.maeLear, 2)} unit="R$/MWh" hint={bt ? `${bt.days} dias · LEAR sozinho ${num(bt.maeLear, 2)} · ingênuo ${num(bt.maeNaive, 2)}` : undefined} />
+        <Stat
+          label="rMAE vs ingênuo semanal"
+          value={num(bt?.rmae, 3)}
+          delta={bt ? (bt.rmae < 1 ? "supera o benchmark" : "não supera o benchmark") : null}
+          deltaGood={bt ? bt.rmae < 1 : null}
+          hint={bt?.rmaeLear !== undefined ? `LEAR sozinho ${num(bt.rmaeLear, 3)} · em 891 dias reais: combinação 0,95–0,99, LEAR 1,04–1,12` : undefined}
+        />
         <Stat label="Teste Diebold–Mariano" value={bt ? `p = ${num(bt.dm.pValue, 3)}` : "—"} delta={bt ? (bt.dm.pValue < 0.05 ? "ganho significativo (5%)" : "sem significância a 5%") : null} deltaGood={bt ? bt.dm.pValue < 0.05 : null} />
-        <Stat label="Cobertura ACI (alvo 90%)" value={pct(bt ? 100 * bt.aci.coverage : null, 1)} hint={bt ? `Kupiec p = ${num(bt.aci.kupiecP, 3)} · ±${brl(bt.aci.halfWidth, 0)}` : undefined} />
+        <Stat
+          label="Cobertura da banda (alvo 90%)"
+          value={pct(bt ? 100 * bt.aci.coverage : null, 1)}
+          hint={bt ? `Kupiec (blocos diários, deff ${num(bt.aci.deff ?? 1, 1)}) p = ${num(bt.aci.kupiecP, 3)} · Christoffersen 24 h p = ${bt.aci.christoffersenP !== undefined ? num(bt.aci.christoffersenP, 3) : "—"} · ±${brl(bt.aci.halfWidth, 0)} médio` : undefined}
+        />
         <Stat label="CRPS QRA (fora da amostra)" value={num(bt?.qraCrps, 2)} unit="R$/MWh" hint={bt ? `cobertura 5–95%: ${pct(100 * bt.qraCoverage90, 0)} (alvo 90%) · menor é melhor` : undefined} />
         <Stat label="sMAPE" value={pct(bt?.smape, 1)} hint={bt ? `RMSE ${num(bt.rmse, 1)}` : undefined} />
       </div>
 
       <Panel
         title={`Leque de previsão — PLD ${sub}`}
-        subtitle={f ? `Último dia observado ${dayLabel(f.lastObservedDate)} · previsão a partir de ${dayLabel(f.firstForecastDate)} · 1.000 trajetórias MRJD centradas no LEAR` : "calibrando modelos…"}
+        subtitle={f ? `Último dia observado ${dayLabel(f.lastObservedDate)} · previsão a partir de ${dayLabel(f.firstForecastDate)} · 1.000 trajetórias (nível diário + MRJD intradiário) centradas na previsão · banda 90% calibrada em D+1; em D+5–D+7 a cobertura medida em dados reais cai para ~85%` : "calibrando modelos…"}
       >
         {fanOpt ? <EChart option={fanOpt} height={380} label="Leque de previsão do PLD" dim={isValidating} /> : <Loading height={380} />}
         {f?.warnings.length ? (
@@ -181,12 +192,12 @@ export default function PrevisaoPage() {
             <Loading />
           )}
         </Panel>
-        <Panel title="Média diária prevista" subtitle="LEAR e faixa Monte Carlo P05–P95 (média das horas)">
+        <Panel title="Média diária prevista" subtitle="Previsão publicada, LEAR sozinho e faixa 90% da MÉDIA DO DIA (conformal nos erros diários do backtest, por horizonte)">
           {f ? (
             <Table
-              head={["Dia", "LEAR", "P05", "P95"]}
-              align={["left", "right", "right", "right"]}
-              rows={f.horizon.dailyMean.map((d) => [dayLabel(d.date), brl(d.lear), brl(d.p05), brl(d.p95)])}
+              head={["Dia", "Previsão", "LEAR", "P05", "P95"]}
+              align={["left", "right", "right", "right", "right"]}
+              rows={f.horizon.dailyMean.map((d) => [dayLabel(d.date), brl(d.point ?? d.lear), brl(d.lear), brl(d.p05), brl(d.p95)])}
             />
           ) : (
             <Loading />

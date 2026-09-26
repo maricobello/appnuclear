@@ -40,14 +40,14 @@ function fanOption(f: PrevisaoResp): ChartOption {
   return {
     ...baseOption(),
     tooltip: { ...baseOption().tooltip, formatter: undefined, valueFormatter: (v: number) => brl(v) },
-    legend: { ...baseOption().legend, data: ["Realizado", "LEAR (P50)", "Monte Carlo P05–P95", "P25–P75"] },
+    legend: { ...baseOption().legend, data: ["Realizado", "Previsão", "Monte Carlo P05–P95", "P25–P75"] },
     xAxis: timeAxis(),
     yAxis: valueAxis("R$/MWh"),
     series: [
       ...band("Monte Carlo P05–P95", h.ts, h.mc.p05, h.mc.p95, C.series[0], 0.12, "a"),
       ...band("P25–P75", h.ts, h.mc.p25, h.mc.p75, C.series[0], 0.22, "b"),
       line("Realizado", hist.ts.slice(cut).map((t, i) => [t, hist.values[cut + i]]), C.ink2),
-      line("LEAR (P50)", h.ts.map((t, i) => [t, h.lear[i]]), C.series[0]),
+      line("Previsão", h.ts.map((t, i) => [t, (h.point ?? h.lear)[i]]), C.series[0]),
     ],
   };
 }

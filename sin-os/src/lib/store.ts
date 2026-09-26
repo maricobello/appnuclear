@@ -135,3 +135,29 @@ export const euZoneStore: ZoneStore = {
     await withDb((db) => db.collection("eu_prices").doc(z.bzn).set(z).then(() => undefined), () => undefined);
   },
 };
+
+const slots = new Map<string, number>();
+/**
+ * Trava de taxa global (entre instâncias) via transação no Firestore: devolve true e
+ * registra o horário se a última reserva de `key` tem mais de `minIntervalMs`. Sem
+ * Firestore, vale só para esta instância.
+ */
+export async function claimSlot(key: string, minIntervalMs: number, now = Date.now()): Promise<boolean> {
+  const local = () => {
+    const last = slots.get(key) ?? 0;
+    if (now - last < minIntervalMs) return false;
+    slots.set(key, now);
+    return true;
+  };
+  return withDb(
+    (db) =>
+      db.runTransaction(async (tx) => {
+        const ref = db.collection("meta").doc(`slot_${key}`);
+        const last = Number((await tx.get(ref)).data()?.at ?? 0);
+        if (now - last < minIntervalMs) return false;
+        tx.set(ref, { at: now });
+        return true;
+      }),
+    local,
+  );
+}

@@ -15,8 +15,8 @@ interface Model {
 const MODELS: Model[] = [
   {
     name: "LEAR — LASSO Estimated AutoRegressive",
-    role: "Previsão pontual horária do PLD (24 modelos, um por hora).",
-    math: "p̃_{d,h} = asinh((p − mediana)/MAD·) ; p̃_{d,h} = β₀ + Σ_{L∈{1,2,3,7}} Σ_{h'} β_{L,h'} p̃_{d−L,h'} + Σ γ_k DoW_k ; β por LASSO (LARS) com λ escolhido por AICc",
+    role: "Previsão pontual horária do PLD (24 modelos, um por hora). A previsão PUBLICADA é a média simples LEAR ⊕ ingênuo semanal.",
+    math: "p̃_{d,h} = asinh((p − mediana)/MAD·) ; p̃_{d,h} = β₀ + Σ_{L∈{1,2,3,7}} Σ_{h'} β_{L,h'} p̃_{d−L,h'} + Σ γ_k DoW_k ; β por LASSO (LARS) com λ escolhido por AICc ; ŷ limitado à faixa de p̃ vista no treino ; publicado = ½·LEAR + ½·ingênuo",
     refs: [
       "Lago, Marcjasz, De Schutter & Weron (2021), Applied Energy 293 — benchmark aberto de EPF",
       "Uniejewski, Nowotarski & Weron (2016), Energies 9(8)",
@@ -27,7 +27,7 @@ const MODELS: Model[] = [
       { label: "jeslago/epftoolbox", href: "https://github.com/jeslago/epftoolbox" },
       { label: "scikit-learn LassoLarsIC", href: "https://github.com/scikit-learn/scikit-learn" },
     ],
-    validation: "Backtest rolante com re-estimação diária; rMAE vs ingênuo semanal; teste de Diebold–Mariano (HLN). Teste unitário: LEAR supera o ingênuo com DM p < 0,05.",
+    validation: "Backtest rolante com re-estimação diária em 891 dias reais (abr/2024–set/2026): LEAR sozinho rMAE 1,04–1,12 (perde do ingênuo no período longo); média LEAR ⊕ ingênuo 0,95–0,99 nos 4 submercados, melhor que o LEAR com DM (Newey–West) t ≈ −3,9 a −4,5. Em produção: rMAE e DM (HAC de Bartlett, HLN) nos últimos 28 dias.",
   },
   {
     name: "Adaptive Conformal Inference (ACI)",
@@ -35,7 +35,7 @@ const MODELS: Model[] = [
     math: "α_{t+1} = α_t + γ(α − 𝟙{y_t ∉ Ĉ_t}) ; Ĉ_t = ŷ_t ± Q_{⌈(n+1)(1−α_t)⌉/n}(|resíduos|)",
     refs: ["Gibbs & Candès (2021), NeurIPS", "Angelopoulos & Bates (2023), Found. & Trends in ML — introdução à predição conformal", "Kupiec (1995) — teste de cobertura"],
     code: [{ label: "scikit-learn-contrib/MAPIE", href: "https://github.com/scikit-learn-contrib/MAPIE" }],
-    validation: "Teste unitário: cobertura empírica entre 87% e 93% para alvo de 90%. Em produção: cobertura observada + p-valor de Kupiec.",
+    validation: "Teste unitário: cobertura empírica entre 87% e 93% para alvo de 90%. Escore normalizado pelo fator da hora (a cobertura é a da banda publicada). Em produção: Kupiec com efeito de desenho diário (violações se agrupam no dia) e independência de Christoffersen na mesma hora de dias consecutivos. A faixa da média diária é conformal nos erros diários por horizonte.",
   },
   {
     name: "Quantile Regression Averaging (QRA)",
@@ -46,12 +46,12 @@ const MODELS: Model[] = [
     validation: "Teste unitário recupera inclinação e quantil 90% de DGP conhecido. Avaliação por CRPS (Gneiting & Raftery, 2007).",
   },
   {
-    name: "Difusão com reversão à média e saltos (MRJD)",
-    role: "Cenários estocásticos (1.000 trajetórias) em torno do LEAR — base do Monte Carlo, do CVaR e do LSMC.",
-    math: "dX = κ(μ − X)dt + σ dW + J dN ; N ~ Poisson(λ), J ~ N(μ_J, σ_J²) ; sazonalidade de Fourier 24h/168h ; filtro iterativo de saltos 3σ + AR(1) exato",
-    refs: ["Schwartz (1997), Journal of Finance 52(3)", "Cartea & Figueroa (2005), Applied Mathematical Finance 12(4)", "Weron (2014), Int. J. Forecasting — revisão de EPF"],
+    name: "Dois fatores: nível diário + MRJD intradiário",
+    role: "Cenários estocásticos (1.000 trajetórias) em torno da previsão publicada — base do Monte Carlo, do CVaR e do LSMC.",
+    math: "r_{d,h} = m_d + u_{d,h} ; m_d = φ m_{d−1} + η_d ; du = −κu dt + σ dW + J dN ; κ pelo AR(1) within com correção do viés de Nickell ; saltos no resíduo do AR(1) (3σ iterativo) ; Var(m) descontada da parte intradiária",
+    refs: ["Schwartz (1997), Journal of Finance 52(3)", "Cartea & Figueroa (2005), Applied Mathematical Finance 12(4)", "Nickell (1981), Econometrica 49(6)", "Weron (2014), Int. J. Forecasting — revisão de EPF"],
     code: [{ label: "statsmodels (AR/OU)", href: "https://github.com/statsmodels/statsmodels" }],
-    validation: "Teste unitário: recupera κ, μ e λ de trajetória simulada.",
+    validation: "Teste unitário: recupera κ, a variância e o AR(1) do nível diário de um painel sintético onde o AR(1) agrupado antigo subestimava κ. Em 56 origens reais por submercado, a cobertura 5–95% horária em D+7 subiu de 0,84–0,87 para 0,88–0,91.",
   },
   {
     name: "Markov-switching / HMM gaussiano (3 regimes)",

@@ -21,6 +21,13 @@ export interface LearModel {
   scalers: AsinhScaler[];
   exogScalers: AsinhScaler[];
   fits: LassoFit[]; // 24
+  /**
+   * Faixa do alvo transformado (asinh) vista no treino, por hora. A previsão é limitada a
+   * essa faixa antes de voltar à escala de preço: numa janela quase toda no piso o MAD
+   * colapsa (b pequeno) e sinh(ŷ) extrapolava para o teto (ex.: NE úmido/2025 previu
+   * ~931 R$/MWh com realizado de 72). Limitar nunca piorou o MAE na validação real.
+   */
+  yRange: [number, number][];
   lags: number[];
   nTrain: number;
   selectedFeatures: number; // média de coeficientes ativos
@@ -80,7 +87,7 @@ export function learFit(days: number[][], dows: number[], opts: LearOptions = {}
   const exogWin = opts.exog ? opts.exog.slice(start, days.length) : [];
   const nExog = exogWin[0]?.length ?? 0;
   const exogScalers = Array.from({ length: nExog }, (_, j) => fitAsinh(exogWin.map((r) => r[j])));
-  const model: LearModel = { scalers, exogScalers, fits: [], lags, nTrain: 0, selectedFeatures: 0, calibrationDays: cal };
+  const model: LearModel = { scalers, exogScalers, fits: [], yRange: [], lags, nTrain: 0, selectedFeatures: 0, calibrationDays: cal };
 
   const t = win.map((row) => transformRow(model, row));
   const X: number[][] = [];
@@ -95,6 +102,7 @@ export function learFit(days: number[][], dows: number[], opts: LearOptions = {}
     const fit =
       opts.solver === "cd" ? lassoIC(X, y, { criterion: "aicc", nLambda: opts.nLambda ?? 20 }) : lassoLarsIC(X, y, "aicc");
     model.fits.push(fit);
+    model.yRange.push([Math.min(...y), Math.max(...y)]);
     active += fit.df;
   }
   model.nTrain = X.length;
@@ -132,7 +140,10 @@ export function learForecast(
     const preds = models.map((m) => {
       const t = hist.map((r) => transformRow(m, r));
       const x = features([...t, []], t.length, dow, m.lags, transformExog(m, exogRow));
-      return m.fits.map((fit, h) => asinhInv(m.scalers[h], predictLinear(fit, x)));
+      return m.fits.map((fit, h) => {
+        const [lo, hi] = m.yRange[h] ?? [-Infinity, Infinity];
+        return asinhInv(m.scalers[h], Math.min(hi, Math.max(lo, predictLinear(fit, x))));
+      });
     });
     let pRow = Array.from({ length: HOURS }, (_, h) => preds.reduce((s, p) => s + p[h], 0) / preds.length);
     if (clip) pRow = pRow.map((p) => Math.min(clip[1], Math.max(clip[0], p)));

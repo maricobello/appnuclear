@@ -111,7 +111,9 @@ export interface StorageResult {
    * (LP) e uma política simples de limiar; capture = política / teto. Mostra o que uma
    * bateria teria capturado de fato — não é P&L transacionável (ver aviso na tela).
    */
-  realized: { days: number; perMWDayRS: number; naivePerMWDayRS: number; captureRatio: number } | null;
+  realized: { days: number; perMWDayRS: number; naivePerMWDayRS: number; captureRatio: number | null } | null;
+  /** Diagnósticos de consistência numérica (ex.: LSMC abaixo do intrínseco na grade). */
+  notes: string[];
 }
 
 
@@ -147,14 +149,19 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
   const mc = half >= 50;
   // curva a termo = E[preço]: o LEAR é ajustado em asinh e estima a MEDIANA; o valor
   // esperado de um despacho linear depende da média (desigualdade de Jensen)
-  const curve = mc ? fc.horizon.lear.map((_, t) => mean(fc.paths.map((p) => p[t]))) : fc.horizon.lear.slice();
+  const curve = mc ? fc.horizon.point.map((_, t) => mean(fc.paths.map((p) => p[t]))) : fc.horizon.point.slice();
   const lp = await optimizeStorageLP(curve, spec);
 
   let extrinsic = 0, stdErr = 0, pf = lp.value;
+  const notes: string[] = [];
   let pnl = [lp.value];
   if (mc) {
     const lsmc = valueStorageLSMC(fc.paths.slice(0, half), fc.paths.slice(half), spec);
-    extrinsic = Math.max(0, lsmc.value - lsmc.intrinsic);
+    const rawExtrinsic = lsmc.value - lsmc.intrinsic;
+    extrinsic = Math.max(0, rawExtrinsic);
+    if (rawExtrinsic < -2 * lsmc.stdErr) {
+      notes.push(`LSMC ficou ${rawExtrinsic.toFixed(0)} R$ abaixo do intrínseco na grade de SoC (erro de grade/amostra); a opcionalidade é mostrada como 0.`);
+    }
     stdErr = lsmc.stdErr;
     // P&L da política LSMC, deslocado pelo viés da grade medido na curva média
     pnl = lsmc.pnl.map((v) => v + (lp.value - lsmc.intrinsic));
@@ -162,6 +169,7 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
     const pfVals: number[] = [];
     for (const p of pfPaths) pfVals.push((await optimizeStorageLP(p, spec)).value);
     pf = mean(pfVals);
+    if (pf < lp.value + extrinsic) notes.push("Teto de informação perfeita (média de 200 trajetórias) ficou abaixo do valor com opcionalidade; o teto exibido é o maior dos dois.");
   }
 
   const tomorrow = fc.publishedAhead[0];
@@ -197,11 +205,14 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
     let pfSum = 0, naiveSum = 0;
     for (const d of days) {
       pfSum += Math.max(0, (await optimizeStorageLP(d, daySpec)).value);
+      // regra explícita da política simples: não opera no dia se o caixa seria < 0 (decisão
+      // implementável — o PLD de D+1 é publicado na véspera)
       naiveSum += Math.max(0, naiveDayValue(d, daySpec));
     }
     const perMW = pfSum / days.length / spec.powerMW;
     const naivePerMW = naiveSum / days.length / spec.powerMW;
-    realized = { days: days.length, perMWDayRS: perMW, naivePerMWDayRS: naivePerMW, captureRatio: perMW > 0 ? Math.min(1, naivePerMW / perMW) : 0 };
+    // PLD quase plano (teto < 1 R$/MW·dia): a razão não tem significado ⇒ n/d
+    realized = { days: days.length, perMWDayRS: perMW, naivePerMWDayRS: naivePerMW, captureRatio: perMW >= 1 ? Math.min(1, naivePerMW / perMW) : null };
   }
   const total = lp.value + extrinsic;
   return {
@@ -219,6 +230,7 @@ export async function bessArbitrage(fc: ForecastInternal, spec: StorageSpec = DE
     pnlHistogram: histogram(pnl),
     solver: `HiGHS ${lp.mip ? "MILP" : "LP"} (exato) + LSMC em grade`,
     realized,
+    notes,
   };
 }
 

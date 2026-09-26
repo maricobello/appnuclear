@@ -1,4 +1,6 @@
 import { AGENT_MODEL } from "@/lib/audit/agent";
+import { alertKind } from "@/lib/audit/health";
+import { computeSlo } from "@/lib/audit/slo";
 import { dataMode } from "@/lib/data";
 import { firebaseStatus } from "@/lib/firebase";
 import { quantile } from "@/lib/quant/stats";
@@ -40,6 +42,7 @@ export async function GET(req: Request) {
     return Response.json(
       {
         latest,
+        slo: computeSlo(runs),
         history: runs.map((r) => ({ id: r.id, startedAt: r.startedAt, overallScore: r.overallScore, counts: r.counts, trigger: r.trigger })).reverse(),
         reports,
         registry: SOURCE_LIST,
@@ -47,6 +50,7 @@ export async function GET(req: Request) {
         storage: storageKind(),
         firebase: firebaseStatus(),
         agent: { configured: !!process.env.ANTHROPIC_API_KEY, model: AGENT_MODEL },
+        alerts: process.env.ALERT_WEBHOOK_URL ? { configured: true, destination: alertKind(process.env.ALERT_WEBHOOK_URL) } : { configured: false, destination: null },
         auth: { required: !!(process.env.CRON_SECRET || process.env.ADMIN_KEY) },
         dataMode: dataMode(),
       },

@@ -147,7 +147,18 @@ export default function ArbitragemPage() {
       <PageHeader
         title="Arbitragem"
         subtitle="Temporal (armazenamento: LP exato + Least-Squares Monte Carlo), espacial (spreads entre submercados) e europeia. Métricas de decisão/risco, não P&L transacionável."
-        right={<Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />}
+        right={
+          <div className="flex items-center gap-3">
+            <a
+              href={`${url}&format=csv`}
+              className="rounded-md border border-line px-2.5 py-1 text-xs text-ink-2 hover:bg-surface-2"
+              title="Baixar o despacho ótimo das próximas 72 h (preço esperado, potência e SoC) em CSV"
+            >
+              ↓ CSV
+            </a>
+            <Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />
+          </div>
+        }
       />
       <SimBanner metas={[a?.meta.pld, a?.meta.eu, a?.meta.fx]} />
       <div role="note" className="flex items-start gap-2 rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
@@ -195,9 +206,21 @@ export default function ArbitragemPage() {
       {b?.realized ? (
         <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
           <Stat label="Teto realizado (últimos dias)" value={brl(b.realized.perMWDayRS, 0)} unit="R$/MW·dia" hint={`informação perfeita no PLD realizado · ${b.realized.days} dias`} />
-          <Stat label="Política simples (limiar)" value={brl(b.realized.naivePerMWDayRS, 0)} unit="R$/MW·dia" hint="carrega barato / descarrega caro, 1 ciclo/dia" />
-          <Stat label="Capture ratio" value={pct(100 * b.realized.captureRatio, 0)} hint="política simples / teto realizado" deltaGood={b.realized.captureRatio >= 0.5} delta={b.realized.captureRatio >= 0.5 ? "captura a maior parte" : "muito abaixo do teto"} />
+          <Stat label="Política simples (limiar)" value={brl(b.realized.naivePerMWDayRS, 0)} unit="R$/MW·dia" hint="carrega nas horas mais baratas e descarrega nas mais caras, 1 ciclo/dia; não opera se o caixa do dia seria < 0 (o PLD D+1 sai na véspera)" />
+          {b.realized.captureRatio === null ? (
+            <Stat label="Capture ratio" value="n/d" hint="PLD quase plano no período: o teto é ~0 e a razão não tem significado" />
+          ) : (
+            <Stat label="Capture ratio" value={pct(100 * b.realized.captureRatio, 0)} hint="política simples / teto realizado" deltaGood={b.realized.captureRatio >= 0.5} delta={b.realized.captureRatio >= 0.5 ? "captura a maior parte" : "muito abaixo do teto"} />
+          )}
         </div>
+      ) : null}
+
+      {b?.notes?.length ? (
+        <ul className="flex flex-col gap-1 text-[11px] text-muted" aria-label="Diagnósticos numéricos">
+          {b.notes.map((n, i) => (
+            <li key={i}>⚠ {n}</li>
+          ))}
+        </ul>
       ) : null}
 
       <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">

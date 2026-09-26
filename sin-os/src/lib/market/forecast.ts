@@ -1,9 +1,9 @@
-import { adaptiveConformal } from "../quant/conformal";
+import { adaptiveConformal, conformalQuantile } from "../quant/conformal";
 import { fitGarch } from "../quant/garch";
 import { fitHmm, hmmStateLabel, regimeForecast } from "../quant/hmm";
 import { learBacktest, learFit, learForecast, naiveForecast } from "../quant/lear";
-import { crpsFromQuantiles, dieboldMariano, kupiec, mae, rmae, rmse, smape } from "../quant/metrics";
-import { calibrateMRJD, calibrateMRJDSegments, fitSeasonality, simulateMRJD } from "../quant/ou";
+import { christoffersen, crpsFromQuantiles, dieboldMariano, kupiecBlocks, mae, rmae, rmse, smape } from "../quant/metrics";
+import { calibrateMRJD, calibrateTwoFactor, fitSeasonality, simulateTwoFactor, type TwoFactorParams } from "../quant/ou";
 import { fitQRA, predictQRA } from "../quant/qra";
 import { mean, mulberry32, quantile, round } from "../quant/stats";
 import { asinhFwd, asinhInv, fitAsinh } from "../quant/transforms";
@@ -13,6 +13,31 @@ import { capDailyMean, capDailyMeans, PLD_LIMITS, toDayMatrix } from "./brazil";
 
 export const QRA_TAUS = [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
 
+/**
+ * Peso do LEAR na previsão pontual publicada (o resto vai para o ingênuo semanal).
+ * Em 891 dias reais fora da amostra (abr/2024–set/2026), o LEAR sozinho teve rMAE
+ * 1,04–1,12 (perde do ingênuo no período longo, com a transição úmido→seco), enquanto a
+ * média simples 50/50 ficou em 0,95–0,99 nos 4 submercados e venceu o LEAR com DM (HAC)
+ * t ≈ −3,9 a −4,5. Pesos estimados em janela móvel não superaram a média simples
+ * (o "enigma da combinação" de previsões — Smith & Wallis, 2009).
+ */
+export const LEAR_WEIGHT = 0.5;
+
+/**
+ * Combina uma trajetória LEAR (dias × 24) com o ingênuo semanal de forma recursiva: o
+ * ingênuo de D+k usa a própria previsão combinada dos dias anteriores quando o dia de
+ * referência ainda não foi observado. `hist` = dias observados até a origem.
+ */
+export function combinePath(learPath: number[][], hist: number[][], dows: number[], w = LEAR_WEIGHT): number[][] {
+  const ext = hist.slice(-7);
+  return learPath.map((row, k) => {
+    const nv = naiveForecast(ext, dows[k]);
+    const c = row.map((v, h) => w * v + (1 - w) * nv[h]);
+    ext.push(c);
+    return c;
+  });
+}
+
 export interface ForecastResult {
   sub: Sub;
   generatedAt: number;
@@ -21,22 +46,36 @@ export interface ForecastResult {
   history: { ts: number[]; values: number[] };
   horizon: {
     ts: number[];
+    /** Previsão pontual publicada: LEAR ⊕ ingênuo semanal (ver LEAR_WEIGHT). Centro das bandas e do Monte Carlo. */
+    point: number[];
+    /** LEAR sozinho (transparência). */
     lear: number[];
     aciLo: number[];
     aciHi: number[];
     mc: { p05: number[]; p25: number[]; p50: number[]; p75: number[]; p95: number[] };
     qraNextDay: { taus: number[]; quantiles: number[][] };
-    dailyMean: { date: string; lear: number; p05: number; p95: number }[];
+    dailyMean: { date: string; point: number; lear: number; p05: number; p95: number }[];
   };
   backtest: {
     days: number;
+    /** MAE da previsão publicada (LEAR ⊕ ingênuo). */
+    maeModel: number;
     maeLear: number;
     maeNaive: number;
+    /** rMAE da previsão publicada vs ingênuo semanal; rmaeLear = LEAR sozinho. */
     rmae: number;
+    rmaeLear: number;
+    /** DM (HAC) da publicada contra o LEAR sozinho (p < 0,05 ⇒ a combinação é melhor). */
+    dmVsLear: { statistic: number; pValue: number };
     smape: number;
     rmse: number;
     dm: { statistic: number; pValue: number };
-    aci: { coverage: number; halfWidth: number; alpha: number; kupiecP: number };
+    /**
+     * Cobertura da banda PUBLICADA (escore normalizado pelo fator da hora) e testes:
+     * Kupiec com efeito de desenho diário (deff) e independência de Christoffersen na
+     * mesma hora de dias consecutivos (defasagem 24 h).
+     */
+    aci: { coverage: number; halfWidth: number; alpha: number; kupiecP: number; deff: number; christoffersenP: number; pi01: number; pi11: number };
     /** CRPS e cobertura 5–95% do QRA fora da amostra (ajuste na 1ª metade do backtest). */
     qraCrps: number;
     qraCoverage90: number;
@@ -56,7 +95,18 @@ export interface ForecastResult {
     recentPath: number[];
   } | null;
   garch: { dailyVolPct: number; forecastVolPct: number[]; persistence: number; halfLifeDays: number; alpha: number; beta: number; n: number } | null;
-  mrjd: { kappaPerHour: number; halfLifeHours: number; sigma: number; jumpsPerDay: number; jumpMean: number; jumpSd: number; calibratedOn: string } | null;
+  mrjd: {
+    kappaPerHour: number;
+    halfLifeHours: number;
+    sigma: number;
+    jumpsPerDay: number;
+    jumpMean: number;
+    jumpSd: number;
+    /** Fator de nível diário (modelo de dois fatores): desvio-padrão e AR(1) entre dias. */
+    dayLevelSd: number;
+    dayPhi: number;
+    calibratedOn: string;
+  } | null;
   lear: { activeFeatures: number; nTrain: number; calibrationDays: number };
   warnings: string[];
 }
@@ -84,16 +134,27 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   const learOpts = { calibrationDays, clip, post: capDailyMean, scaling: "hourly" as const };
   // backtest multi-horizonte: cada origem prevê D+1…D+H, para medir o erro por horizonte
   const btAll = learBacktest(dm.rows, dm.dows, nTest, { ...learOpts, horizon: horizonDays });
+  // previsão publicada em cada origem: LEAR ⊕ ingênuo (recursivo por horizonte)
+  const comboMulti = btAll.multi.map((path, i) => {
+    const o = btAll.dayIndex[i];
+    return combinePath(path, dm.rows.slice(0, o), dm.dows.slice(o, o + path.length));
+  });
   // dias interpolados (ausentes na fonte) não são "observados": ficam fora das métricas
   const imputed = new Set(dm.imputed);
   const keep = btAll.dayIndex.map((d) => !imputed.has(dm.dates[d]));
   const pick = <T,>(a: T[]) => a.filter((_, i) => keep[i]);
-  const bt = { forecasts: pick(btAll.forecasts), naive: pick(btAll.naive), actuals: pick(btAll.actuals), dayIndex: pick(btAll.dayIndex) };
+  const bt = {
+    forecasts: pick(comboMulti.map((p) => p[0])),
+    lear: pick(btAll.forecasts),
+    naive: pick(btAll.naive),
+    actuals: pick(btAll.actuals),
+    dayIndex: pick(btAll.dayIndex),
+  };
   if (dm.imputed.length) warnings.push(`${dm.imputed.length} dia(s) ausente(s) na fonte preenchido(s) por interpolação: ${dm.imputed.slice(-5).join(", ")}`);
 
   // erros por horizonte (k = 0 é D+1): só dias observados de verdade
   const errByH: number[][] = Array.from({ length: horizonDays }, () => []);
-  btAll.multi.forEach((path, i) => {
+  comboMulti.forEach((path, i) => {
     const o = btAll.dayIndex[i];
     path.forEach((f, k) => {
       const d = o + k;
@@ -109,26 +170,45 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     const r = k === 0 ? 1 : e.length >= 24 * 5 && errByH[0].length ? q90(e) / q90(errByH[0]) : prev * Math.sqrt((k + 1) / k);
     growth.push(Math.max(prev, Number.isFinite(r) ? r : prev));
   });
+  // erro da MÉDIA DIÁRIA por horizonte (conformal direto): a faixa do dia não depende da
+  // estrutura de dependência do Monte Carlo, que subestimava a dispersão do nível do dia
+  const dayErrByH: number[][] = Array.from({ length: horizonDays }, () => []);
+  comboMulti.forEach((path, i) => {
+    const o = btAll.dayIndex[i];
+    path.forEach((f, k) => {
+      const d = o + k;
+      if (d >= dm.rows.length || imputed.has(dm.dates[d])) return;
+      dayErrByH[k].push(Math.abs(mean(dm.rows[d]) - mean(f)));
+    });
+  });
+  const dayQ: number[] = [];
+  dayErrByH.forEach((e, k) => {
+    const q = e.length >= 10 ? conformalQuantile(e, 0.1) : NaN;
+    dayQ.push(Number.isFinite(q) ? Math.max(q, dayQ[k - 1] ?? 0) : NaN);
+  });
   const horizonErrors = errByH.map((e, k) => ({ day: k + 1, mae: e.length ? mean(e.map(Math.abs)) : null, n: e.length / 24, spread: growth[k] }));
   const act = bt.actuals.flat();
   const fL = bt.forecasts.flat();
   const fN = bt.naive.flat();
-  const dmTest = dieboldMariano(
-    bt.actuals.map((a, d) => mae(a, bt.forecasts[d])),
-    bt.actuals.map((a, d) => mae(a, bt.naive[d])),
-  );
+  const fLear = bt.lear.flat();
+  const dayLoss = (f: number[][]) => bt.actuals.map((a, d) => mae(a, f[d]));
+  const dmTest = dieboldMariano(dayLoss(bt.forecasts), dayLoss(bt.naive));
+  const dmVsLear = dieboldMariano(dayLoss(bt.forecasts), dayLoss(bt.lear));
   const resid = act.map((a, i) => a - fL[i]);
-  // day-ahead: as 24 horas saem juntas ⇒ ACI em blocos de 24 h (sem informação do próprio dia)
-  const aci = adaptiveConformal(resid, 0.1, 0.01, 168, 24);
-  const kup = kupiec(aci.violations, Math.max(1, aci.evaluated), 0.1);
   // heterocedasticidade intradiária: fator por hora-do-dia (q90 do |erro| relativo à média),
-  // normalizado para média 1 — redistribui a largura da banda entre pico e fora-de-pico sem
-  // mudar a cobertura global. Sample pequeno ⇒ limita a [0.5, 2].
+  // normalizado para média 1 — redistribui a largura da banda entre pico e fora-de-pico.
+  // Sample pequeno ⇒ limita a [0.5, 2].
   const byHour: number[][] = Array.from({ length: 24 }, () => []);
   resid.forEach((r, i) => byHour[i % 24].push(Math.abs(r)));
   const q90h = byHour.map((e) => (e.length ? quantile(e, 0.9) : 0));
   const meanQ90 = mean(q90h.filter((v) => v > 0)) || 1;
   const hourScale = q90h.map((v) => Math.min(2, Math.max(0.5, (v || meanQ90) / meanQ90)));
+  // day-ahead: as 24 horas saem juntas ⇒ ACI em blocos de 24 h (sem informação do próprio
+  // dia). O escore é |erro|/fator_da_hora, então a cobertura medida é a da banda publicada
+  // (half-width × fator), não a de uma banda plana.
+  const aci = adaptiveConformal(resid.map((r, i) => r / hourScale[i % 24]), 0.1, 0.01, 168, 24);
+  const kup = kupiecBlocks(aci.hits, 24, 0.1);
+  const chr = christoffersen(aci.hits, 24);
   // MAE por regime: horas coladas no piso vs. fora do piso (o MAE agrupado esconde onde falha)
   const floorLvl = PLD_LIMITS.min * 1.01;
   const rg = { floorErr: [] as number[], offErr: [] as number[] };
@@ -140,12 +220,12 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   };
   // QRA avaliado fora da amostra: ajusta na 1ª metade dos dias do backtest, mede na 2ª
   const cut = 24 * Math.floor(bt.actuals.length / 2);
-  const qraCal = fitQRA(fL.slice(0, cut).map((f, i) => [f, fN[i]]), act.slice(0, cut), QRA_TAUS);
-  const oos = act.slice(cut).map((a, j) => ({ a, q: predictQRA(qraCal, [fL[cut + j], fN[cut + j]]) }));
+  const qraCal = fitQRA(fLear.slice(0, cut).map((f, i) => [f, fN[i]]), act.slice(0, cut), QRA_TAUS);
+  const oos = act.slice(cut).map((a, j) => ({ a, q: predictQRA(qraCal, [fLear[cut + j], fN[cut + j]]) }));
   const qraCrps = mean(oos.map(({ a, q }) => crpsFromQuantiles(a, q, QRA_TAUS)));
   const qraCoverage90 = mean(oos.map(({ a, q }) => (a >= q[0] && a <= q[q.length - 1] ? 1 : 0)));
   // modelo operacional: todos os dias do backtest
-  const qra = fitQRA(fL.map((f, i) => [f, fN[i]]), act, QRA_TAUS);
+  const qra = fitQRA(fLear.map((f, i) => [f, fN[i]]), act, QRA_TAUS);
 
   // ---- previsão final
   const model = learFit(dm.rows, dm.dows, learOpts);
@@ -153,12 +233,15 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   const futureDates = Array.from({ length: horizonDays }, (_, k) => addDays(lastDate, k + 1));
   const futureDows = futureDates.map((d) => new Date(`${d}T12:00:00Z`).getUTCDay());
   const fut = learForecast(model, dm.rows, futureDows, clip, capDailyMean);
+  const futPoint = combinePath(fut, dm.rows, futureDows);
   const extended = [...dm.rows, ...fut];
   const naiveFut = futureDows.map((dow, k) => naiveForecast(extended.slice(0, dm.rows.length + k), dow));
   const qraNextDay = fut[0].map((f, h) => predictQRA(qra, [f, naiveFut[0][h]]).map(clipPld));
 
   const hTs = futureDates.flatMap((d) => Array.from({ length: 24 }, (_, h) => Date.parse(`${d}T${String(h).padStart(2, "0")}:00:00-03:00`)));
-  const learFlat = fut.flat();
+  const learOnly = fut.flat();
+  // centro de bandas e trajetórias = previsão publicada (LEAR ⊕ ingênuo)
+  const learFlat = futPoint.flat();
   // banda conformal de D+1 (ACI) alargada pelo crescimento MEDIDO do erro em cada horizonte
   const band = (i: number) => aci.halfWidth * growth[Math.floor(i / 24)] * hourScale[i % 24];
   const aciLo = learFlat.map((f, i) => clipPld(f - band(i)));
@@ -174,11 +257,12 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   let mrjd: ForecastResult["mrjd"] = null;
   let paths: number[][] = [];
   try {
-    let params = residDays.length >= 10 ? calibrateMRJDSegments(residDays) : null;
+    let params: TwoFactorParams | null = residDays.length >= 10 ? calibrateTwoFactor(residDays) : null;
     let calibratedOn: "resíduos do LEAR" | "desvios sazonais" = "resíduos do LEAR";
     if (!params || !Number.isFinite(params.kappa) || params.kappa <= 0 || params.sigma <= 0) {
       const seas = fitSeasonality(y);
-      params = calibrateMRJD(y.map((v, t) => v - seas.predict(t)));
+      const one = calibrateMRJD(y.map((v, t) => v - seas.predict(t)));
+      params = { ...one, mu: 0, dayVar: 0, dayPhi: 0, bWithin: Math.exp(-one.kappa) };
       calibratedOn = "desvios sazonais";
       warnings.push("MRJD calibrado em desvios sazonais (resíduos do LEAR insuficientes ou degenerados)");
     }
@@ -190,14 +274,15 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
       jumpsPerDay: params.lambda * 24,
       jumpMean: params.jumpMean,
       jumpSd: params.jumpSd,
+      dayLevelSd: Math.sqrt(params.dayVar),
+      dayPhi: params.dayPhi,
       calibratedOn,
     };
     const center = learFlat.map((p) => asinhFwd(scaler, p));
-    // aquecimento de 72 h: começa na distribuição estacionária (o erro de D+1 não é zero na 1ª hora)
-    const burn = 72;
-    const devPaths = simulateMRJD({ ...params, mu: 0 }, 0, center.length + burn, nPaths, mulberry32(20260925)).map((d) => d.slice(burn));
-    // casamento de quantis: a faixa 5–95% simulada em D+1 passa a ter a largura da faixa
-    // 5–95% dos erros reais do LEAR (o MRJD sozinho superestimava a dispersão)
+    // dois fatores: nível do dia (AR(1) entre dias) + intradiário OU com saltos (aquecido)
+    const devPaths = simulateTwoFactor(params, center.length, nPaths, mulberry32(20260925));
+    // casamento de quantis (guarda): a faixa 5–95% simulada em D+1 passa a ter a largura
+    // da faixa 5–95% dos erros reais do LEAR
     let c = 1;
     if (calibratedOn === "resíduos do LEAR") {
       const sim = devPaths.flatMap((d) => d.slice(0, 24));
@@ -219,9 +304,21 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     p75: learFlat.map((_, t) => quantile(col(t), 0.75)),
     p95: learFlat.map((_, t) => quantile(col(t), 0.95)),
   };
+  // faixa 90% da MÉDIA DIÁRIA: conformal nos erros da média do dia por horizonte (com
+  // correção de amostra finita); sem erros suficientes, quantis por trajetória do MC.
+  // (A média dos quantis horários só vale sob comonotonicidade — auditoria set/2026.)
   const dailyMean = futureDates.map((date, k) => {
-    const sl = (a: number[]) => a.slice(k * 24, k * 24 + 24);
-    return { date, lear: mean(sl(learFlat)), p05: mean(sl(mc.p05)), p95: mean(sl(mc.p95)) };
+    const point = mean(learFlat.slice(k * 24, k * 24 + 24));
+    const dMeans = paths.map((p) => mean(p.slice(k * 24, k * 24 + 24)));
+    const q = dayQ[k];
+    const cap = (v: number) => Math.min(PLD_LIMITS.maxStructural, Math.max(PLD_LIMITS.min, v));
+    return {
+      date,
+      point,
+      lear: mean(learOnly.slice(k * 24, k * 24 + 24)),
+      p05: Number.isFinite(q) ? cap(point - q) : quantile(dMeans, 0.05),
+      p95: Number.isFinite(q) ? cap(point + q) : quantile(dMeans, 0.95),
+    };
   });
 
   // ---- regimes (HMM 3 estados) nas últimas 60 dias horárias
@@ -284,7 +381,8 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     history: { ts: histTs, values: dm.rows.slice(-histDays).flat() },
     horizon: {
       ts: hTs,
-      lear: learFlat.map((v) => round(v)),
+      point: learFlat.map((v) => round(v)),
+      lear: learOnly.map((v) => round(v)),
       aciLo,
       aciHi,
       mc,
@@ -293,13 +391,25 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     },
     backtest: {
       days: bt.actuals.length,
-      maeLear: mae(act, fL),
+      maeModel: mae(act, fL),
+      maeLear: mae(act, fLear),
       maeNaive: mae(act, fN),
       rmae: rmae(act, fL, fN),
+      rmaeLear: rmae(act, fLear, fN),
+      dmVsLear: { statistic: dmVsLear.statistic, pValue: dmVsLear.pValue },
       smape: smape(act, fL),
       rmse: rmse(act, fL),
       dm: { statistic: dmTest.statistic, pValue: dmTest.pValue },
-      aci: { coverage: aci.empiricalCoverage, halfWidth: aci.halfWidth, alpha: aci.alphaFinal, kupiecP: kup.pValue },
+      aci: {
+        coverage: aci.empiricalCoverage,
+        halfWidth: aci.halfWidth,
+        alpha: aci.alphaFinal,
+        kupiecP: kup.pValue,
+        deff: kup.deff,
+        christoffersenP: chr.pValue,
+        pi01: chr.pi01,
+        pi11: chr.pi11,
+      },
       qraCrps,
       qraCoverage90,
       horizonErrors,

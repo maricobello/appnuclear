@@ -28,6 +28,8 @@ export interface AciResult {
   alphaPath: number[];
   evaluated: number;
   violations: number;
+  /** Indicador de violação (0/1) de cada passo avaliado, em ordem — base dos testes de cobertura. */
+  hits: number[];
 }
 
 /**
@@ -43,6 +45,7 @@ export function adaptiveConformal(residuals: number[], alpha = 0.1, gamma = 0.01
   let covered = 0;
   let evaluated = 0;
   const path: number[] = [];
+  const hits: number[] = [];
   const warm = block * Math.max(1, Math.round(Math.min(24, Math.floor(scores.length / 3)) / block));
   for (let t0 = warm; t0 < scores.length; t0 += block) {
     const cal = scores.slice(Math.max(0, t0 - window), t0);
@@ -51,6 +54,7 @@ export function adaptiveConformal(residuals: number[], alpha = 0.1, gamma = 0.01
       const err = scores[t] > q ? 1 : 0;
       covered += 1 - err;
       evaluated++;
+      hits.push(err);
       a += gamma * (alpha - err);
       path.push(a);
     }
@@ -58,5 +62,5 @@ export function adaptiveConformal(residuals: number[], alpha = 0.1, gamma = 0.01
   const cal = scores.slice(-window);
   const q = a <= 0 ? Infinity : conformalQuantile(cal, Math.min(0.999, a));
   const halfWidth = Number.isFinite(q) ? q : Math.max(...cal);
-  return { alphaFinal: a, halfWidth, empiricalCoverage: evaluated ? covered / evaluated : NaN, alphaPath: path, evaluated, violations: evaluated - covered };
+  return { alphaFinal: a, halfWidth, empiricalCoverage: evaluated ? covered / evaluated : NaN, alphaPath: path, evaluated, violations: evaluated - covered, hits };
 }

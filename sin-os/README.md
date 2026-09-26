@@ -18,8 +18,8 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Arbitragem** | Bateria (BESS) no PLD: DP (valor intrínseco) + LSMC (opcionalidade), P&L e CVaR; spreads entre submercados (ADF, cointegração, meia-vida); bateria por zona europeia e valor de congestionamento (FTR); lente global em R$/MWh |
 | **Mercados globais** | Europa (SDAC, 15 min), Reino Unido (Elexon, NESO), câmbio (BCB), combustíveis (EIA) |
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
-| **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado e resultado (curva a termo/BBCE fica de fora) |
-| **Agente auditor** | Auditoria determinística de todas as APIs + relatório do Claude com causa provável e ação |
+| **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
+| **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), alertas push + relatório do Claude com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
@@ -64,15 +64,16 @@ mostra — o auditor exibe os dois na tela **Agente auditor**.
 | LEAR (LASSO por LARS, AICc, transformação asinh) | Lago et al. (2021) *Applied Energy*; Efron et al. (2004) | [jeslago/epftoolbox](https://github.com/jeslago/epftoolbox) |
 | Adaptive Conformal Inference | Gibbs & Candès (2021) *NeurIPS* | [MAPIE](https://github.com/scikit-learn-contrib/MAPIE) |
 | Quantile Regression Averaging | Nowotarski & Weron (2015) | statsmodels QuantReg |
-| Difusão com reversão e saltos (MRJD) | Cartea & Figueroa (2005); Schwartz (1997) | — |
+| Dois fatores: nível diário AR(1) + MRJD intradiário (κ com correção de Nickell) | Cartea & Figueroa (2005); Schwartz (1997); Nickell (1981) | — |
+| Combinação LEAR ⊕ ingênuo (média simples) | Smith & Wallis (2009); Lago et al. (2021) | epftoolbox |
 | HMM / Markov-switching (3 regimes) | Hamilton (1989); Janczura & Weron (2010) | [hmmlearn](https://github.com/hmmlearn/hmmlearn) |
 | GARCH(1,1) | Bollerslev (1986) | [arch](https://github.com/bashtage/arch) |
 | ADF, Engle–Granger, meia-vida | MacKinnon (2010); Engle & Granger (1987) | statsmodels |
-| Diebold–Mariano, Kupiec, CRPS | DM (1995), HLN (1997), Gneiting & Raftery (2007) | epftoolbox |
+| Diebold–Mariano (HAC Newey–West), Kupiec com efeito de desenho diário, Christoffersen, CRPS | DM (1995), HLN (1997), Newey & West (1987), Christoffersen (1998), Gneiting & Raftery (2007) | epftoolbox, arch |
 | Armazenamento: LP/MILP exato (HiGHS) + LSMC, rolling intrinsic no D+1 | Huangfu & Hall (2018); Longstaff & Schwartz (2001); Boogert & de Jong (2008) | [ERGO-Code/HiGHS](https://github.com/ERGO-Code/HiGHS), QuantLib |
 | CVaR / Expected Shortfall | Rockafellar & Uryasev (2000) | — |
 
-`npm test` roda 55 testes: recuperação de parâmetros em dados simulados (LASSO/LARS, HMM, GARCH, MRJD,
+`npm test` roda mais de 60 testes: recuperação de parâmetros em dados simulados (LASSO/LARS, HMM, GARCH, MRJD,
 regressão quantílica), valores críticos de MacKinnon, cobertura do conformal, DP contra força bruta,
 LEAR superando o benchmark ingênuo com Diebold–Mariano significativo, contratos de payload de cada API
 e o caminho completo previsão → arbitragem.
@@ -96,19 +97,21 @@ p-valor de Diebold–Mariano contra a configuração anterior:
 Ensemble de janelas e CMO semanal não trouxeram ganho consistente no D+1 e ficaram de fora. Em
 janelas curtas (ex.: 10 dias) o ingênuo pode ganhar — só amostras longas sustentam conclusões.
 
-**2. Calibração da incerteza** — a previsão completa rodada em 20 datas passadas só com os dados
-disponíveis em cada uma; cobertura das faixas contra o PLD realizado (alvo 90%):
+**2. Calibração da incerteza** — a previsão completa rodada em 56 datas passadas por submercado
+(abr–set/2026, passo de 5 dias) só com os dados disponíveis em cada uma; cobertura contra o PLD
+realizado (alvo 90%, média dos 4 submercados):
 
 | Horizonte | D+1 | D+2 | D+3 | D+4 | D+5 | D+6 | D+7 |
 |---|---|---|---|---|---|---|---|
-| Banda conformal (SE) | 0,90 | 0,92 | 0,91 | 0,90 | 0,89 | 0,90 | 0,91 |
-| Monte Carlo 5–95% (SE) | 0,90 | 0,89 | 0,90 | 0,91 | 0,89 | 0,90 | 0,89 |
-| Banda conformal (N) | 0,91 | 0,91 | 0,91 | 0,91 | 0,91 | 0,90 | 0,91 |
-| Monte Carlo 5–95% (N) | 0,91 | 0,90 | 0,89 | 0,91 | 0,89 | 0,86 | 0,89 |
+| Banda horária conformal | 0,92 | 0,88 | 0,88 | 0,89 | 0,88 | 0,88 | 0,87 |
+| Monte Carlo 5–95% (horário) | 0,93 | 0,92 | 0,94 | 0,92 | 0,91 | 0,94 | 0,93 |
+| Faixa da média diária (conformal) | 0,95 | 0,92 | 0,94 | 0,91 | 0,93 | 0,93 | 0,89 |
 
-Para chegar aí: o erro de cada horizonte é medido num backtest multi-horizonte (em SE o MAE sobe de
-~38 R$/MWh no D+1 para ~61 no D+7) e alarga a banda na proporção medida; o Monte Carlo (MRJD) é
-calibrado nos erros reais do LEAR, com a largura 5–95% casada com a dos resíduos.
+No D+1 a previsão publicada (LEAR ⊕ ingênuo) teve MAE 5–9% menor que o LEAR sozinho nos 4
+submercados (SE 37,0 vs 39,1 R$/MWh). O Kupiec com efeito de desenho diário não rejeitou a cobertura
+em nenhuma origem; o teste de Christoffersen na mesma hora de dias consecutivos rejeita em 34–50%
+delas — as violações se repetem de um dia para o outro, sinal de que a banda reage devagar a mudança
+de regime (limitação conhecida, exibida na tela). O Monte Carlo ficou levemente conservador (0,91–0,94).
 
 ### Auditoria matemática (set/2026)
 
@@ -126,6 +129,28 @@ hmmlearn, scipy): LARS/LASSO, asinh, ADF/Engle–Granger, GARCH, DM, Kupiec e as
   excluídos das métricas — antes a previsão caía por falta de histórico contíguo;
 - valor crítico de 1% de Engle–Granger (MacKinnon 2010) corrigido; dia de entrega europeu em CET/CEST.
 
+### Segunda auditoria matemática (set/2026) — nota 66/100 e correções
+
+Um agente revisor refez os modelos em dados reais (891 dias fora da amostra por submercado, 56 origens
+completas, 3.996 dias de bateria no HiGHS) e apontou, com números, o que estava errado. Corrigido:
+
+| Achado | Correção |
+|---|---|
+| LEAR sozinho perde do ingênuo no período longo (rMAE 1,04–1,12) | previsão publicada = ½ LEAR + ½ ingênuo: rMAE 0,95–0,99, melhor que o LEAR com DM t ≈ −4 |
+| LEAR extrapolava em janela colada no piso (previu ~931 R$/MWh com realizado 72) | previsão limitada à faixa do alvo transformado vista no treino (rMAE NE úmido/2025: 3,88 → 1,28) |
+| MRJD: κ ~4× menor que o real (nível do dia confundido com persistência horária) | modelo de dois fatores (nível diário AR(1) + OU intradiário), κ por AR(1) within com correção de Nickell e saltos no resíduo |
+| Faixa da média diária = média dos quantis horários | faixa conformal nos erros da média diária do backtest, por horizonte |
+| Kupiec horário rejeitava cobertura correta (violações agrupadas no dia, deff 6–8) | Kupiec com efeito de desenho diário + Christoffersen na mesma hora de dias consecutivos |
+| DM ignorava autocorrelação da perda diária | variância de longo prazo Newey–West (Bartlett) |
+| Banda horária: cobertura medida era da banda plana, não da publicada | ACI com escore normalizado pelo fator da hora |
+| Carteira liquidava o mês corrente (parcial) como fechado | mês parcial vira estimativa, fora do resultado liquidado |
+| Limites de 2026 aplicados ao PLD de 2024–25 | limites do próprio ano (2024: 61,07/716,80/1.470,57; 2025: 58,60/751,73/1.542,23) |
+| Capture ratio sem sentido com PLD plano; LSMC abaixo do intrínseco escondido | "n/d" quando o teto é ~0; diagnóstico explícito quando o LSMC fica abaixo do intrínseco |
+
+Validado sem problemas: bateria (0 dias com política simples acima do LP em 3.996), sinal e exatidão
+da liquidação da carteira, teto estrutural, QRA, ACI em blocos de 24 h e CRPS. Ainda em aberto: fator
+por tipo de dia (sábado sub-coberto, 0,74–0,84) e a faixa de D+5–D+7, que fica perto de 85%.
+
 ## Agente auditor
 
 1. **Camada determinística** (sempre ativa): para cada API mede disponibilidade, latência, frescor vs SLA,
@@ -137,13 +162,25 @@ hmmlearn, scipy): LARS/LASSO, asinh, ADF/Engle–Granger, GARCH, DM, Kupiec e as
    e manualmente (com `ADMIN_KEY`). Usa `claude-opus-5` com *server-side fallbacks* habilitados
    (`ANTHROPIC_MODEL` troca o modelo).
 3. **Agendamento**: Vercel Cron diário (plano Hobby) + GitHub Actions a cada 15 min (`.github/workflows/audit.yml`).
+4. **Saúde e alertas**: `/api/health` responde 200/503 pela mesma regra do alerta (score, fontes fora do ar
+   ou vencidas, persistência, idade do último run — `HEALTH_MAX_AGE_MIN`, padrão 1500). Com
+   `ALERT_WEBHOOK_URL`, cada mudança de saúde (degradou/recuperou) vira notificação. **Grátis e sem conta:**
+   use `https://ntfy.sh/<um-tópico-longo-e-aleatório>` e assine o mesmo tópico no app ntfy (Android/iOS/web)
+   — o app detecta o ntfy e manda texto com título e prioridade; Slack/Discord/Teams recebem JSON
+   (`ALERT_WEBHOOK_FORMAT=json|ntfy` força o formato). **Agente auditor → Alertas → enviar teste**
+   (`POST /api/auditoria/alert-test`, 1/h sem credencial) valida o destino.
+5. **Self-eval**: `/api/auditoria/selfeval` injeta 10 falhas conhecidas e mede precisão/recall da camada determinística.
+
+**Exportação CSV** (`?format=csv`): `/api/previsao?sub=SE` (curva horária, banda e quantis),
+`/api/arbitragem?sub=SE` (despacho ótimo de 72 h) e `/api/pld-mensal` (PLD médio mês × submercado).
 
 ## Deploy na Vercel
 
 1. Em [vercel.com/new](https://vercel.com/new), importe o repositório `maricobello/sinos`.
 2. Framework: Next.js (detectado). Root Directory, build e output ficam no padrão.
 3. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
-   `CRON_SECRET`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`.
+   `CRON_SECRET`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`,
+   `ALERT_WEBHOOK_URL`.
    Dá para adicionar depois e fazer redeploy.
 4. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.
 5. Abra **Agente auditor → Rodar auditoria** para a primeira execução.
@@ -207,7 +244,7 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente Claude
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: brasil, previsao, arbitragem, global, clima, auditoria, status
+src/app/api/        rotas: brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```

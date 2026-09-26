@@ -1,4 +1,5 @@
 import type { SourceMetaView } from "@/components/ui";
+import type { Slo } from "./audit/slo";
 import type { AgentReport, AuditRun } from "./audit/types";
 import type { BorderSpread, EuZoneArb, GlobalLens, SpreadStat, StorageResult } from "./market/arbitrage";
 import type { ForecastResult } from "./market/forecast";
@@ -67,12 +68,14 @@ export interface ClimaResp {
 export interface AuditoriaResp {
   latest: AuditRun | null;
   history: { id: string; startedAt: number; overallScore: number; counts: AuditRun["counts"]; trigger: string }[];
+  slo: Slo;
   reports: AgentReport[];
   registry: SourceMeta[];
   telemetry: { host: string; count: number; errors: number; p50: number; p95: number }[];
   storage: "firestore" | "memory";
   firebase: { configured: boolean; projectId: string | null; error: string | null };
   agent: { configured: boolean; model: string };
+  alerts: { configured: boolean; destination: "ntfy" | "json" | null };
   auth: { required: boolean };
   dataMode: string;
 }

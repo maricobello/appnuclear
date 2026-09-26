@@ -1,7 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
-import { Bot, Database, ExternalLink, Play, RefreshCw } from "lucide-react";
+import { Bell, Bot, Database, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { EChart, type ChartOption } from "@/components/EChart";
 import { Badge, ErrorBox, Loading, PageHeader, Panel, statusLabel, statusLevel, Table } from "@/components/ui";
 import type { AuditoriaResp } from "@/lib/apiTypes";
@@ -46,6 +46,24 @@ export default function AuditoriaPage() {
       setRunMsg(e instanceof Error ? e.message : String(e));
     } finally {
       setRunning(false);
+    }
+  }
+
+  async function testAlert() {
+    setRunMsg(null);
+    try {
+      const k = key || storedKey();
+      const res = await fetch("/api/auditoria/alert-test", { method: "POST", headers: k ? { "x-admin-key": k } : {} });
+      const body = await res.json();
+      setRunMsg(
+        body.sent
+          ? `Notificação de teste enviada (${body.destination}). Confira o app/canal.`
+          : body.throttled
+            ? "Teste já enviado há pouco — limite de 1 por hora sem credencial."
+            : body.error ?? `Falha ao enviar (HTTP ${res.status}).`,
+      );
+    } catch (e) {
+      setRunMsg(e instanceof Error ? e.message : String(e));
     }
   }
 
@@ -121,6 +139,19 @@ export default function AuditoriaPage() {
               <Bot size={13} aria-hidden /> Agente IA:{" "}
               {data ? data.agent.configured ? <Badge level="good">{data.agent.model}</Badge> : <Badge level="warning">defina ANTHROPIC_API_KEY</Badge> : "—"}
             </span>
+            <span className="flex items-center gap-1.5">
+              <Bell size={13} aria-hidden /> Alertas:{" "}
+              {data ? (
+                data.alerts.configured ? (
+                  <>
+                    <Badge level="good">{data.alerts.destination === "ntfy" ? "push (ntfy)" : "webhook"}</Badge>
+                    <button onClick={testAlert} className="text-accent hover:underline">enviar teste</button>
+                  </>
+                ) : (
+                  <Badge level="warning">defina ALERT_WEBHOOK_URL</Badge>
+                )
+              ) : "—"}
+            </span>
             {data?.firebase.error ? <span className="text-critical">Firebase: {data.firebase.error}</span> : null}
           </div>
         </Panel>
@@ -128,6 +159,30 @@ export default function AuditoriaPage() {
           {hist ? <EChart option={hist} height={210} label="Histórico do score de auditoria" dim={isValidating} /> : <p className="text-xs text-muted">Sem histórico ainda.</p>}
         </Panel>
       </div>
+
+      {data?.slo?.samples ? (
+        <Panel
+          title="SLO das fontes"
+          subtitle={`Amostra das últimas ${data.slo.samples} execuções (${data.slo.fromTs ? dateTime(data.slo.fromTs) : "—"} → ${data.slo.toTs ? dateTime(data.slo.toTs) : "—"}). Disponibilidade = fora de “fora do ar”; conformidade = “OK” em todas as checagens.`}
+        >
+          <div className="mb-3 flex flex-wrap gap-2 text-xs">
+            <Badge level={data.slo.healthyPct >= 95 ? "good" : data.slo.healthyPct >= 80 ? "warning" : "critical"}>saudável em {num(data.slo.healthyPct, 1)}% dos runs</Badge>
+            {data.slo.meanScore !== null ? <Badge level="neutral">score médio {num(data.slo.meanScore, 1)}</Badge> : null}
+          </div>
+          <Table
+            head={["Fonte", "Amostras", "Disponibilidade", "Conformidade", "Latência p50", "Latência p95"]}
+            align={["left", "right", "right", "right", "right", "right"]}
+            rows={data.slo.sources.map((s) => [
+              s.expectedDown ? `${s.name} (bloqueio esperado; coberto pelo CMO)` : s.name,
+              s.samples,
+              <Badge key="a" level={s.expectedDown ? "neutral" : s.availabilityPct >= 99 ? "good" : s.availabilityPct >= 95 ? "warning" : "critical"}>{num(s.availabilityPct, 1)}%</Badge>,
+              `${num(s.okPct, 1)}%`,
+              s.latencyP50 !== null ? `${num(s.latencyP50)} ms` : "—",
+              s.latencyP95 !== null ? `${num(s.latencyP95)} ms` : "—",
+            ])}
+          />
+        </Panel>
+      ) : null}
 
       <Panel title="Fontes auditadas" subtitle="Clique numa linha para ver as checagens">
         {l ? (
