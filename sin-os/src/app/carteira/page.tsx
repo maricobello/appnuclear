@@ -166,13 +166,13 @@ export default function CarteiraPage() {
   const inputCls = "rounded-md border border-line bg-surface px-2 py-1 text-sm text-ink";
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Carteira"
         subtitle="Contratos como swap financeiro sobre o PLD médio mensal por submercado: liquidação de curto prazo, exposição líquida e resultado. Os contratos ficam salvos só neste navegador."
       />
 
-      <div role="note" className="flex items-start gap-2 rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
+      <div role="note" className="flex items-start gap-2 rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
         <span aria-hidden>ℹ️</span>
         <span>
           Modelo simplificado da <strong className="text-ink-2">liquidação de curto prazo</strong> (a &ldquo;metade PLD&rdquo; do resultado): não inclui sazonalização/flexibilidade,

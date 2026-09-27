@@ -1,33 +1,38 @@
 @import "tailwindcss";
 
 /*
- * SIN OS — terminal escuro. Paleta categórica e de status validada
- * (scripts/validate_palette.js da skill de dataviz) contra a superfície #0f141b.
+ * SIN OS — sistema de design "terminal".
+ * Princípios (Apple HIG aplicados a um terminal de energia): clareza (tipografia técnica,
+ * contraste alto, números tabulares), deferência (o dado é o protagonista; cromo mínimo,
+ * bordas finas, sem sombras nem gradientes) e profundidade por camadas de superfície.
+ * Paleta categórica dos submercados validada (skill de dataviz) contra a superfície.
  */
 :root {
   color-scheme: dark;
-  --page: #0a0d12;
-  --surface: #0f141b;
-  --surface-2: #141b24;
-  --surface-3: #1a2330;
-  --border: rgba(255, 255, 255, 0.08);
-  --border-strong: rgba(255, 255, 255, 0.14);
-  --grid: #1f2732;
-  --axis: #2b3441;
-  --ink: #f3f5f8;
-  --ink-2: #c3c9d3;
-  --muted: #8b95a5;
-  --accent: #f5a524;
+  --page: #05080d;
+  --surface: #0a0e15;
+  --surface-2: #0e141d;
+  --surface-3: #141c28;
+  --border: rgba(148, 163, 184, 0.11);
+  --border-strong: rgba(148, 163, 184, 0.2);
+  --grid: #161f2c;
+  --axis: #243044;
+  --ink: #e9eef5;
+  --ink-2: #b6c0cd;
+  --muted: #7c8797;
+  --accent: #3b9eff;
+  --accent-2: #22d3ee;
   --s1: #3987e5;
   --s2: #d95926;
   --s3: #199e70;
   --s4: #c98500;
   --s5: #d55181;
   --s7: #9085e9;
-  --good: #0ca30c;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #d03b3b;
+  --good: #2fbf71;
+  --warning: #f2b63a;
+  --serious: #f08a4b;
+  --critical: #ef5350;
+  --radius: 6px;
 }
 
 @theme inline {
@@ -41,12 +46,13 @@
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-2: var(--accent-2);
   --color-good: var(--good);
   --color-warning: var(--warning);
   --color-serious: var(--serious);
   --color-critical: var(--critical);
-  --font-sans: var(--font-geist-sans), system-ui, -apple-system, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
+  --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, Menlo, monospace;
 }
 
 html,
@@ -57,16 +63,49 @@ body {
 
 body {
   font-family: var(--font-sans);
+  font-size: 13px;
+  line-height: 1.4;
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: rgba(59, 158, 255, 0.35);
+}
+
+/* foco visível e consistente (teclado), sem anel no clique do mouse */
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 3px;
 }
 
 .tnum {
   font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum" 1, "zero" 1;
+}
+
+/* rótulo de seção: pequeno, caixa-alta, espaçado — hierarquia sem peso visual */
+.eyebrow {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
 }
 
 .scrollbar-thin {
   scrollbar-width: thin;
   scrollbar-color: var(--axis) transparent;
+}
+.scrollbar-thin::-webkit-scrollbar {
+  height: 6px;
+  width: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: var(--axis);
+  border-radius: 3px;
 }
 
 @keyframes pulse-dot {
@@ -80,11 +119,39 @@ body {
 }
 
 .live-dot {
-  animation: pulse-dot 1.6s ease-in-out infinite;
+  animation: pulse-dot 1.8s ease-in-out infinite;
+}
+
+@keyframes shimmer {
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
+}
+
+.skeleton {
+  background: linear-gradient(90deg, var(--surface-2) 0px, var(--surface-3) 120px, var(--surface-2) 240px);
+  background-size: 800px 100%;
+  animation: shimmer 1.4s linear infinite;
+  border-radius: 4px;
+}
+
+/* inputs numéricos sem setas nativas (usamos stepper próprio) */
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+input[type="number"] {
+  -moz-appearance: textfield;
+  appearance: textfield;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-dot {
+  .live-dot,
+  .skeleton {
     animation: none;
   }
 }

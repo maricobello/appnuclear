@@ -4,18 +4,20 @@
  * cor segue a entidade (SE sempre azul etc.), nunca o ranking.
  */
 export const C = {
-  surface: "#0f141b",
-  surface2: "#141b24",
-  grid: "#1f2732",
-  axis: "#2b3441",
-  ink: "#f3f5f8",
-  ink2: "#c3c9d3",
-  muted: "#8b95a5",
+  surface: "#0a0e15",
+  surface2: "#0e141d",
+  grid: "#161f2c",
+  axis: "#243044",
+  ink: "#e9eef5",
+  ink2: "#b6c0cd",
+  muted: "#7c8797",
+  accent: "#3b9eff",
+  accent2: "#22d3ee",
   series: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"],
-  good: "#0ca30c",
-  warning: "#fab219",
-  serious: "#ec835a",
-  critical: "#d03b3b",
+  good: "#2fbf71",
+  warning: "#f2b63a",
+  serious: "#f08a4b",
+  critical: "#ef5350",
   // sequencial (1 matiz, azul) — no escuro, valor baixo ≈ superfície
   seq: ["#0d366b", "#184f95", "#256abf", "#3987e5", "#6da7ec", "#9ec5f4", "#cde2fb"],
   // divergente azul ↔ vermelho com ponto médio neutro
@@ -39,17 +41,26 @@ export const tooltipTime = (v: number) => fmtHour.format(new Date(v)) + "h";
 export function baseOption() {
   return {
     backgroundColor: "transparent",
-    animationDuration: 300,
-    textStyle: { color: C.muted, fontFamily: "var(--font-geist-sans), system-ui, sans-serif", fontSize: 11 },
+    animationDuration: 350,
+    animationEasing: "cubicOut" as const,
+    textStyle: { color: C.muted, fontFamily: "Geist, -apple-system, BlinkMacSystemFont, 'SF Pro Text', system-ui, sans-serif", fontSize: 11 },
     // topo reserva a linha da legenda (0–16px) e o nome do eixo y logo abaixo dela
     grid: { left: 8, right: 16, top: 48, bottom: 8, containLabel: true },
     tooltip: {
       trigger: "axis",
-      backgroundColor: "#141b24",
-      borderColor: "rgba(255,255,255,0.14)",
+      backgroundColor: "rgba(10,14,21,0.96)",
+      borderColor: "rgba(148,163,184,0.25)",
       borderWidth: 1,
-      textStyle: { color: C.ink, fontSize: 12 },
-      axisPointer: { type: "line", lineStyle: { color: C.muted, width: 1 } },
+      padding: [6, 8],
+      extraCssText: "border-radius:6px;box-shadow:none;",
+      textStyle: { color: C.ink, fontSize: 11.5 },
+      // crosshair de terminal: linhas finas + rótulos nos eixos
+      axisPointer: {
+        type: "cross",
+        lineStyle: { color: "rgba(148,163,184,0.45)", width: 1, type: [3, 3] },
+        crossStyle: { color: "rgba(148,163,184,0.45)", width: 1, type: [3, 3] },
+        label: { backgroundColor: "#1b2533", color: C.ink, fontSize: 10, padding: [2, 5], borderRadius: 3 },
+      },
       confine: true,
     },
     legend: {
@@ -74,6 +85,7 @@ export const valueAxis = (name?: string, extra: Record<string, unknown> = {}) =>
   axisLine: { show: false },
   splitLine: { lineStyle: { color: C.grid, width: 1 } },
   axisLabel: { color: C.muted, fontSize: 10 },
+  axisPointer: { label: { formatter: (p: { value: number }) => new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 1 }).format(p.value) } },
   scale: true,
   ...extra,
 });
@@ -84,6 +96,7 @@ export const timeAxis = (extra: Record<string, unknown> = {}) => ({
   axisTick: { show: false },
   splitLine: { show: false },
   axisLabel: { color: C.muted, fontSize: 10, formatter: axisTimeLabel, hideOverlap: true },
+  axisPointer: { label: { formatter: (p: { value: number }) => tooltipTime(p.value) } },
   ...extra,
 });
 

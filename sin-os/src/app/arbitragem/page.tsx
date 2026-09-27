@@ -143,7 +143,7 @@ export default function ArbitragemPage() {
   const b = a?.bess;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Arbitragem"
         subtitle="Temporal (armazenamento: LP exato + Least-Squares Monte Carlo), espacial (spreads entre submercados) e europeia. Métricas de decisão/risco, não P&L transacionável."
@@ -161,7 +161,7 @@ export default function ArbitragemPage() {
         }
       />
       <SimBanner metas={[a?.meta.pld, a?.meta.eu, a?.meta.fx]} />
-      <div role="note" className="flex items-start gap-2 rounded-lg border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
+      <div role="note" className="flex items-start gap-2 rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
         <span aria-hidden>ℹ️</span>
         <span>
           <strong className="text-ink-2">Como ler estes números.</strong> No SIN não existe mercado spot contínuo onde se compre/venda no PLD à vontade
@@ -173,7 +173,7 @@ export default function ArbitragemPage() {
       </div>
       {error && !a ? <ErrorBox error={error} /> : null}
 
-      <div className="flex flex-wrap items-center gap-3 rounded-lg border border-line bg-surface px-4 py-3">
+      <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-surface px-4 py-3">
         <span className="text-xs font-medium text-ink-2">Ativo de armazenamento</span>
         <NumberField label="Potência" value={pow} onChange={setPow} step={5} min={1} max={2000} suffix="MW" />
         <NumberField label="Energia" value={cap} onChange={setCap} step={10} min={1} max={5000} suffix="MWh" />
@@ -223,7 +223,7 @@ export default function ArbitragemPage() {
         </ul>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title="Despacho ótimo — próximas 72 h" subtitle="Preço previsto, potência na rede e estado de carga (gráficos separados, mesmo eixo de tempo)" right={<SourceTag meta={a?.meta.pld} label="PLD" />}>
           {priceOpt && dispatchOpt && socOpt ? (
             <div className="flex flex-col gap-1">
@@ -235,7 +235,7 @@ export default function ArbitragemPage() {
             <Loading height={450} />
           )}
         </Panel>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <Panel title="Distribuição de P&L" subtitle="1.000 trajetórias MRJD (500 treino / 500 avaliação) · barras vermelhas = cauda VaR 95%">
             {histOpt ? <EChart option={histOpt} height={220} label="Distribuição de P&L" /> : <Loading height={220} />}
             {b ? <p className="mt-2 text-[11px] text-muted">P05 {brl(b.risk.p05, 0)} · mediana {brl(b.risk.p50, 0)} · P95 {brl(b.risk.p95, 0)} · média na cauda 5% {brl(-b.risk.cvar95, 0)}</p> : null}
@@ -255,7 +255,7 @@ export default function ArbitragemPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Panel title="Spreads entre submercados (30 dias)" subtitle="Risco de descolamento entre submercados (não é arbitragem: não há FTR no SIN). z-score, % de horas descoladas, ADF, Engle–Granger e meia-vida (OU)">
           {a ? (
             <Table
@@ -282,7 +282,7 @@ export default function ArbitragemPage() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Panel title="Europa — bateria 1 MW / 2 MWh por zona" subtitle="Receita intrínseca ótima no último dia de entrega disponível (resolução nativa)" right={<SourceTag meta={a?.meta.eu} label="Energy-Charts" />}>
           {a ? (
             <Table

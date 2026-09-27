@@ -121,6 +121,11 @@ export function buildBessLp(prices: number[], spec: StorageSpec, opts: BessLpOpt
  * LP no mesmo enquadramento — o que garante capture ratio ≤ 1.
  */
 export function naiveDayValue(prices: number[], spec: StorageSpec): number {
+  return naiveDaySchedule(prices, spec).cash;
+}
+
+/** Mesma política, com a energia movimentada (MWh na rede) — base de estudos de receita. */
+export function naiveDaySchedule(prices: number[], spec: StorageSpec): { cash: number; chargedMWh: number; dischargedMWh: number } {
   const dt = spec.dtHours ?? 1;
   const cap = spec.capacityMWh;
   const P = spec.powerMW;
@@ -130,18 +135,18 @@ export function naiveDayValue(prices: number[], spec: StorageSpec): number {
   const buy = new Set(order.slice(0, hFill).map(([, i]) => i));
   const sell = new Set(order.slice(-hFill).map(([, i]) => i));
   let soc = 0; // parte vazia (mesmo enquadramento do teto LP: socInit=0)
-  let cash = 0;
+  let cash = 0, chargedMWh = 0, dischargedMWh = 0;
   for (let i = 0; i < prices.length; i++) {
     if (buy.has(i) && !sell.has(i)) {
       const room = cap - soc;
       const charge = Math.min(P * dt, room / spec.etaCharge); // energia retirada da rede
-      if (charge > 0) { soc += spec.etaCharge * charge; cash -= prices[i] * charge + k * spec.etaCharge * charge; }
+      if (charge > 0) { soc += spec.etaCharge * charge; cash -= prices[i] * charge + k * spec.etaCharge * charge; chargedMWh += charge; }
     } else if (sell.has(i) && !buy.has(i)) {
       const draw = Math.min(P * dt, soc * spec.etaDischarge); // energia entregue à rede
-      if (draw > 0) { soc -= draw / spec.etaDischarge; cash += prices[i] * draw - (k * draw) / spec.etaDischarge; }
+      if (draw > 0) { soc -= draw / spec.etaDischarge; cash += prices[i] * draw - (k * draw) / spec.etaDischarge; dischargedMWh += draw; }
     }
   }
-  return cash;
+  return { cash, chargedMWh, dischargedMWh };
 }
 
 export async function optimizeStorageLP(prices: number[], spec: StorageSpec, opts: BessLpOpts = {}): Promise<BessLpResult> {

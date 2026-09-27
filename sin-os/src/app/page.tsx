@@ -1,221 +1,186 @@
 "use client";
 
 import Link from "next/link";
-import { useMemo } from "react";
-import { ArrowLeftRight, BatteryCharging, Bot, Globe } from "lucide-react";
-import { EChart, type ChartOption } from "@/components/EChart";
-import { Badge, ErrorBox, Loading, Panel, SimBanner, SourceTag, Stat, statusLabel, statusLevel } from "@/components/ui";
-import type { ArbitragemResp, AuditoriaResp, BrasilResp, PrevisaoResp } from "@/lib/apiTypes";
-import { band, baseOption, C, line, SUB_COLOR, timeAxis, valueAxis } from "@/lib/chart";
-import { ago, brl, num, pct, signed } from "@/lib/fmt";
-import { SUB_NAMES, SUBS } from "@/lib/sources/types";
+import { useMemo, useState } from "react";
+import { ChartFrame } from "@/components/EChart";
+import {
+  AssetsPanel,
+  AuditorPanel,
+  BessMini,
+  buildKpis,
+  DaySummary,
+  earOption,
+  EnaRow,
+  fanOption,
+  loadOption,
+  OpportunitiesTable,
+  pldMainOption,
+  priceCurveOption,
+  SinFlow,
+  type Mode,
+  type Range,
+} from "@/components/home/panels";
+import { Appear } from "@/components/motion";
+import { Kpi, Panel, Segmented, SimBanner, SourceTag } from "@/components/ui";
+import type { ArbitragemResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp } from "@/lib/apiTypes";
+import { assetQuery, useAsset } from "@/lib/asset";
+import { SUB_COLOR } from "@/lib/chart";
+import { brl } from "@/lib/fmt";
+import { buildOpportunities, pickDay } from "@/lib/market/opportunities";
+import { brtDate, brtHour } from "@/lib/sources/time";
+import { SUBS, type Sub } from "@/lib/sources/types";
 import { useApi } from "@/lib/useApi";
+import { useNow } from "@/lib/useNow";
 
-function pldOption(d: BrasilResp): ChartOption {
-  const p = d.pld!;
-  const now = Date.now();
-  return {
-    ...baseOption(),
-    tooltip: { ...baseOption().tooltip, valueFormatter: (v: number) => brl(v) },
-    xAxis: timeAxis(),
-    yAxis: valueAxis("R$/MWh"),
-    series: SUBS.map((s, k) =>
-      line(`${s} · ${SUB_NAMES[s]}`, p.ts.map((t, i) => [t, p.values[s][i]]), SUB_COLOR[s], {
-        z: 10 - k,
-        ...(k === 0
-          ? {
-              markLine: { symbol: "none", silent: true, label: { color: C.muted, formatter: "agora", fontSize: 10 }, lineStyle: { color: C.muted, width: 1, type: "solid" }, data: [{ xAxis: now }] },
-              markArea: { silent: true, itemStyle: { color: "rgba(255,255,255,0.025)" }, data: [[{ xAxis: now }, { xAxis: p.ts[p.ts.length - 1] }]] },
-            }
-          : {}),
-      }),
-    ),
-  };
-}
+const RANGES: { value: Range; label: string }[] = [
+  { value: "24H", label: "24H" },
+  { value: "7D", label: "7D" },
+  { value: "30D", label: "30D" },
+];
+const MODES: { value: Mode; label: string }[] = [
+  { value: "real", label: "Real" },
+  { value: "prev", label: "Previsão" },
+];
 
-function fanOption(f: PrevisaoResp): ChartOption {
-  const h = f.horizon;
-  const hist = f.history;
-  const cut = hist.ts.length - 72;
-  return {
-    ...baseOption(),
-    tooltip: { ...baseOption().tooltip, formatter: undefined, valueFormatter: (v: number) => brl(v) },
-    legend: { ...baseOption().legend, data: ["Realizado", "Previsão", "Monte Carlo P05–P95", "P25–P75"] },
-    xAxis: timeAxis(),
-    yAxis: valueAxis("R$/MWh"),
-    series: [
-      ...band("Monte Carlo P05–P95", h.ts, h.mc.p05, h.mc.p95, C.series[0], 0.12, "a"),
-      ...band("P25–P75", h.ts, h.mc.p25, h.mc.p75, C.series[0], 0.22, "b"),
-      line("Realizado", hist.ts.slice(cut).map((t, i) => [t, hist.values[cut + i]]), C.ink2),
-      line("Previsão", h.ts.map((t, i) => [t, (h.point ?? h.lear)[i]]), C.series[0]),
-    ],
-  };
-}
-
-function Opportunities({ a }: { a: ArbitragemResp }) {
-  const topEu = a.eu[0];
-  const topBorder = a.borders[0];
-  const spread = [...a.spreads].filter((s) => s.z !== null).sort((x, y) => Math.abs(y.z!) - Math.abs(x.z!))[0];
-  const items = [
-    {
-      Icon: BatteryCharging,
-      title: `BESS ${a.bess.spec.powerMW} MW / ${a.bess.spec.capacityMWh} MWh no PLD ${a.sub}`,
-      value: brl(a.bess.lsmcRS, 0),
-      detail: `7 dias · política LSMC (intrínseco ${brl(a.bess.intrinsicRS, 0)} + opcionalidade ${brl(a.bess.extrinsicRS, 0)}) · pior 5%: ${brl(-a.bess.risk.cvar95, 0)}`,
-      level: a.bess.lsmcRS > 0 ? ("good" as const) : ("neutral" as const),
-    },
-    topEu && {
-      Icon: Globe,
-      title: `Bateria 1 MW/2 MWh — ${topEu.name} (${topEu.bzn})`,
-      value: `€ ${num(topEu.bessEurPerMWDay, 0)}/MW·dia`,
-      detail: `entrega ${topEu.date} · spread ${num(topEu.max - topEu.min, 0)} €/MWh · ${num(topEu.negativeHours, 1)} h negativas`,
-      level: "good" as const,
-    },
-    topBorder && {
-      Icon: ArrowLeftRight,
-      title: `Congestionamento ${topBorder.from} ⇄ ${topBorder.to}`,
-      value: `€ ${num(Math.max(topBorder.ftrFromTo, topBorder.ftrToFrom), 0)}/MW·dia`,
-      detail: `valor intrínseco de FTR · spread médio ${signed(topBorder.avgSpread, 1)} €/MWh · ${num(topBorder.congestedPct, 0)}% dos intervalos congestionados`,
-      level: "neutral" as const,
-    },
-    spread && {
-      Icon: ArrowLeftRight,
-      title: `Spread ${spread.a}−${spread.b} (z = ${num(spread.z, 2)})`,
-      value: brl(spread.current, 2),
-      detail: `${spread.signal}${spread.halfLifeH ? ` · meia-vida ${num(spread.halfLifeH, 1)} h` : ""}`,
-      level: Math.abs(spread.z ?? 0) > 2 ? ("warning" as const) : ("neutral" as const),
-    },
-  ].filter(Boolean) as { Icon: typeof Globe; title: string; value: string; detail: string; level: "good" | "neutral" | "warning" }[];
-  return (
-    <ul className="flex flex-col divide-y divide-line">
-      {items.map((it, i) => (
-        <li key={i} className="flex gap-3 py-2.5 first:pt-0 last:pb-0">
-          <it.Icon size={16} className="mt-0.5 shrink-0 text-muted" aria-hidden />
-          <div className="min-w-0 flex-1">
-            <div className="flex items-baseline justify-between gap-2">
-              <span className="truncate text-xs text-ink-2">{it.title}</span>
-              <span className="shrink-0 text-sm font-semibold text-ink">{it.value}</span>
-            </div>
-            <p className="mt-0.5 text-[11px] leading-snug text-muted">{it.detail}</p>
-          </div>
-        </li>
-      ))}
-    </ul>
-  );
-}
+const more = (href: string, label = "detalhes") => (
+  <Link href={href} className="text-[11px] text-muted transition-colors hover:text-accent">
+    {label} →
+  </Link>
+);
 
 export default function Home() {
+  const asset = useAsset();
+  const now = useNow();
   const br = useApi<BrasilResp>("/api/brasil", 60_000);
-  const fc = useApi<PrevisaoResp>("/api/previsao?sub=SE", 600_000);
   const arb = useApi<ArbitragemResp>("/api/arbitragem?sub=SE", 300_000);
-  const audit = useApi<AuditoriaResp>("/api/auditoria", 30_000);
-
-  const pldOpt = useMemo(() => (br.data?.pld ? pldOption(br.data) : null), [br.data]);
-  const fanOpt = useMemo(() => (fc.data ? fanOption(fc.data) : null), [fc.data]);
+  const audit = useApi<AuditoriaResp>("/api/auditoria", 60_000);
+  const clima = useApi<ClimaResp>("/api/clima", 600_000);
+  const bess = useApi<BessResp>(`/api/bess?${assetQuery(asset)}`, 900_000);
+  const [range, setRange] = useState<Range>("7D");
+  const [mode, setMode] = useState<Mode>("real");
+  // previsão: SE sempre (resumo e leque); demais submercados só no modo previsão
+  const fcSE = useApi<PrevisaoResp>("/api/previsao?sub=SE", 600_000);
+  const fcS = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=S" : null, 600_000);
+  const fcNE = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=NE" : null, 600_000);
+  const fcN = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=N" : null, 600_000);
   const d = br.data;
-  const earSE = d?.ear?.values.SE.filter((v): v is number => v !== null);
-  const run = audit.data?.latest;
-  const report = audit.data?.reports?.[0];
+
+  const kpis = useMemo(() => buildKpis(d, clima.data, audit.data, now || undefined), [d, clima.data, audit.data, now]);
+  const forecasts = useMemo(() => ({ SE: fcSE.data, S: fcS.data, NE: fcNE.data, N: fcN.data }) as Partial<Record<Sub, PrevisaoResp>>, [fcSE.data, fcS.data, fcNE.data, fcN.data]);
+  const mainOpt = useMemo(() => (d && now ? pldMainOption(d, range, mode, forecasts, now) : null), [d, range, mode, forecasts, now]);
+  const curveOpt = useMemo(() => (d && now ? priceCurveOption(d, now) : null), [d, now]);
+  const loadOpt = useMemo(() => (d ? loadOption(d) : null), [d]);
+  const earOpt = useMemo(() => (d ? earOption(d) : null), [d]);
+  const fanOpt = useMemo(() => (fcSE.data ? fanOption(fcSE.data) : null), [fcSE.data]);
+
+  const opps = useMemo(() => {
+    if (!d?.pld || !now) return [];
+    const day = pickDay(d.pld.ts, d.pld.values, brtDate(now), brtDate, brtHour);
+    const eu = arb.data?.eu[0];
+    const lensEu = arb.data?.lens.find((l) => l.unit.includes("€") && l.localAvg > 0);
+    const fx = lensEu ? lensEu.brlAvg / lensEu.localAvg : null;
+    return buildOpportunities({
+      day,
+      floor: d.limits.min,
+      asset: { pow: asset.pow, cap: asset.cap, rte: asset.rte, lcos: asset.lcos },
+      spreads: arb.data?.spreads,
+      intl: eu && fx ? { name: eu.name, bzn: eu.bzn, eurPerMWDay: eu.bessEurPerMWDay, spreadEur: eu.max - eu.min, fx, date: eu.date } : null,
+    });
+  }, [d, arb.data, asset, now]);
+  const oppDay = d?.pld && now ? pickDay(d.pld.ts, d.pld.values, brtDate(now), brtDate, brtHour) : null;
+  const fcLoading = mode === "prev" && (fcS.isLoading || fcNE.isLoading || fcN.isLoading);
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <SimBanner metas={[d?.meta.pld, d?.meta.cmo, d?.meta.ear, d?.meta.ena, d?.meta.load]} />
-      {br.error && !d ? <ErrorBox error={br.error} /> : null}
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        {(d?.kpis ?? SUBS.map((s) => ({ sub: s, now: null, dayAgo: null, spark: [], tomorrowAvg: null, at: null, todayAvg: null }))).map((k) => (
-          <Stat
-            key={k.sub}
-            label={`PLD ${k.sub} · ${SUB_NAMES[k.sub]}`}
-            swatch={SUB_COLOR[k.sub]}
-            value={num(k.now, 2)}
-            unit="R$/MWh"
-            delta={k.now !== null && k.dayAgo !== null ? `${signed(k.now - k.dayAgo, 2)} vs mesma hora ontem` : null}
-            hint={k.tomorrowAvg !== null ? `D+1 publicado: média ${brl(k.tomorrowAvg)}` : undefined}
-            spark={k.spark}
-            sparkColor={SUB_COLOR[k.sub]}
-          />
+      {/* 1 · KPIs */}
+      <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 md:grid-cols-5 min-[1880px]:grid-cols-10">
+        {kpis.map((k, i) => (
+          <Appear key={k.key} delay={i * 0.025}>
+            <Kpi {...k} />
+          </Appear>
         ))}
-        <Stat
-          label="Reservatórios SE/CO (EAR)"
-          value={pct(earSE?.[earSE.length - 1])}
-          delta={earSE && earSE.length > 8 ? `${signed(earSE[earSE.length - 1] - earSE[earSE.length - 8], 1)} p.p. em 7 dias` : null}
-          deltaGood={earSE && earSE.length > 8 ? earSE[earSE.length - 1] >= earSE[earSE.length - 8] : null}
-          spark={d?.ear?.values.SE.slice(-60)}
-          sparkColor={C.series[0]}
-        />
-        <Stat
-          label="Saúde das APIs"
-          value={run ? `${run.overallScore}` : "—"}
-          unit="/100"
-          delta={run ? `${run.counts.ok} ok · ${run.counts.degraded} degradadas · ${run.counts.down} fora` : "execute a primeira auditoria"}
-          hint={run ? `última execução ${ago(run.startedAt)}` : undefined}
-        />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      {/* 2 · gráfico principal + resumo do dia */}
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-12">
         <Panel
-          className="xl:col-span-2"
+          className="xl:col-span-9"
           title="PLD horário por submercado"
-          subtitle={`Últimos 10 dias + dia seguinte já publicado (área sombreada). Limites 2026: ${brl(d?.limits.min)} a ${brl(d?.limits.maxHourly)}.`}
-          right={<SourceTag meta={d?.meta.pld} />}
+          subtitle={
+            d
+              ? `${range === "30D" ? "Últimos 31 dias" : range === "7D" ? "Últimos 7 dias" : "Últimas 24 h"} + dia seguinte quando publicado · faixas: ponta 18–21h · linhas: preço atual · piso ${brl(d.limits.min)} · teto horário ${brl(d.limits.maxHourly)}`
+              : "carregando…"
+          }
+          right={
+            <>
+              <Segmented label="Janela" value={range} options={RANGES} onChange={setRange} size="xs" />
+              <Segmented label="Modo" value={mode} options={MODES} onChange={setMode} size="xs" />
+              <SourceTag meta={d?.meta.pld} staleAfterMs={2 * 3600_000} />
+            </>
+          }
         >
-          {pldOpt ? <EChart option={pldOpt} height={300} label="PLD horário por submercado" dim={br.isValidating && !!br.data} /> : <Loading />}
+          <ChartFrame option={mainOpt} loading={br.isLoading} error={br.error} onRetry={() => br.mutate()} height={340} label="PLD horário por submercado" dim={(br.isValidating && !!d) || fcLoading} />
         </Panel>
-        <Panel title="Oportunidades agora" subtitle="Ranqueadas pelos modelos de arbitragem" right={<Link href="/arbitragem" className="text-xs text-accent hover:underline">detalhes →</Link>}>
-          {arb.data ? <Opportunities a={arb.data} /> : arb.error ? <ErrorBox error={arb.error} /> : <Loading height={220} />}
+        <Panel className="xl:col-span-3" title="Resumo do dia" subtitle="gerado dos dados, sem texto fixo">
+          <DaySummary br={d} fc={fcSE.data} audit={audit.data} now={now} />
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
-        <Panel
-          title="Previsão PLD SE — 7 dias"
-          subtitle={fc.data ? `LEAR + Monte Carlo MRJD · rMAE ${num(fc.data.backtest.rmae, 2)} vs ingênuo · cobertura ACI ${pct(100 * fc.data.backtest.aci.coverage, 0)}` : "calibrando…"}
-          right={<Link href="/previsao" className="text-xs text-accent hover:underline">modelos →</Link>}
-        >
-          {fanOpt ? <EChart option={fanOpt} height={260} label="Leque de previsão do PLD SE" /> : fc.error ? <ErrorBox error={fc.error} /> : <Loading height={260} />}
+      {/* 3 · oportunidades */}
+      <Panel
+        title="Oportunidades agora"
+        subtitle={
+          oppDay
+            ? `Calculadas no PLD de ${oppDay.label} (${oppDay.date.split("-").reverse().slice(0, 2).join("/")}) para o ativo ${asset.pow} MW / ${asset.cap} MWh (η ${asset.rte}%). Margem bruta; verde = cobre o custo nivelado de R$ ${asset.lcos}/MWh, amarelo = não cobre.`
+            : "aguardando um dia completo de PLD"
+        }
+        right={more("/arbitragem", "arbitragem")}
+        bodyClassName="px-1 pb-1"
+      >
+        <OpportunitiesTable rows={opps} />
+      </Panel>
+
+      {/* 4 · painéis inferiores */}
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2 2xl:grid-cols-4">
+        <Panel title="SIN Brasil · fluxo" subtitle="preço, carga e reservatório por submercado" right={more("/sin")}>
+          <SinFlow br={d} now={now} />
         </Panel>
-        <Panel title="Status das APIs públicas" subtitle={run ? `auditoria ${ago(run.startedAt)} · persistência: ${audit.data?.storage === "firestore" ? "Firestore" : "memória"}` : "sem auditoria ainda"} right={<Link href="/auditoria" className="text-xs text-accent hover:underline">auditor →</Link>}>
-          {run ? (
-            <ul className="grid grid-cols-1 gap-1.5">
-              {run.sources.map((s) => (
-                <li key={s.id} className="flex items-center justify-between gap-2 text-xs">
-                  <span className="truncate text-ink-2">
-                    {s.name} <span className="text-muted">· {s.provider.split(" —")[0]}</span>
-                  </span>
-                  <span className="flex shrink-0 items-center gap-2">
-                    <span className="tnum text-muted">{s.latencyMs !== null ? `${s.latencyMs} ms` : ""}</span>
-                    <Badge level={statusLevel(s.status)}>{statusLabel[s.status]}</Badge>
-                  </span>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="text-xs text-muted">
-              Nenhuma auditoria registrada. Abra o <Link href="/auditoria" className="text-accent">Agente auditor</Link> e clique em “Rodar auditoria”.
-            </p>
-          )}
+        <Panel title="Curva de preço" subtitle={d?.kpis?.some((k) => k.tomorrowAvg !== null) ? "R$/MWh · hoje (—) e amanhã publicado (- -)" : "R$/MWh · hoje, hora a hora"} right={more("/sin")}>
+          <ChartFrame option={curveOpt} loading={br.isLoading} error={br.error} height={210} label="Curva do PLD de hoje e amanhã" />
+          <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1 text-[10.5px] text-muted">
+            {SUBS.map((s) => (
+              <span key={s} className="inline-flex items-center gap-1">
+                <span className="inline-block h-0.5 w-3 rounded-full" style={{ background: SUB_COLOR[s] }} aria-hidden />
+                {s}
+              </span>
+            ))}
+          </div>
         </Panel>
-        <Panel title="Agente auditor (IA)" subtitle={report ? `${report.model} · ${ago(report.createdAt)}` : audit.data?.agent.configured ? "aguardando primeira análise" : "configure ANTHROPIC_API_KEY"} right={<Bot size={16} className="text-muted" aria-hidden />}>
-          {report ? (
-            <div className="flex flex-col gap-2 text-xs">
-              <Badge level={report.severity === "critical" ? "critical" : report.severity === "warning" ? "warning" : "good"}>{report.severity}</Badge>
-              <p className="leading-relaxed text-ink-2">{report.summary}</p>
-              <ul className="flex flex-col gap-1">
-                {report.findings.slice(0, 4).map((f, i) => (
-                  <li key={i} className="text-muted">
-                    <span className="text-ink-2">{f.sourceId}</span> — {f.title}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : (
-            <p className="text-xs leading-relaxed text-muted">
-              O agente usa Claude com ferramentas (re-sonda endpoints, lê o histórico no Firestore, inspeciona amostras e checa PLD×CMO) e gera um relatório com causa provável e ação recomendada sempre que a auditoria detecta degradação.
-            </p>
-          )}
+        <Panel title="BESS · energy arbitrage" subtitle="despacho ótimo (HiGHS) no PLD real" right={<SourceTag meta={bess.data?.meta} staleAfterMs={2 * 3600_000} />}>
+          <BessMini bess={bess.data} asset={asset} loading={bess.isLoading} error={bess.error} />
+        </Panel>
+        <Panel title="Previsão de carga" subtitle="GW · SIN verificado (ONS) + ingênuo semanal 24 h" right={<SourceTag meta={d?.meta.load} staleAfterMs={6 * 3600_000} />}>
+          <ChartFrame option={loadOpt} loading={br.isLoading} error={br.error} height={230} label="Carga do SIN e previsão ingênua" />
+        </Panel>
+        <Panel title="Reservatórios & afluências" subtitle="EAR (% da capacidade máx.) e ENA (% da MLT)" right={more("/clima")}>
+          <ChartFrame option={earOpt} loading={br.isLoading} error={br.error} height={170} label="Energia armazenada por submercado" />
+          <EnaRow br={d} />
+        </Panel>
+        <Panel title="Ativos & estratégias" subtitle="ativo selecionado e carteira (neste navegador)" right={more("/carteira", "carteira")}>
+          <AssetsPanel asset={asset} bess={bess.data} now={now} />
+        </Panel>
+        <Panel title="Agente auditor" subtitle="saúde das APIs públicas" right={more("/auditoria", "auditor")}>
+          <AuditorPanel audit={audit.data} />
+        </Panel>
+        <Panel title="Previsão PLD SE · 7 dias" subtitle={fcSE.data ? `LEAR ⊕ ingênuo · rMAE ${fcSE.data.backtest.rmae.toFixed(2).replace(".", ",")} · cobertura ${Math.round(100 * fcSE.data.backtest.aci.coverage)}%` : "calibrando modelos…"} right={more("/previsao", "modelos")}>
+          <ChartFrame option={fanOpt} loading={fcSE.isLoading} error={fcSE.error} height={230} label="Leque de previsão do PLD SE" />
         </Panel>
       </div>
+      <p className="px-1 text-[10.5px] text-muted">
+        Fontes públicas (CCEE, ONS, Open-Meteo, BCB, Energy-Charts). Submercados {SUBS.join(" · ")}. Não é recomendação de investimento.
+      </p>
     </div>
   );
 }

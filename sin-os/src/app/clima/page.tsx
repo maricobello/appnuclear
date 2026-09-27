@@ -69,7 +69,7 @@ export default function ClimaPage() {
   );
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Clima & hidrologia"
         subtitle="Drivers físicos do preço: temperatura nos centros de carga, vento a 100 m nos polos eólicos do Nordeste, irradiância no polo solar de MG e chuva nas bacias (ensemble ECMWF de 51 membros → incerteza hidrológica)."
@@ -101,7 +101,7 @@ export default function ClimaPage() {
         )}
       </Panel>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel title="Eólica — fator de capacidade (7 dias)" subtitle="Polos RN e BA">
           {wind ? <EChart option={wind} height={240} label="Fator de capacidade eólico" /> : <Loading />}
         </Panel>
@@ -115,7 +115,7 @@ export default function ClimaPage() {
 
       <Panel title="Chuva acumulada nas bacias — ensemble ECMWF (15 dias)" subtitle="Faixa P10–P90 entre membros e mediana · mais chuva ⇒ mais ENA ⇒ pressão baixista no PLD" right={<SourceTag meta={data?.meta.ensemble} label="ECMWF" />}>
         {basins.length ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {basins.map(({ b, opt }) => (
               <div key={b.hub.id} className="rounded-md border border-line p-2">
                 <div className="flex items-baseline justify-between px-1 text-xs">

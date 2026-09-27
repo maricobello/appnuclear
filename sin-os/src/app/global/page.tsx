@@ -97,7 +97,7 @@ export default function GlobalPage() {
   const fx = g?.fx;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Mercados globais"
         subtitle={`Europa (acoplamento SDAC, resolução ${g?.euResolutionMin ?? "—"} min via Energy-Charts), Reino Unido (Elexon BMRS e NESO), câmbio (BCB) e combustíveis (EIA). Base para spreads transfronteiriços e comparação de custo marginal.`}
@@ -117,7 +117,7 @@ export default function GlobalPage() {
         />
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Panel title="Europa — mapa de calor zona × hora (UTC)" subtitle="Últimas 72 h com dados (inclui o dia seguinte após o leilão das 12h CET)" right={<SourceTag meta={g?.meta.eu} />}>
           {heat ? <EChart option={heat} height={380} label="Mapa de calor de preços europeus" dim={isValidating} /> : <Loading height={380} />}
         </Panel>
@@ -126,7 +126,7 @@ export default function GlobalPage() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title="Reino Unido — referência e desequilíbrio" subtitle="Períodos de 30 min · o System Buy Price sinaliza escassez em tempo real" right={<SourceTag meta={g?.meta.ukMid} label="Elexon" />}>
           {uk ? <EChart option={uk} height={260} label="Preços do Reino Unido" /> : <Loading height={260} />}
         </Panel>
@@ -137,7 +137,7 @@ export default function GlobalPage() {
 
       <Panel title="Combustíveis — EIA" subtitle="Henry Hub (US$/MMBtu) e Brent (US$/bbl): custo marginal térmico" right={g?.meta.eia.ok ? <SourceTag meta={g.meta.eia} /> : <Badge level="neutral">defina EIA_API_KEY (gratuita)</Badge>}>
         {g?.eia ? (
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             {eia(g.eia.henryHub, "Henry Hub", "US$/MMBtu", C.series[0]) ? <EChart option={eia(g.eia.henryHub, "Henry Hub", "US$/MMBtu", C.series[0])!} height={200} label="Henry Hub" /> : null}
             {eia(g.eia.brent, "Brent", "US$/bbl", C.series[0]) ? <EChart option={eia(g.eia.brent, "Brent", "US$/bbl", C.series[0])!} height={200} label="Brent" /> : null}
           </div>

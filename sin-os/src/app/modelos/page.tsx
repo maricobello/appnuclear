@@ -103,7 +103,7 @@ const ROADMAP = [
 
 export default function ModelosPage() {
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Modelos & APIs"
         subtitle="Tudo implementado em TypeScript puro (roda em qualquer runtime da Vercel), com testes que validam cada método contra resultados conhecidos da literatura. As referências de código apontam as implementações canônicas no GitHub usadas como base de comparação."
@@ -118,7 +118,7 @@ export default function ModelosPage() {
         </ol>
       </Panel>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         {MODELS.map((m) => (
           <Panel key={m.name} title={m.name} subtitle={m.role}>
             <pre className="scrollbar-thin mb-3 overflow-x-auto whitespace-pre-wrap rounded-md border border-line bg-surface-2 p-2.5 font-mono text-[11px] leading-relaxed text-ink-2">{m.math}</pre>

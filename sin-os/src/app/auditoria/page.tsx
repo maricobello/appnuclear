@@ -82,7 +82,7 @@ export default function AuditoriaPage() {
   const report = data?.reports[0];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Agente auditor de APIs"
         subtitle="Camada 1 (determinística): disponibilidade, latência, frescor vs SLA, schema, completude, validade (faixas regulatórias), outliers de Hampel e integridade cruzada PLD×CMO. Camada 2 (IA): Claude investiga degradações com ferramentas e registra causa provável e ação."
@@ -109,10 +109,10 @@ export default function AuditoriaPage() {
           </div>
         }
       />
-      {runMsg ? <div className="rounded-lg border border-line bg-surface-2 px-3 py-2 text-xs text-ink-2">{runMsg}</div> : null}
+      {runMsg ? <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-xs text-ink-2">{runMsg}</div> : null}
       {error && !data ? <ErrorBox error={error} /> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel title="Saúde geral" subtitle={l ? `${dateTime(l.startedAt)} (${ago(l.startedAt)}) · gatilho: ${l.trigger} · ${num(l.durationMs / 1000, 1)} s` : "nenhuma execução"}>
           {l ? (
             <div className="flex flex-col gap-3">
@@ -250,7 +250,7 @@ export default function AuditoriaPage() {
         ) : null}
       </Panel>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title="Relatório do agente IA" subtitle={report ? `${report.model} · ${dateTime(report.createdAt)} · ${report.toolCalls.length} chamadas de ferramenta · ${num(report.usage.inputTokens + report.usage.outputTokens)} tokens (${num(report.usage.cacheReadTokens)} em cache)` : "acionado quando a auditoria detecta degradação, na execução diária agendada ou manualmente com credencial"}>
           {report ? (
             <div className="flex flex-col gap-3 text-xs">

@@ -17,7 +17,7 @@ jobs:
         run: |
           fail=0
           for path in "/api/status" "/api/health" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
-                      "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/pld-mensal" "/api/auditoria/selfeval"; do
+                      "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval"; do
             code=$(curl -s -o body.json -w '%{http_code}' --max-time 120 "$URL$path")
             echo "== $path → HTTP $code"
             python3 - "$path" <<'PY' || true
@@ -38,6 +38,9 @@ jobs:
           if path.startswith("/api/arbitragem"):
               b = d.get("bess") or {}
               print("   intrínseco:", b.get("intrinsicRS"), "opcionalidade:", b.get("extrinsicRS"), "teto:", b.get("perfectForesightRS"), "solver:", b.get("solver"))
+          if path.startswith("/api/bess"):
+              f = d.get("finance") or {}
+              print("   receita/ano:", f.get("revenueYear1"), "TIR:", f.get("irr"), "payback:", f.get("paybackYears"), "LCOS equilíbrio:", f.get("breakevenLcos"))
           if path == "/api/status":
               print("  ", json.dumps(d)[:400])
           PY

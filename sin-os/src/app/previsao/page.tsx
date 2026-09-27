@@ -77,7 +77,7 @@ export default function PrevisaoPage() {
   const bt = f?.backtest;
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="Previsão probabilística do PLD"
         subtitle="Ensemble auditável: LEAR (LASSO via LARS, benchmark do epftoolbox) para o ponto, intervalos conformais adaptativos (ACI), QRA para quantis do D+1, Monte Carlo com difusão de reversão à média com saltos (MRJD), regimes por HMM e volatilidade GARCH(1,1). Avaliação fora da amostra com re-estimação diária."
@@ -130,7 +130,7 @@ export default function PrevisaoPage() {
         ) : null}
       </Panel>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel title="Regimes de mercado (HMM 3 estados)" subtitle="Probabilidade filtrada agora e projetada pela matriz de transição">
           {reg ? <EChart option={reg} height={170} label="Probabilidades de regime" /> : <Loading height={170} />}
           {f?.regime ? (
@@ -180,7 +180,7 @@ export default function PrevisaoPage() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Panel title="Quantis do dia seguinte (QRA)" subtitle="Quantile Regression Averaging sobre LEAR + ingênuo, calibrado no backtest">
           {f ? (
             <Table

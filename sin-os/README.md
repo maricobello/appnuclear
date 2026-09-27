@@ -12,7 +12,8 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 
 | Tela | O que faz |
 |---|---|
-| **Sala de Comando** | PLD atual por submercado, D+1 publicado, EAR, saúde das APIs, oportunidades ranqueadas, previsão 7 dias |
+| **Sala de Comando** | 10 KPIs com sparkline e estado da fonte (LIVE/FALLBACK/STALE/ERROR), PLD horário 24H/7D/30D com ponta, preço atual e modo previsão, scanner de oportunidades (BESS intraday, peak capture, load shifting, curtailment→storage, spreads, internacional), resumo do dia gerado dos dados e 8 painéis operacionais |
+| **BESS** | Ativo configurável (potência, energia, eficiência, degradação, LCOS + premissas): despacho ótimo diário (HiGHS) em até 12 meses de PLD real, fluxo de energia e SOC, margem de arbitragem, receita, CAPEX implícito, VPL, TIR, payback, ROI, LCOS de equilíbrio, cenários e sensibilidade — tudo recalculado no "Recalcular" |
 | **SIN · Brasil** | Mapa de calor do PLD dia×hora, médias diárias, CMO (ONS) × PLD (CCEE), EAR, ENA, carga |
 | **Previsão** | LEAR + conformal adaptativo (ACI) + QRA + Monte Carlo MRJD + regimes HMM + GARCH, com backtest e testes estatísticos |
 | **Arbitragem** | Bateria (BESS) no PLD: DP (valor intrínseco) + LSMC (opcionalidade), P&L e CVaR; spreads entre submercados (ADF, cointegração, meia-vida); bateria por zona europeia e valor de congestionamento (FTR); lente global em R$/MWh |
@@ -159,6 +160,18 @@ completas, 3.996 dias de bateria no HiGHS) e apontou, com números, o que estava
 Validado sem problemas: bateria (0 dias com política simples acima do LP em 3.996), sinal e exatidão
 da liquidação da carteira, teto estrutural, QRA, ACI em blocos de 24 h e CRPS. Ainda em aberto: fator
 por tipo de dia (sábado sub-coberto, 0,74–0,84) e a faixa de D+5–D+7, que fica perto de 85%.
+
+## Interface — sistema de design
+
+Terminal escuro de alta densidade (mesa de energia, não dashboard genérico), com fundamentos das
+Human Interface Guidelines da Apple: **clareza** (tipografia técnica, números tabulares, contraste alto),
+**deferência** (bordas finas, sem sombras nem gradientes decorativos) e **profundidade** por camadas de
+superfície. Movimento com [Motion](https://motion.dev): springs curtos e amortecidos (indicador da
+navegação, controles segmentados, entrada de painéis, números que interpolam e piscam verde/vermelho no
+tick), sempre desligado com "reduzir movimento". Tokens em `src/app/globals.css`; componentes em
+`src/components/ui.tsx` (Panel, Kpi, StatusTag, Segmented, Table, MetricRow, ConfidenceBar) e
+`EChart.tsx` (ChartFrame com estados carregando/erro/vazio, crosshair e zoom). Todo dado exibe a
+procedência: LIVE · FALLBACK · STALE · ERROR · SIM, com a hora da última observação.
 
 ## PLD oficial "em tempo real" — CCEE Plataforma de Integração
 

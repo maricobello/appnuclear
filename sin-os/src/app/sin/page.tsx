@@ -90,7 +90,7 @@ export default function SinPage() {
   const lastDays = data?.aggregates ? data.aggregates.dates.slice(-8).map((d, i, arr) => ({ d, i: data.aggregates!.dates.length - arr.length + i })) : [];
 
   return (
-    <div className="flex flex-col gap-4">
+    <div className="flex flex-col gap-3">
       <PageHeader
         title="SIN · Sistema Interligado Nacional"
         subtitle="PLD (CCEE), CMO do DESSEM (ONS), reservatórios, afluências e carga. O PLD é o CMO limitado ao piso/teto da ANEEL — divergências indicam problema de dados (o agente auditor checa isso)."
@@ -99,11 +99,11 @@ export default function SinPage() {
       <SimBanner metas={[data?.meta.pld, data?.meta.cmo, data?.meta.ear, data?.meta.ena, data?.meta.load]} />
       {error && !data ? <ErrorBox error={error} /> : null}
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <Panel title={`Mapa de calor PLD ${sub} — dia × hora`} subtitle="Últimos 31 dias · escala sequencial (claro = caro)" right={<SourceTag meta={data?.meta.pld} />}>
           {heat ? <EChart option={heat} height={520} label={`Mapa de calor do PLD ${sub}`} dim={isValidating} /> : <Loading height={520} />}
         </Panel>
-        <div className="flex flex-col gap-4">
+        <div className="flex flex-col gap-3">
           <Panel title="PLD médio diário" subtitle="90 dias · 4 submercados">
             {daily ? <EChart option={daily} height={220} label="PLD médio diário por submercado" /> : <Loading height={220} />}
           </Panel>
@@ -113,7 +113,7 @@ export default function SinPage() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel title="Energia armazenada (EAR)" subtitle="% da capacidade máxima · 12 meses" right={<SourceTag meta={data?.meta.ear} />}>
           {ear ? <EChart option={ear} height={240} label="EAR por subsistema" /> : <Loading />}
         </Panel>

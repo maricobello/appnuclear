@@ -2,6 +2,7 @@ import type { SourceMetaView } from "@/components/ui";
 import type { Slo } from "./audit/slo";
 import type { AgentReport, AuditRun } from "./audit/types";
 import type { BorderSpread, EuZoneArb, GlobalLens, SpreadStat, StorageResult } from "./market/arbitrage";
+import type { BessStudy } from "./market/bess-study";
 import type { ForecastResult } from "./market/forecast";
 import type { FxData } from "./sources/fx";
 import type { SourceMeta, Sub } from "./sources/types";
@@ -79,3 +80,5 @@ export interface AuditoriaResp {
   auth: { required: boolean };
   dataMode: string;
 }
+
+export type BessResp = BessStudy & { meta: SourceMetaView; simulated: boolean; generatedAt: number };
