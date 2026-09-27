@@ -241,6 +241,19 @@ publicado), estatísticas de hoje, de amanhã (quando publicado) e do último di
 mesma cadeia do app (CCEE Dados Abertos com identificação honesta → PLD *estimado* pelo CMO/DESSEM do ONS com o
 piso/teto da ANEEL, que pode diferir do oficial → último dado bom) e informa a fonte em `fonte`; dado simulado nunca sai (503).
 
+**PLD oficial pelo coletor** (`scripts/coletor-ccee.mjs`): a CCEE bloqueia servidores de nuvem
+(a Vercel recebe 403), mas não quem usa o portal de Dados Abertos numa conexão comum. O coletor roda
+no seu computador (Node 18+), lê a API pública do portal com identificação honesta — sem se passar
+por navegador — e envia os registros para `POST /api/pld/coletor` (header `x-coletor-key` =
+`PLD_INGEST_KEY`). A rota usa o mesmo parser da busca direta e só aceita dias completos, dentro do
+piso/teto do ano e até D+1; eles ficam no Firestore como oficiais e substituem a estimativa pelo CMO
+em todas as telas, na Iara e em `/api/pld`. `GET /api/pld/coletor` mostra os dias recebidos.
+
+```powershell
+$env:SIN_OS_URL="https://sinos-iota.vercel.app"; $env:PLD_INGEST_KEY="sua-chave"
+node coletor-ccee.mjs --loop 60
+```
+
 **Exportação CSV** (`?format=csv`): `/api/previsao?sub=SE` (curva horária, banda e quantis),
 `/api/arbitragem?sub=SE` (despacho ótimo de 72 h) e `/api/pld-mensal` (PLD médio mês × submercado).
 

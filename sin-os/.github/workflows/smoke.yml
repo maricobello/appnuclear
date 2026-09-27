@@ -16,7 +16,7 @@ jobs:
       - name: Rotas de API
         run: |
           fail=0
-          for path in "/api/status" "/api/health" "/api/pld" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
+          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
                       "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval"; do
             code=$(curl -s -o body.json -w '%{http_code}' --max-time 120 "$URL$path")
             echo "== $path → HTTP $code"
@@ -60,6 +60,8 @@ jobs:
               print("   fonte:", (d.get("fonte") or {}).get("descricao"), "| oficial:", (d.get("fonte") or {}).get("oficial"))
               for x in d.get("submercados") or []:
                   print("  ", x.get("sub"), "agora:", x.get("agora"), "| hoje média:", (x.get("hoje") or {}).get("media"), "| amanhã média:", (x.get("amanha") or {}).get("media"))
+          if path == "/api/pld/coletor":
+              print("   coletor configurado:", d.get("configurado"), "| dias recentes:", ", ".join(f"{x['data']}{'' if x['oficial'] else ' (estimado)'}" for x in d.get("dias_recentes") or []))
           if path == "/api/status":
               print("  ", json.dumps(d)[:400])
           PY

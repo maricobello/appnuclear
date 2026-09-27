@@ -19,7 +19,7 @@ export function GET() {
       firebase: firebaseStatus(),
       agent: { configured: !!process.env.ANTHROPIC_API_KEY, model: AGENT_MODEL },
       assistant: { provider: "groq", configured: groqConfigured(), accessCodeRequired: accessCodeRequired() },
-      optionalKeys: { EIA_API_KEY: !!process.env.EIA_API_KEY, CCEE_PLATAFORMA_INTEGRACAO: ccePiConfigured() },
+      optionalKeys: { EIA_API_KEY: !!process.env.EIA_API_KEY, CCEE_PLATAFORMA_INTEGRACAO: ccePiConfigured(), PLD_INGEST_KEY: !!process.env.PLD_INGEST_KEY },
       pldLimits: PLD_LIMITS,
       region: process.env.VERCEL_REGION ?? null,
       commit: process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? null,

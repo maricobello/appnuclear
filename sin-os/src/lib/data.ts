@@ -1,6 +1,7 @@
 import "server-only";
 import { cached } from "./cache";
 import { overlayPanel, pldFromCmo } from "./market/brazil";
+import { mergeOfficialDays } from "./market/pld-official";
 import { fetchPldHourly } from "./sources/ccee";
 import { ccePiConfigured, fetchPldPI } from "./sources/ccee-pi";
 import { fetchEia } from "./sources/eia";
@@ -109,7 +110,18 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
     }
     // guarda o estimado no histórico; a CCEE sobrescreve quando voltar
     savePldDays(panelToDays(est, PLD_FROM_CMO)).catch(() => undefined);
-    return { ...cmo, id: "ccee_pld", data: est, fallback: `PLD estimado pelo CMO/DESSEM do ONS com o piso/teto da ANEEL (pode diferir do PLD oficial) — CCEE indisponível: ${(primary.error ?? "erro").split(" — ")[0]}`, error: primary.error };
+    const blocked = `CCEE indisponível: ${(primary.error ?? "erro").split(" — ")[0]}`;
+    // dias oficiais já gravados (coletor ou execuções anteriores) valem sobre a estimativa
+    const official = await recentOfficialDays();
+    if (official.length) {
+      const m = mergeOfficialDays(est, official);
+      const last = m.days[m.days.length - 1];
+      if (m.coversLatest) {
+        return { ...cmo, id: "ccee_pld", data: m.data, note: `PLD oficial da CCEE (Dados Abertos, via coletor) em ${m.days.length} dia(s) até ${last}; demais dias estimados pelo CMO/DESSEM (ONS)`, error: primary.error };
+      }
+      return { ...cmo, id: "ccee_pld", data: m.data, fallback: `PLD estimado pelo CMO/DESSEM do ONS com o piso/teto da ANEEL (pode diferir do PLD oficial) após ${last}; oficial da CCEE até ${last} — ${blocked}`, error: primary.error };
+    }
+    return { ...cmo, id: "ccee_pld", data: est, fallback: `PLD estimado pelo CMO/DESSEM do ONS com o piso/teto da ANEEL (pode diferir do PLD oficial) — ${blocked}`, error: primary.error };
   }
   if (pi?.ok && pi.data) {
     const lkgPi = await loadPldDays(daysBack).catch(() => []);
@@ -124,6 +136,13 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
   }
   if (mode === "live") return primary;
   return simulated("ccee_pld", sim.simPld(daysBack), `simulação — CCEE e ONS indisponíveis: ${primary.error}`, primary);
+}
+
+/** Dias oficiais (source "ccee") dos últimos 45 dias no Firestore, em cache de 15 min (poupa leituras). */
+export const OFFICIAL_CACHE_KEY = "pld:official";
+async function recentOfficialDays() {
+  const { value } = await cached(OFFICIAL_CACHE_KEY, 15 * 60_000, async () => (await loadPldDays(45).catch(() => [])).filter((d) => d.source === "ccee"));
+  return value;
 }
 
 const TTL = 60_000;

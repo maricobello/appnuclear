@@ -32,57 +32,70 @@ export async function fetchPldHourly(daysBack = 120): Promise<SourceResult<SubPa
     }
     if (!records.length) throw new Error("datastore_search retornou 0 registros");
 
-    const sample = records[0];
-    const kMes = pickKey(sample, /^mes_referencia$/i, /^mes/i);
-    const kSub = pickKey(sample, /^submercado$/i, /submerc/i);
-    const kDia = pickKey(sample, /^dia$/i);
-    const kHora = pickKey(sample, /^hora$/i, /^hr$/i);
-    const kVal = pickKey(sample, /^pld_hora$/i, /^pld_horario$/i, /^pld$/i, /valor/i);
-    const kData = pickKey(sample, /^data$/i, /^din_/i);
-    for (const [name, k] of Object.entries({ SUBMERCADO: kSub, HORA: kHora, PLD_HORA: kVal })) {
-      if (!k) quality.schemaIssues.push(`campo ausente: ${name}`);
-    }
-    if (!kData && !(kMes && kDia)) quality.schemaIssues.push("campos de data ausentes (MES_REFERENCIA/DIA ou DATA)");
-    if (quality.schemaIssues.length) throw new Error(`schema inesperado: ${quality.schemaIssues.join("; ")}`);
-
-    const map = new Map<number, Partial<Record<Sub, number>>>();
-    for (const rec of records) {
-      const sub = subOf(rec[kSub!]);
-      const hora = num(rec[kHora!]);
-      const val = num(rec[kVal!]);
-      let ts = NaN;
-      if (kMes && kDia) {
-        const mes = String(rec[kMes]).replace(/\D/g, "");
-        ts = brtToUtc(+mes.slice(0, 4), +mes.slice(4, 6), num(rec[kDia]), hora);
-      } else if (kData) {
-        const d = String(rec[kData]).slice(0, 10);
-        ts = brtToUtc(+d.slice(0, 4), +d.slice(5, 7), +d.slice(8, 10), hora);
-      }
-      if (!sub || !Number.isFinite(ts) || !Number.isFinite(val)) {
-        quality.invalid++;
-        continue;
-      }
-      const row = map.get(ts) ?? {};
-      if (row[sub] !== undefined) quality.duplicates++;
-      row[sub] = val;
-      map.set(ts, row);
-    }
-    const ts = [...map.keys()].sort((a, b) => a - b);
-    const cutoff = ts[ts.length - 1] - daysBack * 86400_000;
-    const keep = ts.filter((t) => t > cutoff);
-    const panel: SubPanel = {
-      ts: keep,
-      values: Object.fromEntries(SUBS.map((s) => [s, keep.map((t) => map.get(t)?.[s] ?? null)])) as SubPanel["values"],
-      unit: "R$/MWh",
-    };
-    quality.points = keep.length * 4;
-    quality.expectedPoints = (Math.round((keep[keep.length - 1] - keep[0]) / 3600_000) + 1) * 4;
-    quality.latestTs = keep[keep.length - 1];
-    quality.values = SUBS.flatMap((s) => panel.values[s].slice(-168)).filter((v): v is number => v !== null);
-    quality.range = [PLD_LIMITS.min - 0.5, PLD_LIMITS.maxHourly + 0.5];
+    const { panel, quality: q } = parsePldRecords(records, daysBack);
+    Object.assign(quality, q);
     return { id: "ccee_pld", ok: true, data: panel, probes, quality, simulated: false, fetchedAt: Date.now() };
   } catch (e) {
     probes.push(...probesOf(e));
     return { id: "ccee_pld", ok: false, data: null, error: errMsg(e), probes, quality, simulated: false, fetchedAt: Date.now() };
   }
+}
+
+/**
+ * Registros do conjunto PLD_HORARIO (CKAN, datastore_search ou CSV já convertido em objetos)
+ * → painel horário. Aceita MES_REFERENCIA+DIA ou DATA; lança erro se o schema não bater.
+ * Usado pela busca direta e pela rota que recebe o coletor (/api/pld/coletor).
+ */
+export function parsePldRecords(records: Record<string, unknown>[], daysBack = 120): { panel: SubPanel; quality: ReturnType<typeof emptyQuality> } {
+  const quality = emptyQuality();
+  if (!records.length) throw new Error("nenhum registro");
+  const sample = records[0];
+  const kMes = pickKey(sample, /^mes_referencia$/i, /^mes/i);
+  const kSub = pickKey(sample, /^submercado$/i, /submerc/i);
+  const kDia = pickKey(sample, /^dia$/i);
+  const kHora = pickKey(sample, /^hora$/i, /^hr$/i);
+  const kVal = pickKey(sample, /^pld_hora$/i, /^pld_horario$/i, /^pld$/i, /valor/i);
+  const kData = pickKey(sample, /^data$/i, /^din_/i);
+  for (const [name, k] of Object.entries({ SUBMERCADO: kSub, HORA: kHora, PLD_HORA: kVal })) {
+    if (!k) quality.schemaIssues.push(`campo ausente: ${name}`);
+  }
+  if (!kData && !(kMes && kDia)) quality.schemaIssues.push("campos de data ausentes (MES_REFERENCIA/DIA ou DATA)");
+  if (quality.schemaIssues.length) throw new Error(`schema inesperado: ${quality.schemaIssues.join("; ")}`);
+
+  const map = new Map<number, Partial<Record<Sub, number>>>();
+  for (const rec of records) {
+    const sub = subOf(rec[kSub!]);
+    const hora = num(rec[kHora!]);
+    const val = num(rec[kVal!]);
+    let ts = NaN;
+    if (kMes && kDia) {
+      const mes = String(rec[kMes]).replace(/\D/g, "");
+      ts = brtToUtc(+mes.slice(0, 4), +mes.slice(4, 6), num(rec[kDia]), hora);
+    } else if (kData) {
+      const d = String(rec[kData]).slice(0, 10);
+      ts = brtToUtc(+d.slice(0, 4), +d.slice(5, 7), +d.slice(8, 10), hora);
+    }
+    if (!sub || !Number.isFinite(ts) || !Number.isFinite(val)) {
+      quality.invalid++;
+      continue;
+    }
+    const row = map.get(ts) ?? {};
+    if (row[sub] !== undefined) quality.duplicates++;
+    row[sub] = val;
+    map.set(ts, row);
+  }
+  const ts = [...map.keys()].sort((a, b) => a - b);
+  const cutoff = ts[ts.length - 1] - daysBack * 86400_000;
+  const keep = ts.filter((t) => t > cutoff);
+  const panel: SubPanel = {
+    ts: keep,
+    values: Object.fromEntries(SUBS.map((s) => [s, keep.map((t) => map.get(t)?.[s] ?? null)])) as SubPanel["values"],
+    unit: "R$/MWh",
+  };
+  quality.points = keep.length * 4;
+  quality.expectedPoints = (Math.round((keep[keep.length - 1] - keep[0]) / 3600_000) + 1) * 4;
+  quality.latestTs = keep[keep.length - 1];
+  quality.values = SUBS.flatMap((s) => panel.values[s].slice(-168)).filter((v): v is number => v !== null);
+  quality.range = [PLD_LIMITS.min - 0.5, PLD_LIMITS.maxHourly + 0.5];
+  return { panel, quality };
 }
