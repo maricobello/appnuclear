@@ -161,3 +161,30 @@ export async function claimSlot(key: string, minIntervalMs: number, now = Date.n
     local,
   );
 }
+
+const quotas = new Map<string, number>();
+/**
+ * Cota diária global (entre instâncias, via transação no Firestore; sem Firestore, por
+ * instância): consome 1 unidade de `key` no dia UTC e recusa quando `limit` já foi usado.
+ * Teto de custo para APIs pagas (assistente de IA) num site público.
+ */
+export async function takeDailyQuota(key: string, limit: number, now = Date.now()): Promise<{ ok: boolean; used: number }> {
+  const id = `${key}_${new Date(now).toISOString().slice(0, 10)}`;
+  const local = () => {
+    const used = quotas.get(id) ?? 0;
+    if (used >= limit) return { ok: false, used };
+    quotas.set(id, used + 1);
+    return { ok: true, used: used + 1 };
+  };
+  return withDb(
+    (db) =>
+      db.runTransaction(async (tx) => {
+        const ref = db.collection("meta").doc(`quota_${id}`);
+        const used = Number((await tx.get(ref)).data()?.n ?? 0);
+        if (used >= limit) return { ok: false, used };
+        tx.set(ref, { n: used + 1, at: now });
+        return { ok: true, used: used + 1 };
+      }),
+    local,
+  );
+}

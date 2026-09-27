@@ -22,6 +22,7 @@ import type { BrasilResp } from "@/lib/apiTypes";
 import { useAsset } from "@/lib/asset";
 import { SUB_COLOR } from "@/lib/chart";
 import { useApi } from "@/lib/useApi";
+import { IaraButton, IaraPanel } from "./assistant/Iara";
 import { MotionRoot } from "./motion";
 import { Delta, sourceState, StatusTag } from "./ui";
 
@@ -233,6 +234,7 @@ function SidebarFooter() {
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
   const [open, setOpen] = useState(false);
+  const [iara, setIara] = useState(false);
   const current = ALL.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
 
   return (
@@ -292,11 +294,13 @@ export function Shell({ children }: { children: ReactNode }) {
               </span>
               <ApiPill />
               <AssetChip />
+              <IaraButton open={iara} onToggle={() => setIara((v) => !v)} />
             </div>
           </header>
           <main className="mx-auto w-full max-w-[1920px] min-w-0 flex-1 p-3 sm:p-4">{children}</main>
         </div>
       </div>
+      <IaraPanel open={iara} onClose={() => setIara(false)} onToggle={() => setIara((v) => !v)} />
     </MotionRoot>
   );
 }

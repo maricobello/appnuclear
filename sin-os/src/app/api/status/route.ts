@@ -1,4 +1,6 @@
 import { AGENT_MODEL } from "@/lib/audit/agent";
+import { groqConfigured } from "@/lib/assistant/groq";
+import { accessCodeRequired } from "@/lib/assistant/guard";
 import { dataMode } from "@/lib/data";
 import { firebaseStatus } from "@/lib/firebase";
 import { PLD_LIMITS } from "@/lib/market/brazil";
@@ -16,6 +18,7 @@ export function GET() {
       storage: storageKind(),
       firebase: firebaseStatus(),
       agent: { configured: !!process.env.ANTHROPIC_API_KEY, model: AGENT_MODEL },
+      assistant: { provider: "groq", configured: groqConfigured(), accessCodeRequired: accessCodeRequired() },
       optionalKeys: { EIA_API_KEY: !!process.env.EIA_API_KEY, CCEE_PLATAFORMA_INTEGRACAO: ccePiConfigured() },
       pldLimits: PLD_LIMITS,
       region: process.env.VERCEL_REGION ?? null,

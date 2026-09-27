@@ -16,22 +16,40 @@ export const CARBON = "https://api.carbonintensity.org.uk";
 interface MidRow { startTime: string; dataProvider?: string; price: number; volume?: number }
 interface SysRow { startTime: string; settlementPeriod: number; systemSellPrice: number; systemBuyPrice: number; netImbalanceVolume?: number }
 
+/** A BMRS limita o intervalo from/to (acima de 7 dias responde 400): divide em janelas. */
+export const MID_MAX_WINDOW_DAYS = 6;
+
+export function midWindows(fromMs: number, toMs: number, maxDays = MID_MAX_WINDOW_DAYS): [string, string][] {
+  const iso = (t: number) => new Date(t).toISOString().slice(0, 16) + "Z";
+  const out: [string, string][] = [];
+  for (let a = fromMs; a < toMs; a += maxDays * 86400_000) out.push([iso(a), iso(Math.min(toMs, a + maxDays * 86400_000))]);
+  return out;
+}
+
 export async function fetchUkMid(daysBack = 7): Promise<SourceResult<TimeSeries>> {
   const quality = emptyQuality();
+  const probes: Probe[] = [];
   try {
-    const from = new Date(Date.now() - daysBack * 86400_000).toISOString().slice(0, 16) + "Z";
-    const to = new Date(Date.now() + 86400_000).toISOString().slice(0, 16) + "Z";
-    const { value } = await cached(`elexon:mid:${from.slice(0, 13)}`, 2 * 60_000, () =>
-      fetchJson<{ data: MidRow[] }>(`${ELEXON}/balancing/pricing/market-index?from=${from}&to=${to}&dataProviders=APXMIDP&format=json`),
-    );
-    const rows = value.json?.data;
-    if (!Array.isArray(rows)) throw new Error("campo data ausente");
+    const H = 3600_000;
+    const now = Date.now();
+    const fromMs = Math.floor((now - daysBack * 86400_000) / H) * H;
+    const toMs = Math.ceil((now + 86400_000) / H) * H;
+    const rows: MidRow[] = [];
+    for (const [from, to] of midWindows(fromMs, toMs)) {
+      const { value } = await cached(`elexon:mid:${from}:${to}`, 2 * 60_000, () =>
+        fetchJson<{ data: MidRow[] }>(`${ELEXON}/balancing/pricing/market-index?from=${from}&to=${to}&dataProviders=APXMIDP&format=json`),
+      );
+      probes.push(...value.probes);
+      if (!Array.isArray(value.json?.data)) throw new Error("campo data ausente");
+      rows.push(...value.json.data);
+    }
     const map = new Map<number, number>();
     for (const r of rows) {
       const t = Date.parse(r.startTime);
       if (!Number.isFinite(t) || !Number.isFinite(r.price)) { quality.invalid++; continue; }
       if (r.volume === 0 && r.price === 0) continue; // período sem negociação
-      if (map.has(t)) quality.duplicates++;
+      // janelas contíguas repetem o período da fronteira: só conta duplicata conflitante
+      if (map.has(t) && map.get(t) !== r.price) quality.duplicates++;
       map.set(t, r.price);
     }
     const ts = [...map.keys()].sort((a, b) => a - b);
@@ -40,9 +58,10 @@ export async function fetchUkMid(daysBack = 7): Promise<SourceResult<TimeSeries>
     quality.latestTs = ts[ts.length - 1] ?? null;
     quality.values = values.slice(-96);
     quality.range = [-1000, 6000];
-    return { id: "elexon_mid", ok: ts.length > 0, data: { ts, values, unit: "GBP/MWh" }, probes: value.probes, quality, simulated: false, fetchedAt: Date.now(), error: ts.length ? undefined : "sem períodos com preço" };
+    return { id: "elexon_mid", ok: ts.length > 0, data: { ts, values, unit: "GBP/MWh" }, probes, quality, simulated: false, fetchedAt: Date.now(), error: ts.length ? undefined : "sem períodos com preço" };
   } catch (e) {
-    return { id: "elexon_mid", ok: false, data: null, error: errMsg(e), probes: probesOf(e), quality, simulated: false, fetchedAt: Date.now() };
+    probes.push(...probesOf(e));
+    return { id: "elexon_mid", ok: false, data: null, error: errMsg(e), probes, quality, simulated: false, fetchedAt: Date.now() };
   }
 }
 

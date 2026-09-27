@@ -41,9 +41,41 @@ jobs:
           if path.startswith("/api/bess"):
               f = d.get("finance") or {}
               print("   receita/ano:", f.get("revenueYear1"), "TIR:", f.get("irr"), "payback:", f.get("paybackYears"), "LCOS equilíbrio:", f.get("breakevenLcos"))
+          # nenhum dado simulado em produção: aponta qualquer "simulated": true na resposta
+          def walk(o, where=""):
+              if isinstance(o, dict):
+                  if o.get("simulated") is True:
+                      yield where or "(raiz)", o.get("fallback") or o.get("id") or ""
+                  for k, v in o.items():
+                      yield from walk(v, f"{where}.{k}" if where else k)
+              elif isinstance(o, list):
+                  for i, v in enumerate(o[:50]):
+                      yield from walk(v, f"{where}[{i}]")
+          sims = list(walk(d))
+          for w, why in sims:
+              print("   SIMULADO:", w, "—", str(why)[:400])
+          if sims:
+              open("simulated.flag", "a").write(path + "\n")
           if path == "/api/status":
               print("  ", json.dumps(d)[:400])
           PY
             if [ "$code" -ge 400 ]; then fail=1; fi
           done
+          if [ -f simulated.flag ]; then echo "::error::dado simulado em produção: $(tr '\n' ' ' < simulated.flag)"; fail=1; fi
           exit $fail
+      - name: Iara (Groq online?)
+        if: always()
+        run: |
+          curl -s --max-time 30 "$URL/api/assistente" > iara.json || true
+          python3 - <<'PY'
+          import json
+          try:
+              d = json.load(open("iara.json"))
+          except Exception as e:
+              print("::warning::/api/assistente não respondeu JSON:", e); raise SystemExit(0)
+          print("configurada:", d.get("configured"), "| online:", d.get("online"), "| modelo:", d.get("model"), "| transcrição:", d.get("sttModel"), "| latência ms:", d.get("latencyMs"), "| código de acesso:", d.get("accessCodeRequired"))
+          if not d.get("configured"):
+              print("::notice::Iara desligada no servidor: cadastre GROQ_API_KEY (Sensitive) na Vercel")
+          elif not d.get("online"):
+              print("::warning::Groq fora do ar ou chave recusada:", d.get("error"))
+          PY

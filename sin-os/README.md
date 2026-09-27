@@ -1,5 +1,3 @@
-> **Espelho** do repositório principal [maricobello/sinos](https://github.com/maricobello/sinos) — é de lá que a Vercel publica https://sinos-iota.vercel.app. Os workflows em `sin-os/.github/` só rodam no repositório principal.
-
 # SIN OS — terminal de arbitragem e previsão do setor elétrico
 
 Terminal web (Next.js 16, pronto para a Vercel) que junta **APIs públicas do setor de energia**, **modelos
@@ -22,6 +20,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), alertas push + relatório do Claude com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
+| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
 mostra a idade do dado. As fontes brasileiras são publicadas em D−1/D+1 (PLD de amanhã sai à tarde); as
@@ -195,6 +194,27 @@ oficial `listarPLD` (PLDBSv1) da [Plataforma de Integração](https://github.com
 gera uma notificação com média, mínimo, máximo e hora do pico por submercado. `PLD_ALERT_ABOVE=500`
 marca submercados com máximo acima do valor; `PLD_ALERTS=off` desliga.
 
+## Iara — assistente de voz (Groq)
+
+Botão **Iara** no cabeçalho (ou ⌘J / Ctrl+J). Fica **desligada** até o usuário ativar, e o microfone só abre
+num toque. Fluxo: fala → gravação com detecção de fim de frase (VAD por energia) → transcrição Whisper
+(`whisper-large-v3-turbo`) → agente com *tool calling* (`openai/gpt-oss-120b`, com fallback para outros
+modelos se a Groq descontinuar o configurado) → resposta falada com a voz pt-BR do sistema. Também aceita
+texto. "Conversa contínua" volta a ouvir depois de responder.
+
+- **Só dado real:** a Iara não tem números próprios. Cada número vem de uma ferramenta que chama as mesmas
+  funções das telas (`pld_agora`, `previsao_pld`, `estudo_bess`, `oportunidades`, `reservatorios`,
+  `saude_dados`); dado simulado é recusado pela ferramenta. Ações: `navegar` (abre telas) e
+  `configurar_ativo` (muda o ativo BESS e abre a tela BESS).
+- **Chave:** `GROQ_API_KEY` só no servidor — crie em console.groq.com e cadastre na Vercel como
+  **Sensitive**. Nunca no código nem no chat. `GET /api/assistente` confirma se a Groq está online
+  (sonda de 5 min) e qual modelo responde; `/api/status` mostra se está configurada.
+- **Proteção de custo (site público):** `ASSISTANT_ACCESS_CODE` exige um código (digitado uma vez nos
+  ajustes da Iara); limite por IP; cota diária global no Firestore (`ASSISTANT_DAILY_LIMIT`, padrão 400
+  perguntas; `ASSISTANT_STT_DAILY_LIMIT`, padrão 250 transcrições).
+- **Privacidade:** o áudio vai direto para a transcrição e não é guardado; a conversa fica só na aba
+  (sessionStorage).
+
 ## Agente auditor
 
 1. **Camada determinística** (sempre ativa): para cada API mede disponibilidade, latência, frescor vs SLA,
@@ -224,7 +244,8 @@ marca submercados com máximo acima do valor; `PLD_ALERTS=off` desliga.
 2. Framework: Next.js (detectado). Root Directory, build e output ficam no padrão.
 3. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
    `CRON_SECRET`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`,
-   `ALERT_WEBHOOK_URL`.
+   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara), `ASSISTANT_ACCESS_CODE`. `DATA_MODE=live` garante que
+   nenhuma tela mostra dado simulado (fonte fora do ar aparece como erro).
    Dá para adicionar depois e fazer redeploy.
 4. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.
 5. Abra **Agente auditor → Rodar auditoria** para a primeira execução.

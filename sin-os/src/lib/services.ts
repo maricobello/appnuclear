@@ -1,6 +1,7 @@
 import "server-only";
 import { cached } from "./cache";
-import { getBrazilBundle } from "./data";
+import { getBrazilBundle, getPld } from "./data";
+import { bessStudy, type BessParams } from "./market/bess-study";
 import { buildForecast, type ForecastInternal } from "./market/forecast";
 import type { Sub } from "./sources/types";
 
@@ -14,6 +15,15 @@ export async function getForecast(sub: Sub, horizonDays = 7): Promise<{ fc: Fore
     buildForecast(pld, sub, horizonDays, 1000),
   );
   return { fc: value, simulated: br.pld.simulated, fallback: br.pld.fallback ?? null };
+}
+
+/** Estudo BESS no PLD real, cacheado por (último PLD, parâmetros). */
+export async function getBessStudy(params: BessParams) {
+  const pld = await getPld(params.days + 30);
+  if (!pld.data) throw new Error(pld.error ?? "PLD indisponível");
+  const last = pld.data.ts[pld.data.ts.length - 1];
+  const { value } = await cached(`bess:${last}:${JSON.stringify(params)}`, 15 * 60_000, () => bessStudy(pld.data!, params));
+  return { study: value, pld };
 }
 
 export const SUB_PARAM = (v: string | null): Sub => (v === "S" || v === "NE" || v === "N" ? v : "SE");
