@@ -235,6 +235,12 @@ texto. "Conversa contínua" volta a ouvir depois de responder.
    (`POST /api/auditoria/alert-test`, 1/h sem credencial) valida o destino.
 5. **Self-eval**: `/api/auditoria/selfeval` injeta 10 falhas conhecidas e mede precisão/recall da camada determinística.
 
+**PLD atual em JSON** (`GET /api/pld`): por submercado, o valor da hora atual (ou o último
+publicado), estatísticas de hoje, de amanhã (quando publicado) e do último dia completo; `?sub=SE`
+(aceita SE, SUDESTE, CO, S, SUL, NE, NORDESTE, N, NORTE) e `?dias=7` (médias diárias, até 90). Usa a
+mesma cadeia do app (CCEE Dados Abertos com identificação honesta → PLD *estimado* pelo CMO/DESSEM do ONS com o
+piso/teto da ANEEL, que pode diferir do oficial → último dado bom) e informa a fonte em `fonte`; dado simulado nunca sai (503).
+
 **Exportação CSV** (`?format=csv`): `/api/previsao?sub=SE` (curva horária, banda e quantis),
 `/api/arbitragem?sub=SE` (despacho ótimo de 72 h) e `/api/pld-mensal` (PLD médio mês × submercado).
 
@@ -309,7 +315,7 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente Claude
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status
+src/app/api/        rotas: pld, brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status, assistente (+voz)
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```

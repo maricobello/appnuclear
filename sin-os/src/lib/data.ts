@@ -109,7 +109,7 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
     }
     // guarda o estimado no histórico; a CCEE sobrescreve quando voltar
     savePldDays(panelToDays(est, PLD_FROM_CMO)).catch(() => undefined);
-    return { ...cmo, id: "ccee_pld", data: est, fallback: `PLD calculado pela regra da ANEEL a partir do CMO/DESSEM (ONS) — CCEE indisponível: ${(primary.error ?? "erro").split(" — ")[0]}`, error: primary.error };
+    return { ...cmo, id: "ccee_pld", data: est, fallback: `PLD estimado pelo CMO/DESSEM do ONS com o piso/teto da ANEEL (pode diferir do PLD oficial) — CCEE indisponível: ${(primary.error ?? "erro").split(" — ")[0]}`, error: primary.error };
   }
   if (pi?.ok && pi.data) {
     const lkgPi = await loadPldDays(daysBack).catch(() => []);

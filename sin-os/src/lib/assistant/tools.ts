@@ -2,6 +2,7 @@ import type { AuditRun } from "../audit/types";
 import { BESS_QUERY, toBessParams } from "../market/bess-params";
 import type { BessParams, BessStudy } from "../market/bess-study";
 import { latestBySub, PLD_LIMITS } from "../market/brazil";
+import { dayRow, dayStats } from "../market/pld-summary";
 import type { ForecastResult } from "../market/forecast";
 import { buildOpportunities, pickDay } from "../market/opportunities";
 import { brtDate, brtHour } from "../sources/time";
@@ -76,7 +77,6 @@ export const SIM_REFUSAL = "dado simulado — a Iara não usa dado simulado; inf
 
 const r2 = (v: number | null | undefined) => (v === null || v === undefined || !Number.isFinite(v) ? null : Math.round(v * 100) / 100);
 const stamp = (ts: number) => `${brtDate(ts)} ${String(brtHour(ts)).padStart(2, "0")}:00`;
-const mean = (a: number[]) => (a.length ? a.reduce((s, v) => s + v, 0) / a.length : null);
 
 /** Estado do dado em linguagem de mesa: oficial, calculado pelo CMO, persistido etc. */
 export function sourceLabel(r: Pick<SourceResult<unknown>, "ok" | "simulated" | "fallback" | "note" | "error">): string {
@@ -85,28 +85,6 @@ export function sourceLabel(r: Pick<SourceResult<unknown>, "ok" | "simulated" | 
   if (r.note) return r.note;
   if (r.fallback) return r.fallback.slice(0, 200);
   return "ao vivo";
-}
-
-function dayRow(panel: SubPanel, date: string): Record<Sub, (number | null)[]> {
-  const row = Object.fromEntries(SUBS.map((s) => [s, new Array<number | null>(24).fill(null)])) as Record<Sub, (number | null)[]>;
-  panel.ts.forEach((t, i) => {
-    if (brtDate(t) !== date) return;
-    for (const s of SUBS) row[s][brtHour(t)] = panel.values[s][i];
-  });
-  return row;
-}
-
-export function dayStats(hours: (number | null)[]) {
-  const pts = hours.map((v, h) => [h, v] as const).filter((x): x is readonly [number, number] => x[1] !== null && Number.isFinite(x[1]));
-  if (!pts.length) return null;
-  const lo = pts.reduce((a, b) => (b[1] < a[1] ? b : a));
-  const hi = pts.reduce((a, b) => (b[1] > a[1] ? b : a));
-  return {
-    horas: pts.length,
-    media: r2(mean(pts.map((p) => p[1]))),
-    min: { valor: r2(lo[1]), hora: `${String(lo[0]).padStart(2, "0")}h` },
-    max: { valor: r2(hi[1]), hora: `${String(hi[0]).padStart(2, "0")}h` },
-  };
 }
 
 const SUB_ENUM = { type: "string", enum: [...SUBS], description: "Submercado: SE (Sudeste/Centro-Oeste), S (Sul), NE (Nordeste), N (Norte)" };
