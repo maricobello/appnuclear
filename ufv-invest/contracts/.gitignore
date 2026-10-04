@@ -1,0 +1,18 @@
+node_modules/
+artifacts/
+cache/
+typechain-types/
+coverage/
+coverage.json
+gas-report.txt
+dist/
+.env
+.env.*
+!.env.example
+# deploys locais (hardhat/localhost) nunca vão para o git; testnet/mainnet sim
+deployments/31337.json
+deployments/*.local.json
+# saída do slither / ferramentas locais
+slither-report.*
+crytic-export/
+.venv/

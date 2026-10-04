@@ -1,0 +1,45 @@
+name: UFV Invest
+
+on:
+  push:
+    branches: [main]
+    paths: ["ufv-invest/**", ".github/workflows/ufv-invest.yml"]
+  pull_request:
+    paths: ["ufv-invest/**", ".github/workflows/ufv-invest.yml"]
+
+permissions:
+  contents: read
+
+jobs:
+  web:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ufv-invest/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ufv-invest/web/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+
+  contracts:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ufv-invest/contracts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: ufv-invest/contracts/package-lock.json
+      - run: npm ci
+      - run: npm test

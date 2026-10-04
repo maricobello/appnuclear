@@ -1,0 +1,110 @@
+@import "tailwindcss";
+
+/*
+ * UFV Invest — sistema de design.
+ * Escuro por padrão (plataforma de investimento on-chain), contraste alto, números tabulares.
+ * Marca: âmbar solar (ação/destaque) sobre azul-noite; verde reservado a estados "bom".
+ * Paleta de gráficos validada (skill de dataviz) contra a superfície #0c1219:
+ *   série principal (geração/usina) #c98500 · série secundária (P90/benchmarks) #3987e5 ·
+ *   negativo #e66767. Âmbar claro #f5a524 é cor de interface (botões), não de marca de dado.
+ */
+:root {
+  color-scheme: dark;
+  --page: #070b10;
+  --surface: #0c1219;
+  --surface-2: #111a24;
+  --surface-3: #18232f;
+  --border: rgba(148, 163, 184, 0.12);
+  --border-strong: rgba(148, 163, 184, 0.22);
+  --ink: #eef2f6;
+  --ink-2: #b9c3cf;
+  --muted: #8592a3;
+  --brand: #f5a524;
+  --brand-ink: #1a1203;
+  --brand-soft: rgba(245, 165, 36, 0.12);
+  --series-1: #c98500;
+  --series-2: #3987e5;
+  --series-neg: #e66767;
+  --grid: #1a2430;
+  --axis: #2a3644;
+  --good: #22c55e;
+  --warning: #fab219;
+  --serious: #ec835a;
+  --critical: #ef5350;
+  --radius: 10px;
+}
+
+@theme inline {
+  --color-page: var(--page);
+  --color-surface: var(--surface);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-line: var(--border);
+  --color-line-strong: var(--border-strong);
+  --color-ink: var(--ink);
+  --color-ink-2: var(--ink-2);
+  --color-muted: var(--muted);
+  --color-brand: var(--brand);
+  --color-brand-ink: var(--brand-ink);
+  --color-brand-soft: var(--brand-soft);
+  --color-series-1: var(--series-1);
+  --color-series-2: var(--series-2);
+  --color-good: var(--good);
+  --color-warning: var(--warning);
+  --color-serious: var(--serious);
+  --color-critical: var(--critical);
+  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, Menlo, monospace;
+}
+
+html,
+body {
+  background: var(--page);
+  color: var(--ink);
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 15px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+::selection {
+  background: rgba(245, 165, 36, 0.35);
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.tnum {
+  font-variant-numeric: tabular-nums;
+}
+
+/* brilho do herói: radial âmbar discreto, sem imagem externa */
+.hero-glow {
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(245, 165, 36, 0.16), transparent 60%),
+    radial-gradient(40rem 24rem at -10% 20%, rgba(57, 135, 229, 0.12), transparent 60%);
+}
+
+.grid-texture {
+  background-image:
+    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
+  background-size: 44px 44px;
+  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

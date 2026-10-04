@@ -1,0 +1,25 @@
+{
+  "@odata.context": "https://was-p.bcnet.bcb.gov.br/olinda/servico/Expectativas/versao/v1/odata$metadata#ExpectativasMercadoAnuais(Indicador,Data,DataReferencia,Mediana)",
+  "value": [
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2026", "Mediana": 4.71 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2026", "Mediana": 4.69 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2027", "Mediana": 4.1 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2027", "Mediana": 4.1 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2028", "Mediana": 3.8 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2028", "Mediana": 3.8 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2029", "Mediana": 3.6 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2029", "Mediana": 3.6 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2030", "Mediana": 3.5 },
+    { "Indicador": "IPCA", "Data": "2026-10-02", "DataReferencia": "2030", "Mediana": 3.54 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2026", "Mediana": 4.75 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2026", "Mediana": 4.73 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2027", "Mediana": 4.12 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2027", "Mediana": 4.12 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2028", "Mediana": 3.8 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2028", "Mediana": 3.8 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2029", "Mediana": 3.6 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2029", "Mediana": 3.6 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2030", "Mediana": 3.5 },
+    { "Indicador": "IPCA", "Data": "2026-09-26", "DataReferencia": "2030", "Mediana": 3.5 }
+  ]
+}

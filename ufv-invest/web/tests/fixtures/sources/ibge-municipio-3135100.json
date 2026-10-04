@@ -1,0 +1,22 @@
+{
+  "id": 3135100,
+  "nome": "Janaúba",
+  "microrregiao": {
+    "id": 31003,
+    "nome": "Janaúba",
+    "mesorregiao": {
+      "id": 3101,
+      "nome": "Norte de Minas",
+      "UF": { "id": 31, "sigla": "MG", "nome": "Minas Gerais", "regiao": { "id": 3, "sigla": "SE", "nome": "Sudeste" } }
+    }
+  },
+  "regiao-imediata": {
+    "id": 310007,
+    "nome": "Janaúba",
+    "regiao-intermediaria": {
+      "id": 3102,
+      "nome": "Montes Claros",
+      "UF": { "id": 31, "sigla": "MG", "nome": "Minas Gerais", "regiao": { "id": 3, "sigla": "SE", "nome": "Sudeste" } }
+    }
+  }
+}
