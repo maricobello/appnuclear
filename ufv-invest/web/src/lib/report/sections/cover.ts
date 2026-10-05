@@ -120,7 +120,7 @@ export function renderIntegrityBox(ctx: ReportContext): void {
   const lh = size * 1.35;
 
   const explain = `O JSON anexado a este PDF (${ctx.attachmentName}) reproduz o hash SHA-256 acima; a página /verificar do site confere o PDF contra o registro on-chain.`;
-  const explainLines = l.wrap(explain, "regular", size, leftW - pad - 4);
+  const explainLines = l.wrapRuns([{ text: explain }], size, leftW - pad - 4);
 
   // estado on-chain
   const oc = ctx.onChain;
@@ -141,7 +141,7 @@ export function renderIntegrityBox(ctx: ReportContext): void {
       ? `Confira o registro de documentos do contrato do token na ${chainLabel(chainId)} pelo explorador BscScan.`
       : "Contrato do token ainda não implantado; o hash será ancorado no registro de documentos do contrato após o deploy.";
   }
-  const statusLines = l.wrap(status, "regular", size, rightW);
+  const statusLines = l.wrapRuns([{ text: status }], size, rightW);
   const verifyUrl = `${ctx.siteUrl}/verificar`;
   const addrLine = tokenAddr ? `Contrato: ${truncateMiddle(tokenAddr, 26)}` : null;
 

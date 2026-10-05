@@ -10,8 +10,8 @@ export function renderEconomics(ctx: ReportContext): void {
   const f = a.finance;
   const p = a.plant;
   l.sectionTitle(5, "Análise econômica", {
-    minSpace: 300,
-    lead: "Fluxo de caixa da SPE no cenário P50, em reais nominais, do ponto de vista do cotista (captação no ano 0, distribuição da receita líquida nos anos seguintes).",
+    minSpace: 210,
+    lead: "Fluxo de caixa nominal da SPE no cenário P50, do ponto de vista do cotista: captação no ano 0 e receita líquida distribuída depois.",
   });
 
   // ── premissas (duas colunas de pares) ──
@@ -50,7 +50,7 @@ export function renderEconomics(ctx: ReportContext): void {
   l.tiles(
     [
       { label: "TIR nominal", value: `${fmtPct(f.irrNominalPct)} a.a.`, sub: `CDI líquido: ${fmtPct(cdiNet)} a.a.`, valueColor: f.irrNominalPct >= cdiNet ? C.green : C.redStrong },
-      { label: "TIR real", value: `${fmtPct(f.irrRealPct)} a.a.`, sub: `IPCA LP ${fmtPct(a.market.ipcaLongTermPct)} · NTN-B ${fmtPct(a.market.realRatePct)}` },
+      { label: "TIR real", value: `${fmtPct(f.irrRealPct)} a.a.`, sub: `Deflator: IPCA ${fmtPct(a.market.ipcaLongTermPct)} a.a.` },
       { label: `VPL @ ${fmtPct(f.discountRatePct)}`, value: fmtBRLCompact(f.npvBRL), sub: "Valor presente líquido", valueColor: f.npvBRL >= 0 ? C.navy : C.redStrong },
       { label: "Payback simples", value: fmtYears(f.paybackYears), sub: "Fluxo acumulado nominal" },
       { label: "Payback descontado", value: fmtYears(f.discountedPaybackYears), sub: `Taxa ${fmtPct(f.discountRatePct)} a.a.` },
@@ -66,9 +66,9 @@ export function renderEconomics(ctx: ReportContext): void {
   // ── gráfico de fluxo de caixa ──
   const cfs = [...(f.cashFlows ?? [])].sort((x, y) => x.year - y.year);
   if (cfs.length > 1) {
-    l.subTitle("Fluxo de caixa anual e acumulado", { minSpace: 200, right: "R$ milhões (nominal)" });
-    l.ensure(175);
-    barChart(l, { x: l.x0, y: l.y, w: l.width, h: 170 }, {
+    l.subTitle("Fluxo de caixa anual e acumulado", { minSpace: 180, right: "R$ milhões (nominal)" });
+    l.ensure(152);
+    barChart(l, { x: l.x0, y: l.y, w: l.width, h: 148 }, {
       categories: cfs.map((c) => String(c.year)),
       series: [
         {
@@ -85,7 +85,7 @@ export function renderEconomics(ctx: ReportContext): void {
       barRatio: 0.66,
       maxTicks: 7,
     });
-    l.y += 174;
+    l.y += 152;
     const inv = cfs.find((c) => c.year > 0 && c.capexBRL > 0);
     l.caption(
       `Ano 0: captação de ${fmtBRL(f.investmentBRL, 0)} (CAPEX ${fmtBRL(f.capexBRL, 0)} + estruturação). ` +

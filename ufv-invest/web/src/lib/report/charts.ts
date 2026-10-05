@@ -161,12 +161,8 @@ export function barChart(l: Layout, r: Rect, spec: BarChartSpec): void {
         }
       }
     });
-    if (i % every === 0 || i === n - 1) {
-      if (i === n - 1 && i % every !== 0 && (i % every) < every / 2) {
-        // evita rótulos colados no fim
-      } else {
-        l.text(spec.categories[i], px + i * slot, py + ph + 9, { size: AXIS_SIZE, color: C.muted, align: "center", width: slot });
-      }
+    if (i % every === 0) {
+      l.text(spec.categories[i], px + i * slot - slot, py + ph + 9, { size: AXIS_SIZE, color: C.muted, align: "center", width: slot * 3 });
     }
   }
 
@@ -272,7 +268,7 @@ export function tornado(
 ): void {
   const rows = spec.rows;
   if (rows.length === 0) return;
-  const labelW = 150;
+  const labelW = 168;
   const vals = rows.flatMap((x) => [x.low, x.high]).concat(spec.base).filter(Number.isFinite);
   const span = Math.max(...vals) - Math.min(...vals) || 1;
   const vMin = Math.min(...vals) - span * 0.22;

@@ -8,7 +8,7 @@
 
 import type { FinancialResult, GenerationResult, MarketRates, Plant } from "@/lib/types";
 import { cdiPathPct, computeBenchmarks, geometricMeanPct, longTermNominalPct } from "./benchmarks";
-import { baseInvestmentBRL, buildCashFlows, type ScenarioParams } from "./cashflow";
+import { buildCashFlows, type ScenarioParams } from "./cashflow";
 import { fmtBRL, fmtNum, fmtPct } from "./format";
 import { discountFlows, irr, npv, paybackYears, realRatePct } from "./metrics";
 import { MC_IPCA_SD_PP, runMonteCarlo } from "./montecarlo";

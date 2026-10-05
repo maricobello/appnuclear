@@ -15,6 +15,13 @@
     "deploy:testnet": "hardhat run scripts/deploy.ts --network bscTestnet",
     "deploy:mainnet": "hardhat run scripts/deploy.ts --network bsc",
     "verify": "hardhat run scripts/verify.ts",
+    "admin:kyc": "hardhat run scripts/admin/kyc.ts",
+    "admin:distribute": "hardhat run scripts/admin/distribute.ts",
+    "admin:document": "hardhat run scripts/admin/set-document.ts",
+    "admin:finalize": "hardhat run scripts/admin/finalize-settle.ts",
+    "admin:accept": "hardhat run scripts/admin/accept-admin.ts",
+    "admin:status": "hardhat run scripts/admin/status.ts",
+    "admin:mock-mint": "hardhat run scripts/admin/mock-mint.ts",
     "typecheck": "tsc --noEmit"
   },
   "engines": {

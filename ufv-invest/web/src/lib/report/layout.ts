@@ -43,6 +43,8 @@ export interface ParagraphOpts {
   align?: Align;
   /** não quebra página (o chamador garante o espaço) */
   noBreak?: boolean;
+  /** mantém o parágrafo inteiro na mesma página */
+  keepTogether?: boolean;
 }
 
 export type Cell =
@@ -56,6 +58,8 @@ export type Cell =
       chip?: { fg: RGB; bg: RGB };
       link?: string;
       size?: number;
+      /** uma única linha, truncada com reticências */
+      truncate?: boolean;
       /** desenho customizado dentro da célula (após o fundo, antes do texto) */
       draw?: (l: Layout, x: number, y: number, w: number, h: number) => void;
     };
@@ -122,7 +126,7 @@ const REPLACEMENTS: Record<string, string> = {
   "\u202f": NBSP,
   "\u2009": " ",
 };
-const ASCII_FALLBACK: Record<string, string> = { "Δ": "Delta ", "σ": "sigma" };
+const ASCII_FALLBACK: Record<string, string> = { "Δ": "Delta ", "σ": "dp", "η": "eta", "γ": "gama" };
 
 export class Layout {
   readonly pdf: PDFDocument;
@@ -506,6 +510,7 @@ export class Layout {
     const x = o.x ?? this.x0;
     const width = o.width ?? this.width;
     const lines = this.wrapRuns(runs, size, width, o.font ?? "regular");
+    if (o.keepTogether && !o.noBreak) this.ensure(lines.length * lh);
     for (const line of lines) {
       if (!o.noBreak) this.ensure(lh);
       this.drawLine(line, x, Layout.baseline(this.y, lh, size), size, o.color ?? C.text, o.align, width);
@@ -528,6 +533,7 @@ export class Layout {
     for (const item of items) {
       const runs = typeof item === "string" ? [{ text: item }] : item;
       const lines = this.wrapRuns(runs, size, width - indent, o.font ?? "regular");
+      if (!o.noBreak) this.ensure(lines.length * lh);
       lines.forEach((line, i) => {
         if (!o.noBreak) this.ensure(lh);
         const bl = Layout.baseline(this.y, lh, size);
@@ -584,7 +590,7 @@ export class Layout {
 
   /** Legenda / nota de rodapé de gráfico */
   caption(text: string, o: { x?: number; width?: number; after?: number } = {}): void {
-    this.paragraph(text, { size: SIZE.tiny, color: C.muted, x: o.x, width: o.width, after: o.after ?? 6, lineHeight: 1.35 });
+    this.paragraph(text, { size: SIZE.tiny, color: C.muted, x: o.x, width: o.width, after: o.after ?? 6, lineHeight: 1.35, keepTogether: true });
   }
 
   /** Chip arredondado; retorna a largura. `y` = topo. */
@@ -651,13 +657,13 @@ export class Layout {
       const wrapped = row.map((it) =>
         this.wrap(it.value || "—", it.mono ? "mono" : "semibold", it.mono ? valueSize - 1 : valueSize, colW - 12),
       );
-      const h = 8 + labelSize + 4 + Math.max(...wrapped.map((w) => w.length)) * vlh + 4;
+      const h = 6 + labelSize + 3 + Math.max(...wrapped.map((w) => w.length)) * vlh + 3;
       this.ensure(h);
       const top = this.y;
       row.forEach((it, j) => {
         const cx = x + j * colW;
-        this.text(it.label.toUpperCase(), cx, top + 6 + labelSize, { font: "semibold", size: labelSize, color: C.muted, width: colW - 8, truncate: true });
-        let vy = top + 6 + labelSize + 4;
+        this.text(it.label.toUpperCase(), cx, top + 5 + labelSize, { font: "semibold", size: labelSize, color: C.muted, width: colW - 8, truncate: true });
+        let vy = top + 5 + labelSize + 3;
         for (const ln of wrapped[j]) {
           this.text(ln, cx, Layout.baseline(vy, vlh, valueSize), {
             font: it.mono ? "mono" : "semibold",
@@ -666,7 +672,7 @@ export class Layout {
           });
           vy += vlh;
         }
-        if (it.link) this.link(cx, top + 6 + labelSize + 4, colW - 12, wrapped[j].length * vlh, it.link);
+        if (it.link) this.link(cx, top + 5 + labelSize + 3, colW - 12, wrapped[j].length * vlh, it.link);
       });
       this.y = top + h;
       this.line(x, this.y, x + width, this.y, { color: C.border, width: 0.5 });
@@ -710,6 +716,7 @@ export class Layout {
       if (header) return this.wrap(col.header, "semibold", g.size - 0.4, g.widths[i] - 2 * g.padX);
       const p = this.cellProps(cell, col);
       const isChip = typeof cell !== "string" && !!cell.chip;
+      if (typeof cell !== "string" && cell.truncate) return [this.fit(p.text, p.font, p.size ?? g.size, g.widths[i] - 2 * g.padX)];
       return this.wrap(p.text, p.font, p.size ?? g.size, g.widths[i] - 2 * g.padX - (isChip ? 8 : 0));
     });
     const n = Math.max(1, ...lines.map((l) => l.length));

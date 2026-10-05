@@ -29,8 +29,8 @@ export function renderTokenization(ctx: ReportContext): void {
   const tokenAddr = oc?.tokenAddress ?? t.tokenAddress;
   const offeringAddr = oc?.offeringAddress ?? t.offeringAddress;
   l.sectionTitle(7, "Tokenização e transparência on-chain", {
-    minSpace: 300,
-    lead: "Cada cota é um token indivisível emitido na BNB Smart Chain; a oferta, a emissão, a distribuição de receita e o registro de documentos ficam publicamente verificáveis.",
+    minSpace: 220,
+    lead: "Cada cota é um token indivisível na BNB Smart Chain; oferta, emissão, distribuição de receita e documentos são verificáveis publicamente.",
   });
 
   const fx = a.market.usdtBrl;
@@ -184,10 +184,9 @@ export function renderTokenization(ctx: ReportContext): void {
   l.y = top + boxH + 8;
   l.bullets(
     [
-      "Transferências e saques de receita exigem carteira com KYC válido no IdentityRegistry; a receita acumulada antes de uma transferência permanece com quem transferiu.",
-      `Se o soft cap de ${fmtNum(t.softCapCotas, 0)} cotas não for atingido até o fim da oferta, os investidores recuperam o USDT depositado em escrow.`,
-      "Papéis administrativos (emissão, distribuição, pausa, recuperação de carteira) devem ser exercidos por multisig; o contrato é imutável (sem proxy).",
-      "O hash SHA-256 deste relatório é publicado no registro de documentos do token, permitindo a qualquer pessoa conferir a autenticidade do PDF.",
+      "Transferências e saques de receita exigem carteira com KYC válido (IdentityRegistry); a receita acumulada antes de uma transferência fica com quem transferiu.",
+      `Soft cap de ${fmtNum(t.softCapCotas, 0)} cotas não atingido até o fim da oferta: o USDT em escrow é devolvido aos investidores.`,
+      "Papéis administrativos exercidos por multisig; contrato imutável (sem proxy); hash deste relatório publicado no registro de documentos do token.",
     ],
     { size: 7.8, gap: 1.2, after: 4 },
   );

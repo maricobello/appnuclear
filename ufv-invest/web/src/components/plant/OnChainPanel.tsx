@@ -20,30 +20,27 @@ export function docName(name: Hex): string {
 export function OnChainPanel({ slug, dataHash }: { slug: string; dataHash: string }) {
   const c = plantContracts(slug);
   const enabled = Boolean(c?.token);
+  const ZERO = "0x0000000000000000000000000000000000000000" as const;
+  const tok = c?.token ?? ZERO;
+  const off = c?.offering ?? ZERO;
 
   const base = useReadContracts({
     allowFailure: true,
     query: { enabled, refetchInterval: 60_000 },
-    contracts: enabled
-      ? [
-          { address: c!.token, abi: plantTokenAbi, functionName: "totalSupply", chainId: TARGET_CHAIN_ID },
-          { address: c!.token, abi: plantTokenAbi, functionName: "maxSupply", chainId: TARGET_CHAIN_ID },
-          { address: c!.token, abi: plantTokenAbi, functionName: "totalDistributed", chainId: TARGET_CHAIN_ID },
-          ...(c!.offering
-            ? ([
-                { address: c!.offering, abi: offeringAbi, functionName: "totalRaised", chainId: TARGET_CHAIN_ID },
-                { address: c!.offering, abi: offeringAbi, functionName: "investorCount", chainId: TARGET_CHAIN_ID },
-              ] as const)
-            : []),
-        ]
-      : [],
+    contracts: [
+      { address: tok, abi: plantTokenAbi, functionName: "totalSupply", chainId: TARGET_CHAIN_ID },
+      { address: tok, abi: plantTokenAbi, functionName: "maxSupply", chainId: TARGET_CHAIN_ID },
+      { address: tok, abi: plantTokenAbi, functionName: "totalDistributed", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "totalRaised", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "investorCount", chainId: TARGET_CHAIN_ID },
+    ],
   });
   const docs = useReadContract({ address: c?.token, abi: plantTokenAbi, functionName: "getAllDocuments", chainId: TARGET_CHAIN_ID, query: { enabled } });
   const names = (docs.data ?? []) as readonly Hex[];
   const docDetails = useReadContracts({
     allowFailure: true,
     query: { enabled: enabled && names.length > 0 },
-    contracts: names.map((n) => ({ address: c!.token, abi: plantTokenAbi, functionName: "getDocument", args: [n], chainId: TARGET_CHAIN_ID }) as const),
+    contracts: names.map((n) => ({ address: tok, abi: plantTokenAbi, functionName: "getDocument", args: [n], chainId: TARGET_CHAIN_ID }) as const),
   });
 
   if (!c) {

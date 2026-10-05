@@ -56,32 +56,35 @@ export function InvestPanel({
   const now = useNowSec();
   const [cotasInput, setCotasInput] = useState(String(Math.max(minCotasCatalog, 10)));
 
+  const ZERO = "0x0000000000000000000000000000000000000000" as const;
   const offering = c?.offering;
   const enabled = Boolean(offering && c?.paymentToken && c?.identityRegistry);
-  const me = address ?? "0x0000000000000000000000000000000000000000";
+  const me = address ?? ZERO;
+  const off = offering ?? ZERO;
+  const registry = c?.identityRegistry ?? ZERO;
+  const pay = c?.paymentToken ?? ZERO;
+  const tok = c?.token ?? ZERO;
 
   const reads = useReadContracts({
     allowFailure: true,
     query: { enabled, refetchInterval: 20_000 },
-    contracts: enabled
-      ? [
-          { address: offering!, abi: offeringAbi, functionName: "state", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "pricePerCota", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "minCotas", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "maxCotasPerInvestor", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "cotasSold", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "hardCapCotas", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "softCapCotas", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "startTime", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "endTime", chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "commitmentOf", args: [me], chainId: TARGET_CHAIN_ID },
-          { address: offering!, abi: offeringAbi, functionName: "withdrawalDeadline", args: [me], chainId: TARGET_CHAIN_ID },
-          { address: c!.identityRegistry!, abi: identityRegistryAbi, functionName: "isVerified", args: [me], chainId: TARGET_CHAIN_ID },
-          { address: c!.paymentToken!, abi: erc20Abi, functionName: "balanceOf", args: [me], chainId: TARGET_CHAIN_ID },
-          { address: c!.paymentToken!, abi: erc20Abi, functionName: "allowance", args: [me, offering!], chainId: TARGET_CHAIN_ID },
-          { address: c!.token, abi: plantTokenAbi, functionName: "balanceOf", args: [me], chainId: TARGET_CHAIN_ID },
-        ]
-      : [],
+    contracts: [
+      { address: off, abi: offeringAbi, functionName: "state", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "pricePerCota", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "minCotas", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "maxCotasPerInvestor", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "cotasSold", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "hardCapCotas", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "softCapCotas", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "startTime", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "endTime", chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "commitmentOf", args: [me], chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "withdrawalDeadline", args: [me], chainId: TARGET_CHAIN_ID },
+      { address: registry, abi: identityRegistryAbi, functionName: "isVerified", args: [me], chainId: TARGET_CHAIN_ID },
+      { address: pay, abi: erc20Abi, functionName: "balanceOf", args: [me], chainId: TARGET_CHAIN_ID },
+      { address: pay, abi: erc20Abi, functionName: "allowance", args: [me, off], chainId: TARGET_CHAIN_ID },
+      { address: tok, abi: plantTokenAbi, functionName: "balanceOf", args: [me], chainId: TARGET_CHAIN_ID },
+    ],
   });
 
   const d = reads.data;

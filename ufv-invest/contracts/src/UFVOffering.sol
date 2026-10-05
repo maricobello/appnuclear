@@ -348,8 +348,14 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
         Commitment storage c = _commitments[msg.sender];
         if (c.cotas == 0) revert NoCommitment();
         if (c.settled) revert AlreadySettled();
-        _deliver(msg.sender);
-        _completeSettlementIfDone();
+
+        // efeitos
+        uint256 cotas = _markDelivered(msg.sender);
+        cotasDelivered += cotas;
+        bool completes = _markSettlementCompletedIfDone();
+        // interações
+        token.mint(msg.sender, cotas);
+        if (completes) token.finishMinting();
     }
 
     // ─── Encerramento ───────────────────────────────────────────────────────────────────────
@@ -396,11 +402,28 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
         uint256 end = cursor + maxInvestors;
         uint256 length = _investors.length;
         if (end > length) end = length;
-        for (; cursor < end; ++cursor) {
-            delivered += _deliver(_investors[cursor]);
-        }
+        uint256 n = end - cursor;
+
+        // efeitos (checks-effects-interactions estrito: nada de estado depois dos mints)
         settleCursor = end;
-        _completeSettlementIfDone();
+        address[] memory recipients = new address[](n);
+        uint256[] memory amounts = new uint256[](n);
+        for (uint256 i; i < n; ++i) {
+            address investor = _investors[cursor + i];
+            uint256 cotas = _markDelivered(investor);
+            recipients[i] = investor;
+            amounts[i] = cotas;
+            delivered += cotas;
+        }
+        cotasDelivered += delivered;
+        bool completes = _markSettlementCompletedIfDone();
+
+        // interações: só emite para o token (contrato confiável, imutável); o mint não checa KYC,
+        // então nenhum investidor consegue travar o lote
+        for (uint256 i; i < n; ++i) {
+            if (amounts[i] > 0) token.mint(recipients[i], amounts[i]);
+        }
+        if (completes) token.finishMinting();
     }
 
     /// @notice Cancela a oferta (antes de finalizar). Libera reembolso integral a todos.
@@ -459,22 +482,22 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
         emit Refunded(investor, cotas, paid);
     }
 
-    /// @dev Emite as cotas de `investor` uma única vez (marca `settled` antes do mint).
-    function _deliver(address investor) private returns (uint256 cotas) {
+    /// @dev Marca a entrega das cotas de `investor` (uma única vez) e retorna quantas emitir.
+    function _markDelivered(address investor) private returns (uint256 cotas) {
         Commitment storage c = _commitments[investor];
         cotas = c.cotas;
         if (cotas == 0 || c.settled) return 0;
         c.settled = true;
-        cotasDelivered += cotas;
-        token.mint(investor, cotas);
         emit TokensDelivered(investor, cotas);
     }
 
-    function _completeSettlementIfDone() private {
+    /// @dev Marca a liquidação como concluída quando todas as cotas vendidas foram entregues.
+    function _markSettlementCompletedIfDone() private returns (bool completes) {
         if (!settlementCompleted && cotasDelivered == cotasSold) {
             settlementCompleted = true;
-            token.finishMinting();
             emit SettlementCompleted(cotasDelivered);
+            return true;
         }
+        return false;
     }
 }

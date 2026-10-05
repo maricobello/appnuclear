@@ -90,6 +90,12 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
               tokenização são hipóteses de mercado para demonstrar a plataforma.
             </Notice>
           )}
+          {plant.status === "operacao" && (
+            <Notice tone="info" title={`Em operação desde ${plant.finance.startYear}`}>
+              Os indicadores consideram o fluxo desde a emissão das cotas ({plant.finance.startYear - 1}). Quem compra cotas hoje no mercado secundário recebe só as
+              distribuições futuras, ao preço negociado — o retorno efetivo depende desse preço.
+            </Notice>
+          )}
           {fallbackCount > 0 && (
             <Notice tone="info" title={`${fallbackCount} fonte(s) em modo referência`}>
               Alguma API pública não respondeu agora; os valores de referência embarcados foram usados e estão marcados em “Fontes de dados”.

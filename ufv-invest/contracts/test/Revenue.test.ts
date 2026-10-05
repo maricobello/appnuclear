@@ -20,7 +20,7 @@ async function mintedFixture() {
 async function tokenWithPayout(payoutName: "FeeOnTransferERC20" | "ReentrantERC20") {
   const base = await deployBase();
   const { admin, compliance, distributor, registry, alice, bob } = base;
-  const payout = await ethers.deployContract(payoutName);
+  const payout = (await ethers.deployContract(payoutName)) as unknown as FeeOnTransferERC20 | ReentrantERC20;
   const token = (await ethers.deployContract("UFVPlantToken", [
     "n",
     "s",

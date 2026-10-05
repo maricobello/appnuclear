@@ -9,8 +9,8 @@ export function renderGeneration(ctx: ReportContext): void {
   const t = a.plant.tech;
   const g = a.generation;
   l.sectionTitle(4, "Projeto técnico e geração", {
-    minSpace: 260,
-    lead: "Configuração do sistema, energia esperada mês a mês, cadeia de perdas e níveis de excedência (P50 a P99) usados na análise econômica.",
+    minSpace: 200,
+    lead: "Configuração do sistema, energia mês a mês, cadeia de perdas e níveis de excedência (P50 a P99) usados na análise econômica.",
   });
 
   // ── equipamentos ──
@@ -21,7 +21,7 @@ export function renderGeneration(ctx: ReportContext): void {
     return dirs[Math.round((((az % 360) + 360) % 360) / 45) % 8];
   };
   const eqRows: Cell[][] = [
-    ["Módulos fotovoltaicos", t.module.model, `${fmtNum(t.module.count, 0)} × ${fmtNum(t.module.wp, 0)} Wp = ${fmtNum(t.dcKWp, 0)} kWp · η ${fmtPct(t.module.efficiencyPct)} · ${t.module.bifacial ? "bifacial" : "monofacial"} · γ ${fmtNum(t.module.gammaPmaxPctPerC, 2)} %/°C · NOCT ${fmtNum(t.module.noctC, 0)} °C`],
+    ["Módulos fotovoltaicos", t.module.model, `${fmtNum(t.module.count, 0)} × ${fmtNum(t.module.wp, 0)} Wp = ${fmtNum(t.dcKWp, 0)} kWp · eficiência ${fmtPct(t.module.efficiencyPct)} · ${t.module.bifacial ? "bifacial" : "monofacial"} · coef. de temperatura ${fmtNum(t.module.gammaPmaxPctPerC, 2)} %/°C · NOCT ${fmtNum(t.module.noctC, 0)} °C`],
     ["Inversores", t.inverter.model, `${fmtNum(t.inverter.count, 0)} × ${fmtNum(t.inverter.kw, 0)} kW = ${fmtNum(t.acKW, 0)} kWac · eficiência europeia ${fmtPct(t.inverter.euroEfficiencyPct)}`],
     [
       "Estrutura",
@@ -51,9 +51,9 @@ export function renderGeneration(ctx: ReportContext): void {
   const p50 = monthly.map((m) => (m ? m.energyMWh : NaN));
   const ratio90 = g.annualP50MWh > 0 ? g.p90MWh / g.annualP50MWh : NaN;
   const p90 = p50.map((v) => v * ratio90);
-  l.subTitle("Geração mensal esperada (ano 1)", { minSpace: 240, right: "MWh/mês" });
-  l.ensure(150);
-  barChart(l, { x: l.x0, y: l.y, w: l.width, h: 140 }, {
+  l.subTitle("Geração mensal esperada (ano 1)", { minSpace: 220, right: "MWh/mês" });
+  l.ensure(130);
+  barChart(l, { x: l.x0, y: l.y, w: l.width, h: 126 }, {
     categories: MONTHS_SHORT,
     series: [{ name: "P50", values: p50, color: C.amber }],
     markers: Number.isFinite(ratio90) ? [{ name: "P90", values: p90, color: C.navy }] : [],
@@ -62,7 +62,7 @@ export function renderGeneration(ctx: ReportContext): void {
     legend: true,
     yMin: 0,
   });
-  l.y += 144;
+  l.y += 130;
 
   const rows: Cell[][] = [
     [{ text: "POA (kWh/m²)", font: "semibold" }, ...monthly.map((m) => (m ? fmtNum(m.poaKWhM2, 0) : "—")), { text: fmtNum(g.annualPoaKWhM2, 0), font: "semibold" }],
@@ -114,8 +114,8 @@ export function renderGeneration(ctx: ReportContext): void {
         { header: "", width: 2.6 },
       ],
       rows: wfRows,
-      size: 7.4,
-      padY: 2.7,
+      size: 7.3,
+      padY: 2.3,
       after: 4,
     });
     l.caption(
@@ -164,8 +164,8 @@ export function renderGeneration(ctx: ReportContext): void {
   ];
   const uncSpec = {
     columns: [
-      { header: "Componente de incerteza (1σ)", width: 2.6 },
-      { header: "σ", width: 0.8, align: "right" as const },
+      { header: "Componente (1 desvio-padrão)", width: 2.6 },
+      { header: "Incerteza", width: 0.9, align: "right" as const },
     ],
     rows: uncRows,
     footerRows: [[{ text: "Combinada (RSS)" }, { text: fmtPct(u.totalPct) }]] as Cell[][],
@@ -185,7 +185,7 @@ export function renderGeneration(ctx: ReportContext): void {
   l.subTitle("Incerteza", { x: l.x0 + leftW + 14, width: rightW, minSpace: 0 });
   l.table(uncSpec);
   l.y = Math.max(yLeft, l.y) + 4;
-  l.caption("Distribuição normal da energia anual: Pxx = P50 × (1 \u2212 z × σ). No P90 de 10 anos a parcela interanual é dividida por √10.", { after: 8 });
+  l.caption("Distribuição normal da energia anual: Pxx = P50 × (1 \u2212 z × incerteza combinada). No P90 de 10 anos a parcela interanual é dividida por √10.", { after: 8 });
 
   // ── metodologia ──
   if (g.method?.length) {

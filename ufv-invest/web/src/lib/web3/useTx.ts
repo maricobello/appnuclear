@@ -1,7 +1,8 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, type Hash, type TransactionReceipt } from "viem";
+import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, type Abi, type Address, type Hash, type TransactionReceipt } from "viem";
+import type { Config } from "wagmi";
 import { getConnection, simulateContract, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { wagmiConfig } from "./config";
 import { TARGET_CHAIN_ID } from "./chains";
@@ -57,12 +58,15 @@ export function humanizeError(e: unknown): string {
   return msg;
 }
 
-type SimParams = Parameters<typeof simulateContract<typeof wagmiConfig>>[1];
+/** Parâmetros de uma escrita (os ABIs vêm de lib/web3/abi.ts e os endereços de deployments.json) */
+export type TxParams = { address: Address; abi: Abi; functionName: string; args?: readonly unknown[] };
+type SimulateArgs = Parameters<typeof simulateContract>[1];
+type WriteArgs = Parameters<typeof writeContract>[1];
 
 export function useTx() {
   const [state, setState] = useState<TxState>({ step: "idle" });
 
-  const run = useCallback(async (label: string, params: SimParams): Promise<TransactionReceipt | null> => {
+  const run = useCallback(async (label: string, params: TxParams): Promise<TransactionReceipt | null> => {
     try {
       const conn = getConnection(wagmiConfig);
       if (!conn.address) throw new Error("Conecte a carteira primeiro.");
@@ -71,9 +75,9 @@ export function useTx() {
         await switchChain(wagmiConfig, { chainId: TARGET_CHAIN_ID });
       }
       setState({ step: "simulating", label });
-      const { request } = await simulateContract(wagmiConfig, { ...params, account: conn.address, chainId: TARGET_CHAIN_ID } as SimParams);
+      const { request } = await simulateContract(wagmiConfig as Config, { ...params, account: conn.address, chainId: TARGET_CHAIN_ID } as unknown as SimulateArgs);
       setState({ step: "signing", label });
-      const hash = await writeContract(wagmiConfig, request);
+      const hash = await writeContract(wagmiConfig as Config, request as unknown as WriteArgs);
       setState({ step: "pending", label, hash });
       const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, chainId: TARGET_CHAIN_ID, confirmations: 1 });
       if (receipt.status !== "success") throw new Error("A transação foi revertida na rede.");

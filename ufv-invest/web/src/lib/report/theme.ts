@@ -37,9 +37,9 @@ export const PAGE = {
   height: 841.89,
   marginX: 40,
   /** topo da área de conteúdo (abaixo da faixa de cabeçalho) */
-  contentTop: 60,
+  contentTop: 54,
   /** base da área de conteúdo (acima do rodapé) */
-  contentBottom: 841.89 - 46,
+  contentBottom: 841.89 - 40,
   headerHeight: 30,
 };
 

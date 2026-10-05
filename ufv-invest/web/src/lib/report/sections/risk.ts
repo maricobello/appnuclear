@@ -102,15 +102,15 @@ export function renderRisk(ctx: ReportContext): void {
   const cdi = a.market.cdiPct;
   const cdiNet = cdiNetPct(a);
   l.sectionTitle(6, "Risco", {
-    minSpace: 280,
-    lead: "Distribuição da TIR por simulação de Monte Carlo, sensibilidade a cada premissa, comparação com alternativas de renda fixa e matriz qualitativa de riscos.",
+    minSpace: 220,
+    lead: "Distribuição da TIR (Monte Carlo), sensibilidade a cada premissa, comparação com renda fixa e matriz qualitativa de riscos.",
   });
 
   // ── Monte Carlo ──
   if (mc && mc.histogram?.length) {
     l.subTitle("Monte Carlo — distribuição da TIR nominal", { minSpace: 220, right: `${fmtNum(mc.runs, 0)} cenários · semente ${mc.seed}` });
-    l.ensure(160);
-    histogram(l, { x: l.x0, y: l.y, w: l.width, h: 156 }, {
+    l.ensure(146);
+    histogram(l, { x: l.x0, y: l.y, w: l.width, h: 142 }, {
       bins: mc.histogram,
       xFormat: (v) => `${fmtNum(v, 0)} %`,
       colorFn: (b) => ((b.fromPct + b.toPct) / 2 < cdi ? C.redStrong : C.amber),
@@ -126,7 +126,7 @@ export function renderRisk(ctx: ReportContext): void {
         { label: "TIR < CDI", color: C.redStrong, kind: "box" },
       ],
     });
-    l.y += 160;
+    l.y += 146;
     l.tiles(
       [
         { label: "TIR P10 / P50 / P90", value: `${fmtNum(mc.irrP10Pct, 1)} / ${fmtNum(mc.irrP50Pct, 1)} / ${fmtNum(mc.irrP90Pct, 1)} %`, sub: "Percentis da TIR nominal", accent: C.navy },
@@ -144,7 +144,7 @@ export function renderRisk(ctx: ReportContext): void {
     (x, y) => Math.abs(y.irrHighPct - y.irrLowPct) - Math.abs(x.irrHighPct - x.irrLowPct),
   );
   if (sens.length) {
-    const h = 28 + sens.length * 19;
+    const h = 28 + sens.length * 17.5;
     l.subTitle("Sensibilidade da TIR (tornado)", { minSpace: h + 30, right: "Variação de uma premissa por vez" });
     l.ensure(h);
     tornado(l, { x: l.x0, y: l.y, w: l.width, h }, {
@@ -163,7 +163,7 @@ export function renderRisk(ctx: ReportContext): void {
     l.y += h + 2;
     const top = sens[0];
     l.caption(
-      `Ordenado pela amplitude do efeito. Maior sensibilidade: ${top.variable.toLowerCase()} (TIR de ${fmtPct(top.irrLowPct)} a ${fmtPct(top.irrHighPct)}; VPL de ${fmtBRLCompact(top.npvLowBRL)} a ${fmtBRLCompact(top.npvHighBRL)}). Verde: cenário acima da base; vermelho: abaixo.`,
+      `Ordenado pela amplitude do efeito. Maior sensibilidade: ${top.variable} (TIR de ${fmtPct(top.irrLowPct)} a ${fmtPct(top.irrHighPct)}; VPL de ${fmtBRLCompact(top.npvLowBRL)} a ${fmtBRLCompact(top.npvHighBRL)}). Verde: cenário acima da base; vermelho: abaixo.`,
       { after: 8 },
     );
   }
@@ -173,7 +173,7 @@ export function renderRisk(ctx: ReportContext): void {
   if (bm.length) {
     const rowH = 20;
     const h = bm.length * rowH;
-    l.subTitle(`Comparativo: valor final de R$ 1.000 em ${a.plant.finance.horizonYears} anos`, { minSpace: h + 80, right: "Taxa anual equivalente" });
+    l.subTitle(`Comparativo: valor final de R$ 1.000 em ${a.plant.finance.horizonYears} anos`, { minSpace: h + 36, right: "Taxa anual equivalente" });
     l.ensure(h + 6);
     const isPlant = (name: string) => name.toLowerCase().includes(a.plant.name.toLowerCase()) || name.toLowerCase().includes("usina") || name.toLowerCase().includes("ufv");
     hbars(
@@ -189,17 +189,12 @@ export function renderRisk(ctx: ReportContext): void {
       })),
     );
     l.y += h + 6;
-    l.table({
-      columns: [
-        { header: "Alternativa", width: 1.6, font: "semibold" },
-        { header: "Nota metodológica", width: 4.2, color: C.muted },
-      ],
-      rows: bm.map((b) => [b.name, b.note || "—"]),
-      size: 7,
-      padY: 2.4,
-      after: 4,
-    });
-    l.caption("Comparação de taxas compostas no mesmo horizonte; produtos com riscos, liquidez e tributação distintos. Rentabilidade projetada não é garantia de resultado.", { after: 8 });
+    const notes = bm.filter((b) => b.note).map((b) => `${b.name}: ${b.note.replace(/\.$/, "")}`);
+    l.caption(
+      (notes.length ? `Notas — ${notes.join("; ")}. ` : "") +
+        "Taxas compostas no mesmo horizonte; produtos com riscos, liquidez e tributação distintos. Rentabilidade projetada não é garantia de resultado.",
+      { after: 8 },
+    );
   }
 
   // ── matriz qualitativa ──
@@ -221,7 +216,7 @@ export function renderRisk(ctx: ReportContext): void {
     ],
     rows,
     size: 7.1,
-    padY: 3.2,
+    padY: 2.8,
     after: 4,
   });
 }

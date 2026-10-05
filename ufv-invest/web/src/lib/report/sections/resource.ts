@@ -12,8 +12,8 @@ export function renderResource(ctx: ReportContext): void {
   const r = a.resource;
   const g = a.generation;
   l.sectionTitle(3, "Recurso solar", {
-    minSpace: 330,
-    lead: "Irradiação global horizontal (GHI) de bases satelitais públicas, transposição para o plano dos módulos (POA) e validação cruzada independente.",
+    minSpace: 250,
+    lead: "Irradiação global horizontal (GHI) de bases satelitais públicas, transposição ao plano dos módulos (POA) e validação cruzada.",
   });
 
   const poaGain = g.annualGhiKWhM2 > 0 ? ((g.annualPoaKWhM2 - g.annualGhiKWhM2) / g.annualGhiKWhM2) * 100 : NaN;
@@ -45,9 +45,9 @@ export function renderResource(ctx: ReportContext): void {
     const mg = g.monthly.find((x) => x.month === i);
     return mg ? mg.poaKWhM2 / DAYS[i] : NaN;
   });
-  l.subTitle("Irradiação média diária por mês", { minSpace: 175, right: "kWh/m²/dia" });
-  l.ensure(150);
-  barChart(l, { x: l.x0, y: l.y, w: l.width, h: 142 }, {
+  l.subTitle("Irradiação média diária por mês", { minSpace: 150, right: "kWh/m²/dia" });
+  l.ensure(130);
+  barChart(l, { x: l.x0, y: l.y, w: l.width, h: 126 }, {
     categories: MONTHS_SHORT,
     series: [{ name: "GHI (horizontal)", values: ghi, color: C.amber }],
     lines: poaDaily.some(Number.isFinite) ? [{ name: "POA (plano dos módulos)", values: poaDaily, color: C.navy, dots: true, width: 1.3 }] : [],
@@ -56,7 +56,7 @@ export function renderResource(ctx: ReportContext): void {
     legend: true,
     yMin: 0,
   });
-  l.y += 146;
+  l.y += 130;
   l.caption(sourceLine(r.provenance ?? []) + " POA: saída do modelo de transposição (seção 4).", { after: 8 });
 
   // ── série anual e validação mensal lado a lado ──
@@ -67,7 +67,7 @@ export function renderResource(ctx: ReportContext): void {
   if (hasSeries || hasPv) {
     const both = hasSeries && hasPv;
     const colW = both ? (l.width - 18) / 2 : l.width;
-    const chartH = 128;
+    const chartH = 120;
     l.ensure(chartH + 50);
     const y0 = l.y;
     let maxY = y0;
@@ -83,7 +83,7 @@ export function renderResource(ctx: ReportContext): void {
         categories: series.map((s) => String(s.year).slice(-2)),
         series: [{ name: "GHI anual", values: vals, color: C.amber, colorFn: (v) => (v < mean - sd ? C.amberDark : C.amber) }],
         lines: [{ name: "Média", values: vals.map(() => mean), color: C.navy, dash: [3, 2], width: 1 }],
-        band: { from: mean - sd, to: mean + sd, color: C.navySoft, label: "±1σ" },
+        band: { from: mean - sd, to: mean + sd, color: C.navySoft, label: "±1 desvio-padrão" },
         yFormat: (v) => fmtNum(v, 0),
         legend: true,
         yMin: Math.floor((lo - (hi - lo) * 0.6) / 50) * 50,
@@ -94,7 +94,7 @@ export function renderResource(ctx: ReportContext): void {
       const minY = series.find((s) => s.ghiKWhM2 === lo)?.year;
       const maxYr = series.find((s) => s.ghiKWhM2 === hi)?.year;
       l.caption(
-        `${series[0].year}–${series[series.length - 1].year}: média ${fmtNum(mean, 0)} kWh/m², desvio-padrão ${fmtNum(sd, 0)} (CV ${fmtPct((sd / mean) * 100)}); mínimo em ${minY} (${fmtNum(lo, 0)}), máximo em ${maxYr} (${fmtNum(hi, 0)}). Barras escuras: anos abaixo de \u22121σ.`,
+        `${series[0].year}–${series[series.length - 1].year}: média ${fmtNum(mean, 0)} kWh/m², desvio-padrão ${fmtNum(sd, 0)} (CV ${fmtPct((sd / mean) * 100)}); mínimo em ${minY} (${fmtNum(lo, 0)}), máximo em ${maxYr} (${fmtNum(hi, 0)}). Barras escuras: anos mais de um desvio-padrão abaixo da média.`,
         { x: l.x0, width: colW },
       );
       maxY = Math.max(maxY, l.y);
@@ -123,7 +123,7 @@ export function renderResource(ctx: ReportContext): void {
       const dev = ((modelAnnual - pv.annualKWhPerKWp) / pv.annualKWhPerKWp) * 100;
       l.caption(
         `Modelo: ${fmtNum(modelAnnual, 0)} kWh/kWp·ano; PVGIS: ${fmtNum(pv.annualKWhPerKWp, 0)} kWh/kWp·ano${
-          pv.interannualSdKWhPerKWp ? ` (σ interanual ${fmtNum(pv.interannualSdKWhPerKWp, 0)})` : ""
+          pv.interannualSdKWhPerKWp ? ` (desvio-padrão interanual ${fmtNum(pv.interannualSdKWhPerKWp, 0)})` : ""
         }; desvio ${fmtPctSigned(dev)}. ${sourceLine([pv.provenance])}`,
         { x, width: colW },
       );

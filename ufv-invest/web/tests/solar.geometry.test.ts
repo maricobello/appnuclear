@@ -28,11 +28,20 @@ describe("declinação solar", () => {
     KLEIN_MEAN_DAY.forEach((n, m) => expect(Math.abs(declinationCooperDeg(n) - DB_TABLE_161_DECL[m])).toBeLessThan(0.1));
   });
 
-  it("Spencer concorda com o algoritmo NOAA/Meeus em ±0,5°", () => {
-    for (const iso of ["2025-01-17", "2025-04-15", "2025-06-11", "2025-09-15", "2025-10-15", "2025-12-10"]) {
+  it("NOAA/Meeus acerta os instantes de equinócio e solstício de 2025", () => {
+    // equinócio de março: 20/03/2025 09:01 UTC; solstício de junho: 21/06/2025 02:42 UTC (obliquidade ≈ 23,436°)
+    expect(Math.abs(sunPositionDetailed(new Date("2025-03-20T09:01:00Z"), 0, 0).declinationDeg)).toBeLessThan(0.01);
+    expect(sunPositionDetailed(new Date("2025-06-21T02:42:00Z"), 0, 0).declinationDeg).toBeCloseTo(23.436, 2);
+  });
+
+  it("Spencer concorda com o NOAA/Meeus em ±0,6°", () => {
+    // A série de Spencer foi ajustada a efemérides de ~1950; em 2025 os equinócios caem ~0,8 dia mais
+    // cedo no calendário, o que dá até ~0,5° de diferença perto dos equinócios (δ varia 0,4°/dia).
+    // Irrelevante para médias mensais (efeito < 0,2 % em H₀ nas latitudes do Brasil).
+    for (const iso of ["2025-01-17", "2025-03-20", "2025-04-15", "2025-06-11", "2025-09-15", "2025-10-15", "2025-12-10"]) {
       const d = new Date(`${iso}T12:00:00Z`);
       const noaa = sunPositionDetailed(d, 0, 0).declinationDeg;
-      expect(Math.abs(declinationDeg(dayOfYearUTC(d)) - noaa)).toBeLessThan(0.5);
+      expect(Math.abs(declinationDeg(dayOfYearUTC(d)) - noaa)).toBeLessThan(0.6);
     }
   });
 

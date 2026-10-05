@@ -21,7 +21,7 @@ export function renderLocation(ctx: ReportContext): void {
   const loc = a.location;
   const pl = a.plant.location;
   l.sectionTitle(2, "Localização e dados do local", {
-    lead: "Identificação geográfica e administrativa do empreendimento, com dados oficiais do IBGE e coordenadas do arranjo fotovoltaico.",
+    lead: "Identificação geográfica e administrativa do empreendimento (IBGE) e coordenadas do arranjo fotovoltaico.",
   });
 
   const lat = pl.lat;
