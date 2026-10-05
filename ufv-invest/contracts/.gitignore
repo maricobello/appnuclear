@@ -16,3 +16,5 @@ deployments/*.local.json
 slither-report.*
 crytic-export/
 .venv/
+# lotes do Safe Transaction Builder (gerados por npm run admin:accept)
+deployments/*-accept-admin.json
