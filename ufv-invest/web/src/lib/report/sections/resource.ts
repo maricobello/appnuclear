@@ -94,7 +94,7 @@ export function renderResource(ctx: ReportContext): void {
       const minY = series.find((s) => s.ghiKWhM2 === lo)?.year;
       const maxYr = series.find((s) => s.ghiKWhM2 === hi)?.year;
       l.caption(
-        `${series[0].year}–${series[series.length - 1].year}: média ${fmtNum(mean, 0)} kWh/m², desvio-padrão ${fmtNum(sd, 0)} (CV ${fmtPct((sd / mean) * 100)}); mínimo em ${minY} (${fmtNum(lo, 0)}), máximo em ${maxYr} (${fmtNum(hi, 0)}). Barras escuras: anos abaixo de −1σ.`,
+        `${series[0].year}–${series[series.length - 1].year}: média ${fmtNum(mean, 0)} kWh/m², desvio-padrão ${fmtNum(sd, 0)} (CV ${fmtPct((sd / mean) * 100)}); mínimo em ${minY} (${fmtNum(lo, 0)}), máximo em ${maxYr} (${fmtNum(hi, 0)}). Barras escuras: anos abaixo de \u22121σ.`,
         { x: l.x0, width: colW },
       );
       maxY = Math.max(maxY, l.y);

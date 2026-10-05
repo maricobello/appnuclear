@@ -104,7 +104,7 @@ describe("série mensal e variabilidade interanual", () => {
   });
 
   it("menos de 5 anos válidos ⇒ erro", () => {
-    expect(() => interannualCvPct([{ year: 2020, ghiKWhM2: 2000 }])).toThrow(/mínimo/);
+    expect(() => interannualCvPct([{ ghiKWhM2: 2000 }, { ghiKWhM2: 2100 }])).toThrow(/mínimo/);
   });
 
   it("irradiação anual da climatologia = Σ mês × dias (365)", () => {

@@ -1,0 +1,43 @@
+{
+  "$comment": "Configuração das ofertas. Datas: ISO 8601 (UTC) ou relativas ao momento do deploy no formato '+<n>d' / '+<n>h'. Preço em USDT (string decimal, convertido com os decimais do token de pagamento). maxCotasPerInvestor = 10% do total. hardCapCotas = maxSupply.",
+  "defaults": {
+    "pricePerCotaUSDT": "18.2",
+    "minCotas": 10,
+    "withdrawalWindowDays": 5
+  },
+  "plants": [
+    {
+      "slug": "ufv-janauba-1",
+      "name": "Cota UFV Janaúba I",
+      "symbol": "UFVJAN1",
+      "maxSupply": 130000,
+      "hardCapCotas": 130000,
+      "softCapCotas": 91000,
+      "maxCotasPerInvestor": 13000,
+      "startTime": "2026-10-01T12:00:00Z",
+      "endTime": "2026-12-20T23:59:59Z"
+    },
+    {
+      "slug": "ufv-petrolina-1",
+      "name": "Cota UFV Petrolina I",
+      "symbol": "UFVPET1",
+      "maxSupply": 84600,
+      "hardCapCotas": 84600,
+      "softCapCotas": 59220,
+      "maxCotasPerInvestor": 8460,
+      "startTime": "+1d",
+      "endTime": "+60d"
+    },
+    {
+      "slug": "ufv-bom-jesus-da-lapa-1",
+      "name": "Cota UFV Bom Jesus da Lapa I",
+      "symbol": "UFVBJL1",
+      "maxSupply": 105600,
+      "hardCapCotas": 105600,
+      "softCapCotas": 73920,
+      "maxCotasPerInvestor": 10560,
+      "startTime": "+1d",
+      "endTime": "+60d"
+    }
+  ]
+}
