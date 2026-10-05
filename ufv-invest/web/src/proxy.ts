@@ -19,16 +19,22 @@ export function proxy(request: NextRequest) {
     .filter(Boolean)
     .map((u) => new URL(u as string).origin);
   const walletConnect = ["https://*.walletconnect.com", "https://*.walletconnect.org", "wss://*.walletconnect.com", "wss://*.walletconnect.org", "https://*.reown.com", "wss://*.reown.com"];
+  // O modal QR do WalletConnect (Reown AppKit) injeta <style> SEM nonce no <head> (variáveis de
+  // tema), busca config/ícones em api.web3modal.org e fontes em fonts.reown.com. Com um nonce na
+  // diretiva, 'unsafe-inline' é ignorado (CSP2+), então, só quando o WalletConnect está ativo,
+  // style-src fica 'self' 'unsafe-inline' (CSS não executa código; script-src segue estrito).
+  const wcEnabled = Boolean(process.env.NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID);
+  const appKit = wcEnabled ? " https://api.web3modal.org" : "";
 
   const csp = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
-    `style-src 'self' 'nonce-${nonce}'${isDev ? " 'unsafe-inline'" : ""}`,
+    wcEnabled || isDev ? "style-src 'self' 'unsafe-inline'" : `style-src 'self' 'nonce-${nonce}'`,
     // atributos style="" gerados pelo React/ECharts (sem execução de código)
     "style-src-attr 'unsafe-inline'",
-    "img-src 'self' blob: data: https://*.walletconnect.com https://*.reown.com",
-    "font-src 'self' data:",
-    `connect-src 'self' ${[...new Set(rpc)].join(" ")} ${walletConnect.join(" ")}`,
+    `img-src 'self' blob: data: https://*.walletconnect.com https://*.reown.com${appKit}`,
+    `font-src 'self' data:${wcEnabled ? " https://fonts.reown.com" : ""}`,
+    `connect-src 'self' ${[...new Set(rpc)].join(" ")} ${walletConnect.join(" ")}${appKit}`,
     "frame-src https://verify.walletconnect.com https://verify.walletconnect.org https://secure.walletconnect.org",
     "worker-src 'self' blob:",
     "object-src 'none'",

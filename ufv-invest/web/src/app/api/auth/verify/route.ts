@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { NONCE_COOKIE, startSession } from "@/lib/auth/session";
 import { verifySiwe } from "@/lib/auth/siwe";
-import { verifyToken } from "@/lib/auth/token";
+import { NONCE_PATTERN, verifyToken } from "@/lib/auth/token";
 import { rateLimit } from "@/lib/rateLimit";
 
 const Body = z.object({
@@ -19,8 +19,12 @@ export async function POST(req: NextRequest) {
   const parsed = Body.safeParse(await req.json().catch(() => null));
   if (!parsed.success) return NextResponse.json({ error: "requisição inválida" }, { status: 400 });
 
-  const nonceToken = verifyToken<{ nonce: string; exp: number }>(req.cookies.get(NONCE_COOKIE)?.value);
-  if (!nonceToken) return NextResponse.json({ error: "nonce expirado — tente de novo" }, { status: 401 });
+  // propósito "siwe-nonce": um cookie de sessão (mesma chave HMAC) não serve como nonce. O nonce
+  // precisa existir e ter o formato emitido — o viem PULA a checagem se `nonce` for vazio/undefined.
+  const nonceToken = verifyToken<{ nonce: string; exp: number }>(req.cookies.get(NONCE_COOKIE)?.value, "siwe-nonce");
+  if (!nonceToken || typeof nonceToken.nonce !== "string" || !NONCE_PATTERN.test(nonceToken.nonce)) {
+    return NextResponse.json({ error: "nonce expirado — tente de novo" }, { status: 401 });
+  }
   if (usedNonces.has(nonceToken.nonce)) return NextResponse.json({ error: "nonce já utilizado" }, { status: 401 });
 
   // domínio esperado: o configurado (NEXT_PUBLIC_SITE_URL) ou o Host da requisição

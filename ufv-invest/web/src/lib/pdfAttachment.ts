@@ -5,33 +5,48 @@ import { decodePDFRawStream, PDFArray, PDFDict, PDFDocument, PDFHexString, PDFNa
  * Usado na página /verificar para recuperar o `dados-analise.json` do relatório e recalcular
  * o SHA-256 dos dados, sem depender do servidor.
  */
+/**
+ * Limites para PDFs não confiáveis (o arquivo vem do usuário): a árvore de nomes pode ter ciclos
+ * ou nós compartilhados (Kids [B, B] em 40 níveis = 2^40 visitas, travando a aba) e um stream
+ * comprimido pode ser uma "bomba" de descompressão.
+ */
+const MAX_NAME_TREE_NODES = 512;
+const MAX_NAME_TREE_DEPTH = 32;
+const MAX_ATTACHMENTS = 32;
+const MAX_ENCODED_ATTACHMENT_BYTES = 4 * 1024 * 1024;
+
 export async function extractAttachments(bytes: Uint8Array | ArrayBuffer): Promise<{ name: string; data: Uint8Array }[]> {
   const doc = await PDFDocument.load(bytes, { updateMetadata: false });
   const names = doc.catalog.lookupMaybe(PDFName.of("Names"), PDFDict);
   const embedded = names?.lookupMaybe(PDFName.of("EmbeddedFiles"), PDFDict);
   if (!embedded) return [];
   const out: { name: string; data: Uint8Array }[] = [];
+  const seen = new Set<PDFDict>(); // lookup de uma mesma referência devolve a mesma instância
 
-  const walk = (node: PDFDict) => {
+  const walk = (node: PDFDict, depth: number) => {
+    if (depth > MAX_NAME_TREE_DEPTH || seen.has(node) || seen.size >= MAX_NAME_TREE_NODES) return;
+    seen.add(node);
     const arr = node.lookupMaybe(PDFName.of("Names"), PDFArray);
     if (arr) {
-      for (let i = 0; i + 1 < arr.size(); i += 2) {
+      for (let i = 0; i + 1 < arr.size() && out.length < MAX_ATTACHMENTS; i += 2) {
         const key = arr.lookup(i);
         const spec = arr.lookup(i + 1);
         if (!(spec instanceof PDFDict)) continue;
         const name = key instanceof PDFString || key instanceof PDFHexString ? key.decodeText() : `anexo-${i / 2}`;
         const ef = spec.lookupMaybe(PDFName.of("EF"), PDFDict);
         const stream = ef?.lookup(PDFName.of("F"));
-        if (stream instanceof PDFRawStream) out.push({ name, data: decodePDFRawStream(stream).decode() });
+        if (stream instanceof PDFRawStream && stream.contents.length <= MAX_ENCODED_ATTACHMENT_BYTES) {
+          out.push({ name, data: decodePDFRawStream(stream).decode() });
+        }
       }
     }
     const kids = node.lookupMaybe(PDFName.of("Kids"), PDFArray);
     if (kids) for (let i = 0; i < kids.size(); i++) {
       const k = kids.lookup(i);
-      if (k instanceof PDFDict) walk(k);
+      if (k instanceof PDFDict) walk(k, depth + 1);
     }
   };
-  walk(embedded);
+  walk(embedded, 0);
   return out;
 }
 

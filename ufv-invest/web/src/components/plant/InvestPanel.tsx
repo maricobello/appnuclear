@@ -106,7 +106,8 @@ export function InvestPanel({
   const tokenBalance = isConnected ? v<bigint>(14) : undefined;
   const dec = c?.paymentTokenDecimals ?? 18;
 
-  const cotas = Math.max(0, Math.floor(Number(cotasInput) || 0));
+  // teto: um campo com centenas de dígitos vira Infinity e BigInt(Infinity) derrubaria o render
+  const cotas = Math.min(Number.MAX_SAFE_INTEGER, Math.max(0, Math.floor(Number(cotasInput) || 0)));
   const cost = price !== undefined ? price * BigInt(cotas) : undefined;
   const myCotas = commitment ? Number(commitment[0]) : 0;
   const myPaid = commitment?.[1] ?? 0n;

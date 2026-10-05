@@ -1,7 +1,7 @@
-import { createHash } from "node:crypto";
 import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getSession } from "@/lib/auth/session";
+import { keyedHash } from "@/lib/auth/token";
 import { isValidCpf, maskCpf } from "@/lib/cpf";
 import { rateLimit } from "@/lib/rateLimit";
 
@@ -43,12 +43,11 @@ export async function POST(req: NextRequest) {
   const b = parsed.data;
   if (!isValidCpf(b.cpf)) return NextResponse.json({ error: "CPF inválido" }, { status: 400 });
 
-  const salt = process.env.SESSION_SECRET ?? "dev";
   const record: KycRequest = {
     address: s.address,
     nome: b.nome,
     cpfMasked: maskCpf(b.cpf),
-    cpfHash: createHash("sha256").update(`${salt}:${b.cpf.replace(/\D/g, "")}`).digest("hex"),
+    cpfHash: keyedHash("cpf", b.cpf.replace(/\D/g, "")),
     email: b.email,
     pais: b.pais,
     at: new Date().toISOString(),

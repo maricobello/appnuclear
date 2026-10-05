@@ -207,6 +207,11 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
     const existing = record.plants[p.slug];
     if (existing && (await hasCode(existing.token.address)) && (await hasCode(existing.offering.address))) {
       log(`  = já implantada (token ${existing.token.address}, oferta ${existing.offering.address}); use FORCE_REDEPLOY=true para refazer`);
+      // retomada: uma execução anterior pode ter caído entre o registro da usina e o hand-off (ou
+      // rodado sem ADMIN_ADDRESS). handOff é idempotente — sem isso o deployer ficaria admin para sempre.
+      await handOff(await ethers.getContractAt("UFVPlantToken", existing.token.address), `${p.symbol} (token)`);
+      await handOff(await ethers.getContractAt("UFVOffering", existing.offering.address), `${p.symbol} (oferta)`);
+      save();
       continue;
     }
     const treasury = norm(p.treasury, `treasury de ${p.slug}`) ?? treasuryDefault ?? admin;

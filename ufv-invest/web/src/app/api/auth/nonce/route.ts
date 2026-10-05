@@ -6,6 +6,6 @@ export async function GET() {
   const nonce = randomNonce();
   const exp = Math.floor(Date.now() / 1000) + 600;
   const res = NextResponse.json({ nonce }, { headers: { "Cache-Control": "no-store" } });
-  res.cookies.set(NONCE_COOKIE, signToken({ nonce, exp }), nonceCookieOptions);
+  res.cookies.set(NONCE_COOKIE, signToken({ nonce, exp }, "siwe-nonce"), nonceCookieOptions);
   return res;
 }

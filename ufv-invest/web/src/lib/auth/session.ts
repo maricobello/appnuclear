@@ -23,7 +23,7 @@ const cookieBase = {
 
 export async function getSession(): Promise<Session | null> {
   const jar = await cookies();
-  const s = verifyToken<Session>(jar.get(SESSION_COOKIE)?.value);
+  const s = verifyToken<Session>(jar.get(SESSION_COOKIE)?.value, "session");
   if (!s) return null;
   try {
     return { ...s, address: getAddress(s.address) };
@@ -36,7 +36,7 @@ export async function startSession(address: Address, chainId: number): Promise<S
   const now = Math.floor(Date.now() / 1000);
   const session: Session = { address: getAddress(address), chainId, iat: now, exp: now + SESSION_TTL_S };
   const jar = await cookies();
-  jar.set(SESSION_COOKIE, signToken({ ...session }), { ...cookieBase, maxAge: SESSION_TTL_S });
+  jar.set(SESSION_COOKIE, signToken({ ...session }, "session"), { ...cookieBase, maxAge: SESSION_TTL_S });
   return session;
 }
 
