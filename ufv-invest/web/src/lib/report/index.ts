@@ -39,7 +39,8 @@ export interface RenderAuditReportOptions {
   now?: Date;
 }
 
-const FONT_DIR = ["src", "lib", "report", "fonts"];
+// caminhos literais (escopo estático) para o rastreamento de arquivos do Next/Turbopack incluir
+// só a pasta de fontes no deploy — ver outputFileTracingIncludes em next.config.ts
 const FONT_FILES = {
   regular: "Geist-Regular.ttf",
   semibold: "Geist-SemiBold.ttf",
@@ -52,9 +53,9 @@ let fontBytesPromise: Promise<FontBytes> | null = null;
 
 function loadFontBytes(): Promise<FontBytes> {
   if (!fontBytesPromise) {
-    const dir = path.join(process.cwd(), ...FONT_DIR);
+    const dir = path.join(process.cwd(), "src/lib/report/fonts");
     fontBytesPromise = Promise.all(
-      (Object.keys(FONT_FILES) as (keyof typeof FONT_FILES)[]).map(async (k) => [k, new Uint8Array(await readFile(path.join(dir, FONT_FILES[k])))] as const),
+      (Object.keys(FONT_FILES) as (keyof typeof FONT_FILES)[]).map(async (k) => [k, new Uint8Array(await readFile(path.join(/*turbopackIgnore: true*/ dir, FONT_FILES[k])))] as const),
     )
       .then((entries) => Object.fromEntries(entries) as FontBytes)
       .catch((err) => {

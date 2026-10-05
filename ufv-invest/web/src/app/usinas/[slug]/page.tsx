@@ -37,7 +37,9 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
   const { plant, generation: g, finance: f, resource, location, market } = a;
   const t = plant.tech;
   const p90Ratio = g.annualP50MWh > 0 ? g.p90MWh / g.annualP50MWh : 0.9;
-  const cdi = f.benchmarks.find((b) => /cdi/i.test(b.name));
+  // comparação justa no simulador: só CDI × usina com a renda reinvestida no CDI
+  const cdi = f.benchmarks.find((b) => b.name.startsWith("CDI"));
+  const ufvReinvested = f.benchmarks.find((b) => b.name.startsWith("UFV") && /reinvest/i.test(b.name));
   const fallbackCount = a.provenance.filter((p) => p.status === "fallback" || p.status === "error").length;
 
   return (
@@ -276,7 +278,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
                 <Stat label="VPL" value={brlCompact(f.npvBRL)} tone={f.npvBRL >= 0 ? "good" : "default"} />
                 <Stat label="TIR nominal / real" value={`${pct(f.irrNominalPct)}`} hint={`real ${pct(f.irrRealPct)}`} tone="brand" />
                 <Stat label="LCOE" value={`R$ ${num(f.lcoeBRLPerMWh)}`} hint="por MWh" />
-                <Stat label="Payback simples" value={years(f.paybackYears)} />
+                <Stat label="Payback simples" value={f.paybackYears != null ? `${num(f.paybackYears, 1)} anos` : "—"} hint={years(f.paybackYears)} />
                 <Stat label="ROI no horizonte" value={pct(f.roiTotalPct, 0)} hint={`MOIC ${num(f.moic, 2)}×`} />
                 <Stat label="Yield ano 1" value={pct(f.firstYearYieldPct)} hint={`médio ${pct(f.avgYieldPct)}`} />
                 <Stat label="Renda total/cota" value={brl(f.perCota.totalIncomeBRL)} hint={`cota de ${brl(f.perCota.priceBRL, 0)}`} />
@@ -284,12 +286,10 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
               <div className="mt-6">
                 <CashFlowChart cashFlows={f.cashFlows} />
               </div>
-              <div className="mt-6 grid gap-6 md:grid-cols-2">
-                <div>
-                  <h3 className="text-[14px] font-semibold">R$ 1.000 em {plant.finance.horizonYears} anos</h3>
-                  <BenchmarksChart benchmarks={f.benchmarks} highlight={plant.name} />
-                </div>
-                <ul className="space-y-2 text-[13px] text-muted">
+              <div className="mt-6">
+                <h3 className="text-[14px] font-semibold">Quanto vira R$ 1.000 em {plant.finance.horizonYears} anos</h3>
+                <BenchmarksChart benchmarks={f.benchmarks} />
+                <ul className="mt-3 space-y-2 text-[13px] text-muted">
                   {f.benchmarks.map((b) => (
                     <li key={b.name}>
                       <b className="text-ink-2">{b.name}</b> ({pct(b.annualPct)} a.a.): {b.note}
@@ -318,7 +318,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
                 <MonteCarloChart mc={f.monteCarlo} cdiPct={market.cdiPct} />
               </div>
               <p className="mt-2 text-[13px] text-muted">Variáveis sorteadas: {f.monteCarlo.variables.join(" · ")}.</p>
-              <h3 className="mt-6 text-[14px] font-semibold">Sensibilidade da TIR (base {pct(f.irrNominalPct)})</h3>
+              <h3 className="mt-6 text-[14px] font-semibold">Sensibilidade da TIR — variação em pontos percentuais sobre a base de {pct(f.irrNominalPct)}</h3>
               <TornadoChart rows={f.sensitivity} baseIrr={f.irrNominalPct} />
             </div>
           </Card>
@@ -409,7 +409,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
                       <tr key={`${p.id}-${i}`} className="border-b border-line/50 align-top">
                         <td className="py-2 pr-3">
                           <div className="text-ink">{p.name}</div>
-                          {p.note && <div className="text-[12px] text-muted">{p.note}</div>}
+                          {p.note && <div className="max-w-[560px] break-words text-[12px] text-muted">{p.note}</div>}
                           {p.url.startsWith("http") && (
                             <a href={p.url} target="_blank" rel="noopener noreferrer" className="block max-w-[420px] truncate font-mono text-[11px] text-muted hover:text-ink-2">
                               {p.url}
@@ -468,6 +468,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
                 cotaPriceUSDT={plant.token.cotaPriceUSDT}
                 minCotas={plant.token.minCotas}
                 cdiNetFinalOf1000={cdi?.finalValueOf1000BRL}
+                ufvReinvestedFinalOf1000={ufvReinvested?.finalValueOf1000BRL}
               />
             </div>
           </Card>

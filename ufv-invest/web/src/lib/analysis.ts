@@ -2,7 +2,7 @@ import "server-only";
 import { createHash } from "node:crypto";
 import { getPlant, plants } from "@/data/plants";
 import { analyzeFinance } from "@/lib/finance";
-import { canonicalAnalysisJson } from "@/lib/report";
+import { canonicalAnalysisJson } from "@/lib/report/canonical";
 import { instantPower, simulateGeneration } from "@/lib/solar";
 import { getLiveWeather, getLocationInfo, getMarketRates, getPvgisCrossCheck, getSolarResource, type LiveWeather } from "@/lib/sources";
 import type { LiveConditions, Plant, PlantAnalysis, Provenance } from "@/lib/types";

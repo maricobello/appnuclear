@@ -12,6 +12,8 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // ABIs gerados por contracts/scripts/export-abi.ts
+    "src/lib/web3/abi.ts",
   ]),
 ]);
 

@@ -2,7 +2,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { getPlantAnalysis } from "@/lib/analysis";
 import { readOnChainState } from "@/lib/web3/server";
 import { rateLimit } from "@/lib/rateLimit";
-import { renderAuditReport } from "@/lib/report";
+import { defaultReportId, renderAuditReport } from "@/lib/report";
 import { siteUrl } from "@/lib/web3/chains";
 
 export const maxDuration = 60;
@@ -16,7 +16,7 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/usinas/[slug
   if (!analysis) return NextResponse.json({ error: "usina não encontrada" }, { status: 404 });
 
   const onChain = await readOnChainState(slug).catch(() => null);
-  const reportId = `UFV-${analysis.plant.token.symbol}-${analysis.generatedAt.slice(0, 10).replaceAll("-", "")}-${analysis.dataHash.slice(0, 8).toUpperCase()}`;
+  const reportId = defaultReportId(analysis, new Date());
   const pdf = await renderAuditReport(analysis, { siteUrl, onChain, reportId });
   return new NextResponse(Buffer.from(pdf), {
     headers: {

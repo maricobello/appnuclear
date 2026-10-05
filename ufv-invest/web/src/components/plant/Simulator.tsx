@@ -15,6 +15,7 @@ export function Simulator({
   cotaPriceUSDT,
   minCotas,
   cdiNetFinalOf1000,
+  ufvReinvestedFinalOf1000,
 }: {
   cashFlows: CashFlowYear[];
   totalCotas: number;
@@ -22,6 +23,7 @@ export function Simulator({
   cotaPriceUSDT: number;
   minCotas: number;
   cdiNetFinalOf1000?: number;
+  ufvReinvestedFinalOf1000?: number;
 }) {
   const [cotas, setCotas] = useState(Math.max(minCotas, 50));
   const r = useMemo(() => {
@@ -44,8 +46,9 @@ export function Simulator({
       total,
       payback,
       cdiFinal: cdiNetFinalOf1000 ? (cdiNetFinalOf1000 / 1000) * invested : undefined,
+      ufvFinal: ufvReinvestedFinalOf1000 ? (ufvReinvestedFinalOf1000 / 1000) * invested : undefined,
     };
-  }, [cotas, totalCotas, cashFlows, cotaPriceBRL, cdiNetFinalOf1000]);
+  }, [cotas, totalCotas, cashFlows, cotaPriceBRL, cdiNetFinalOf1000, ufvReinvestedFinalOf1000]);
 
   const max = Math.min(totalCotas, 20000);
   return (
@@ -97,9 +100,10 @@ export function Simulator({
           <dd className="mt-1 text-[16px] font-semibold text-ink">{years(r.payback)}</dd>
         </div>
       </dl>
-      {r.cdiFinal !== undefined && (
+      {r.cdiFinal !== undefined && r.ufvFinal !== undefined && (
         <p className="mt-3 text-[13px] text-muted">
-          Para comparação: o mesmo valor no CDI (líquido de IR) chegaria a <b className="text-ink-2">{brl(r.cdiFinal, 0)}</b> no mesmo prazo.
+          Comparação no mesmo prazo: reinvestindo a renda das cotas no CDI, {brl(r.invested, 0)} chegariam a <b className="text-ink-2">{brl(r.ufvFinal, 0)}</b>; aplicando
+          tudo direto no CDI (líquido de IR), a <b className="text-ink-2">{brl(r.cdiFinal, 0)}</b>.
         </p>
       )}
       <p className="mt-2 text-[12px] text-muted">Projeção P50 em reais nominais, antes de impostos do investidor. Não é garantia de rendimento.</p>

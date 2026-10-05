@@ -3,7 +3,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   poweredByHeader: false,
   // fontes TTF lidas via fs pelo gerador de PDF (rotas de relatório)
-  outputFileTracingIncludes: { "/api/usinas/**": ["./src/lib/report/fonts/**"] },
+  outputFileTracingIncludes: { "/api/usinas/**": ["./src/lib/report/fonts/**/*"] },
   async headers() {
     return [
       {

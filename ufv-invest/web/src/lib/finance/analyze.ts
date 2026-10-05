@@ -207,6 +207,10 @@ function buildAssumptions(
     `CAPEX ±10 % altera a captação necessária na mesma proporção (mesma usina, mesmo fluxo), com seguro e reposição acompanhando; OPEX ±20 % sobre O&M, seguro e arrendamento; estresse regulatório com Fio B a 100 % desde ${FIOB_STRESS_FROM_YEAR}`,
   );
   add("Comparativos", `CDI convergindo para ${fmtPct(longTermNominalPct(market), 2)} a.a. (juro real + IPCA LP); IR de 15 % no CDI e no Tesouro IPCA+; poupança isenta; rendimento da usina bruto`);
-  if (market.provenance.length > 0) add("Fontes de mercado", market.provenance.map((p) => `${p.name} (${p.status})`).join("; "));
+  if (market.provenance.length > 0) {
+    // resumo curto; o detalhe de cada fonte (URL, horário, status) fica na tabela de procedência
+    const live = market.provenance.filter((p) => p.status === "live" || p.status === "cache").length;
+    add("Fontes de mercado", `BCB (SGS, Focus) e cotações cripto — ${live} de ${market.provenance.length} ao vivo`);
+  }
   return a;
 }

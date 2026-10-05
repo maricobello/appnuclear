@@ -18,6 +18,7 @@ export function GenerationChart({ monthly, p90Ratio }: { monthly: MonthlyGenerat
         {
           name: "P50 (mais provável)",
           type: "bar",
+          itemStyle: { color: C.s1 },
           barMaxWidth: 28,
           data: monthly.map((m) => ({ value: +m.energyMWh.toFixed(1), itemStyle: { color: C.s1, borderRadius: barRadius(1) } })),
         },
@@ -43,6 +44,7 @@ export function IrradianceChart({ ghi }: { ghi: number[] }) {
     () => ({
       ...base(),
       grid: { ...base().grid, top: 28 },
+      legend: { show: false },
       xAxis: catAxis(MONTHS),
       yAxis: valAxis("kWh/m²/dia", (v: number) => fmt1(v)),
       series: [{ name: "Irradiação global horizontal", type: "bar", barMaxWidth: 26, data: ghi.map((v) => ({ value: +v.toFixed(2), itemStyle: { color: C.s1, borderRadius: barRadius(1) } })) }],
@@ -61,6 +63,7 @@ export function CashFlowChart({ cashFlows }: { cashFlows: CashFlowYear[] }) {
     return {
       ...base(),
       grid: { ...base().grid, top: 28 },
+      legend: { show: false },
       xAxis: catAxis(years, { axisLabel: { color: C.muted, fontSize: 11, interval: "auto" } }),
       yAxis: valAxis("R$", fmtMi),
       series: [
@@ -98,12 +101,14 @@ export function MonteCarloChart({ mc, cdiPct }: { mc: MonteCarloSummary; cdiPct:
     return {
       ...base(),
       grid: { ...base().grid, top: 40 },
+      legend: { show: false },
       xAxis: catAxis(labels, { name: "TIR nominal", nameLocation: "middle", nameGap: 28, nameTextStyle: { color: C.muted }, axisLabel: { color: C.muted, fontSize: 10, interval: Math.ceil(labels.length / 6) - 1 } }),
       yAxis: valAxis("simulações", fmt0),
       series: [
         {
           name: "Cenários",
           type: "bar",
+          itemStyle: { color: C.s2 },
           barCategoryGap: "8%",
           data: mc.histogram.map((b) => ({ value: b.count, itemStyle: { color: C.s2, borderRadius: [3, 3, 0, 0] } })),
           markLine: {
@@ -128,17 +133,21 @@ export function MonteCarloChart({ mc, cdiPct }: { mc: MonteCarloSummary; cdiPct:
 
 export function TornadoChart({ rows, baseIrr }: { rows: SensitivityRow[]; baseIrr: number }) {
   const option = useMemo(() => {
-    const sorted = [...rows].sort((a, b) => Math.abs(a.irrHighPct - a.irrLowPct) - Math.abs(b.irrHighPct - b.irrLowPct));
+    // linhas que só afetam o VPL (ex.: taxa de desconto) não mudam a TIR — ficam fora do tornado
+    const sorted = rows
+      .filter((r) => Math.abs(r.irrHighPct - baseIrr) > 0.005 || Math.abs(r.irrLowPct - baseIrr) > 0.005)
+      .sort((a, b) => Math.abs(a.irrHighPct - a.irrLowPct) - Math.abs(b.irrHighPct - b.irrLowPct));
     return {
       ...base(),
       grid: { left: 8, right: 24, top: 36, bottom: 8, containLabel: true },
       legend: { ...base().legend, data: ["Cenário desfavorável", "Cenário favorável"] },
-      xAxis: valAxis("Δ TIR (p.p.)", (v: number) => fmt1(v), { position: "top" }),
-      yAxis: catAxis(sorted.map((r) => r.variable), { axisLabel: { color: C.ink2, fontSize: 11, width: 150, overflow: "truncate" } }),
+      xAxis: valAxis(undefined, (v: number) => `${v > 0 ? "+" : ""}${fmt1(v)}`, { position: "top" }),
+      yAxis: catAxis(sorted.map((r) => r.variable), { axisLabel: { color: C.ink2, fontSize: 11, width: 210, overflow: "truncate" } }),
       series: [
         {
           name: "Cenário desfavorável",
           type: "bar",
+          itemStyle: { color: C.neg },
           stack: "t",
           barMaxWidth: 16,
           data: sorted.map((r) => {
@@ -149,6 +158,7 @@ export function TornadoChart({ rows, baseIrr }: { rows: SensitivityRow[]; baseIr
         {
           name: "Cenário favorável",
           type: "bar",
+          itemStyle: { color: C.s2 },
           stack: "t",
           barMaxWidth: 16,
           data: sorted.map((r) => {
@@ -167,32 +177,35 @@ export function TornadoChart({ rows, baseIrr }: { rows: SensitivityRow[]; baseIr
       },
     };
   }, [rows, baseIrr]);
-  return <EChart option={option} height={Math.max(220, rows.length * 38 + 60)} label="Análise de sensibilidade da TIR (tornado)" />;
+  return <EChart option={option} height={Math.max(220, rows.length * 38 + 70)} label="Análise de sensibilidade da TIR em pontos percentuais (tornado)" />;
 }
 
-export function BenchmarksChart({ benchmarks, highlight }: { benchmarks: Benchmark[]; highlight?: string }) {
+export function BenchmarksChart({ benchmarks }: { benchmarks: Benchmark[] }) {
   const option = useMemo(() => {
     const sorted = [...benchmarks].sort((a, b) => a.finalValueOf1000BRL - b.finalValueOf1000BRL);
     return {
       ...base(),
       grid: { left: 8, right: 64, top: 12, bottom: 8, containLabel: true },
-      xAxis: valAxis(undefined, fmtMi, { splitLine: { lineStyle: { color: C.grid } } }),
+      legend: { show: false },
+      // valores rotulados direto nas barras: eixo X sem rótulos para não poluir
+      xAxis: valAxis(undefined, fmtMi, { axisLabel: { show: false }, splitLine: { show: false } }),
       yAxis: catAxis(sorted.map((b) => b.name), { axisLabel: { color: C.ink2, fontSize: 12 } }),
       series: [
         {
           name: "Valor final de R$ 1.000",
           type: "bar",
+          itemStyle: { color: C.s2 },
           barMaxWidth: 20,
           label: { show: true, position: "right", color: C.ink2, fontSize: 11, formatter: (p: { value: number }) => `R$ ${fmtMi(p.value)}` },
           data: sorted.map((b) => ({
             value: Math.round(b.finalValueOf1000BRL),
-            itemStyle: { color: highlight && b.name.includes(highlight) ? C.s1 : C.s2, borderRadius: [0, 4, 4, 0] },
+            itemStyle: { color: b.name.startsWith("UFV") ? C.s1 : C.s2, borderRadius: [0, 4, 4, 0] },
           })),
         },
       ],
       tooltip: { ...base().tooltip, valueFormatter: (v: number) => `R$ ${fmt0(v)}` },
     };
-  }, [benchmarks, highlight]);
+  }, [benchmarks]);
   return <EChart option={option} height={Math.max(200, benchmarks.length * 44 + 30)} label="Comparação do valor final de R$ 1.000 entre investimentos" />;
 }
 
@@ -202,6 +215,7 @@ export function ForecastChart({ forecast }: { forecast: LiveConditions["forecast
     return {
       ...base(),
       grid: { ...base().grid, top: 28 },
+      legend: { show: false },
       xAxis: catAxis(forecast.map((d) => fmtDay.format(new Date(`${d.date}T12:00:00Z`)))),
       yAxis: valAxis("MWh", fmt1),
       series: [{ name: "Energia prevista", type: "bar", barMaxWidth: 30, data: forecast.map((d) => ({ value: +d.energyMWh.toFixed(2), itemStyle: { color: C.s1, borderRadius: barRadius(1) } })) }],

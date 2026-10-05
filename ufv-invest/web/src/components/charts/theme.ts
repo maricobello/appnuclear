@@ -30,7 +30,7 @@ export function base() {
     backgroundColor: "transparent",
     animationDuration: 400,
     textStyle: { color: C.muted, fontFamily: "Geist, -apple-system, system-ui, sans-serif", fontSize: 12 },
-    grid: { left: 8, right: 16, top: 36, bottom: 8, containLabel: true },
+    grid: { left: 8, right: 16, top: 56, bottom: 8, containLabel: true },
     tooltip: {
       trigger: "axis",
       backgroundColor: "rgba(12,18,25,0.97)",
