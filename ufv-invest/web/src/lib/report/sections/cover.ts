@@ -3,7 +3,7 @@ import { MODALIDADE_LABEL, STATUS_LABEL, addressUrl, allProvenance, chainLabel }
 import { displayUrl, fmtBRL, fmtBRLCompact, fmtDateTime, fmtMultiple, fmtNum, fmtPct, fmtYears, groupHex, truncateMiddle } from "../format";
 import { verdictItems } from "../insights";
 import { Layout } from "../layout";
-import { C, PAGE, SIZE } from "../theme";
+import { C, PAGE } from "../theme";
 
 export const ILLUSTRATIVE_TEXT =
   "Projeto ilustrativo: dados de engenharia e financeiros hipotéticos; recurso solar e dados do local obtidos de fontes públicas.";
@@ -25,10 +25,18 @@ export function renderCover(ctx: ReportContext): void {
   const textW = PAGE.width - 2 * PAGE.marginX - qrBox - 24;
 
   l.text("RELATÓRIO DE AUDITORIA TÉCNICA E ECONÔMICA", x, 56, { font: "semibold", size: 7.6, color: C.amber });
+  // nome: reduz até 18 pt; se ainda não couber, quebra em até 2 linhas (a 2ª truncada)
   let nameSize = 25;
-  while (nameSize > 15 && l.textWidth(p.name, "bold", nameSize) > textW) nameSize -= 1;
-  l.text(p.name, x, 56 + 10 + nameSize, { font: "bold", size: nameSize, color: C.white });
-  let y = 56 + 10 + nameSize + 16;
+  while (nameSize > 18 && l.textWidth(p.name, "bold", nameSize) > textW) nameSize -= 1;
+  let nameLines = l.wrap(p.name, "bold", nameSize, textW);
+  if (nameLines.length > 2) nameLines = [nameLines[0], l.fit(nameLines.slice(1).join(" "), "bold", nameSize, textW)];
+  let y = 56 + 10;
+  nameLines.forEach((ln, i) => {
+    y += i === 0 ? nameSize : nameSize * 1.12;
+    l.text(ln, x, y, { font: "bold", size: nameSize, color: C.white, width: textW, truncate: true });
+  });
+  y += 16;
+  const tagMax = nameLines.length > 1 ? 1 : 2;
   l.text(
     `${p.location.municipio} / ${p.location.uf}  ·  ${p.location.distribuidora}  ·  Submercado ${p.location.submercado}`,
     x,
@@ -36,7 +44,9 @@ export function renderCover(ctx: ReportContext): void {
     { size: 9, color: C.heroText, width: textW, truncate: true },
   );
   y += 7;
-  const tagLines = l.wrap(p.tagline, "regular", 8, textW).slice(0, 2);
+  const tagAll = l.wrap(p.tagline, "regular", 8, textW);
+  const tagLines = tagAll.slice(0, tagMax);
+  if (tagAll.length > tagMax) tagLines[tagMax - 1] = l.fit(tagAll.slice(tagMax - 1).join(" "), "regular", 8, textW);
   for (const ln of tagLines) {
     y += 11;
     l.text(ln, x, y, { size: 8, color: C.headerMuted });
@@ -193,5 +203,4 @@ export function renderIntegrityBox(ctx: ReportContext): void {
   });
   l.link(rightX, ry, rightW, lh, verifyUrl);
   l.y = top + h + 6;
-  void SIZE;
 }

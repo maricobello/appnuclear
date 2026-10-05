@@ -458,7 +458,7 @@ export class Layout {
 
   wrap(text: string, fontKey: FontKey, size: number, maxWidth: number): string[] {
     return this.wrapRuns([{ text, font: fontKey }], size, maxWidth, fontKey).map((l) =>
-      l.map((t) => (t.spaceBefore ? " " : "") + t.text).join(""),
+      l.map((t) => (t.spaceBefore ? " " : "") + t.text).join("").replace(/\u00a0/g, " "),
     );
   }
 
