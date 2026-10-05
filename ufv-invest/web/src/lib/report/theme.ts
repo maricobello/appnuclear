@@ -28,6 +28,8 @@ export const C = {
   white: hex("#FFFFFF"),
   steel: hex("#64748B"),
   sky: hex("#3B82A6"),
+  headerMuted: hex("#AFC0CC"),
+  heroText: hex("#DCE6EC"),
 };
 
 export const PAGE = {
