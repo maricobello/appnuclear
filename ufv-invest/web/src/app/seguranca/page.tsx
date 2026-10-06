@@ -15,7 +15,7 @@ const walletTiers = [
   },
   {
     tier: "Alta",
-    tone: "text-[#7fb2f0]",
+    tone: "text-info",
     items: [
       "Rabby — mostra a simulação do que cada transação fará antes de você assinar",
       "Binance Wallet (extensão ou app, autocustódia MPC) — nativa da BNB Chain",

@@ -1,17 +1,17 @@
 /**
- * Tema dos gráficos (canvas → hex). Paleta validada contra a superfície #0c1219 (skill dataviz):
- * série principal âmbar #c98500, secundária azul #3987e5, negativo #e66767.
+ * Tema dos gráficos (canvas → hex). Paleta validada contra a superfície branca (skill dataviz):
+ * série principal âmbar #c07f00, secundária azul #2a78d6, negativo #e34948.
  */
 export const C = {
-  surface: "#0c1219",
-  grid: "#1a2430",
-  axis: "#2a3644",
-  ink: "#eef2f6",
-  ink2: "#b9c3cf",
-  muted: "#8592a3",
-  s1: "#c98500",
-  s2: "#3987e5",
-  neg: "#e66767",
+  surface: "#ffffff",
+  grid: "#e6ebf1",
+  axis: "#cbd5e1",
+  ink: "#0b1b2b",
+  ink2: "#33475b",
+  muted: "#64748b",
+  s1: "#c07f00",
+  s2: "#2a78d6",
+  neg: "#e34948",
 };
 
 const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });
@@ -33,13 +33,13 @@ export function base() {
     grid: { left: 8, right: 16, top: 56, bottom: 8, containLabel: true },
     tooltip: {
       trigger: "axis",
-      backgroundColor: "rgba(12,18,25,0.97)",
-      borderColor: "rgba(148,163,184,0.25)",
+      backgroundColor: "rgba(255,255,255,0.98)",
+      borderColor: "rgba(15,30,50,0.12)",
       borderWidth: 1,
       padding: [8, 10],
       textStyle: { color: C.ink, fontSize: 12 },
-      extraCssText: "border-radius:8px;box-shadow:none;",
-      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(148,163,184,0.08)" } },
+      extraCssText: "border-radius:10px;box-shadow:0 8px 24px rgba(15,30,50,0.12);",
+      axisPointer: { type: "shadow", shadowStyle: { color: "rgba(15,30,50,0.05)" } },
       confine: true,
     },
     legend: { top: 0, left: 0, icon: "roundRect", itemWidth: 12, itemHeight: 8, textStyle: { color: C.ink2, fontSize: 12 } },

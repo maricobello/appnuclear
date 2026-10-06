@@ -146,6 +146,10 @@ export function summarize(a: PlantAnalysis) {
     symbol: plant.token.symbol,
     tags,
     cover: plant.cover ?? null,
+    selicPct: a.market.selicPct,
+    cdiPct: a.market.cdiPct,
+    /** previsão de geração de amanhã (Open-Meteo + modelo), quando disponível */
+    forecastNextMWh: a.live?.forecast?.[1]?.energyMWh ?? null,
   };
 }
 export type PlantSummary = ReturnType<typeof summarize>;

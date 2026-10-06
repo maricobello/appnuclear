@@ -51,7 +51,7 @@ export function OfferProgress({
           <span className="font-medium text-good">Captação concluída</span>
           <span className="tnum text-muted">100%</span>
         </div>
-        <div className="mt-1.5 h-1.5 rounded-full bg-good/70" />
+        <div className="mt-1.5 h-1.5 rounded-full bg-good" />
       </div>
     );
   }
@@ -85,8 +85,8 @@ export function OfferProgress({
         <span className="tnum text-muted">{daysLeft > 0 ? `${daysLeft} dias restantes` : endSec ? `até ${dateBR(endSec * 1000)}` : ""}</span>
       </div>
       <div className="relative mt-1.5 h-1.5 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-valuenow={pctSold} aria-valuemin={0} aria-valuemax={100} aria-label="Captação">
-        <div className={cx("h-full rounded-full bg-gradient-to-r from-[#d98e04] to-brand")} style={{ width: `${Math.max(live ? 1.5 : 0, Math.min(100, pctSold))}%` }} />
-        <div className="absolute top-0 h-full w-px bg-ink/60" style={{ left: `${softPct}%` }} title="meta mínima" />
+        <div className={cx("h-full rounded-full bg-gradient-to-r from-[#f5a524] to-[#e08600]")} style={{ width: `${Math.max(live ? 1.5 : 0, Math.min(100, pctSold))}%` }} />
+        <div className="absolute top-0 h-full w-px bg-ink/50" style={{ left: `${softPct}%` }} title="meta mínima" />
       </div>
     </div>
   );

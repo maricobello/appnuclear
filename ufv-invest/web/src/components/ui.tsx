@@ -44,14 +44,14 @@ export function Badge({ children, tone = "default", className }: { children: Rea
     good: "border-good/40 bg-good/10 text-good",
     warning: "border-warning/40 bg-warning/10 text-warning",
     critical: "border-critical/40 bg-critical/10 text-critical",
-    info: "border-series-2/40 bg-series-2/10 text-[#7fb2f0]",
+    info: "border-series-2/40 bg-series-2/10 text-info",
   };
   return <span className={cx("inline-flex items-center gap-1 rounded-full border px-2.5 py-0.5 text-[12px] font-medium", tones[tone], className)}>{children}</span>;
 }
 
 export function Notice({ tone = "info", title, children }: { tone?: "info" | "warning" | "critical" | "good"; title?: ReactNode; children: ReactNode }) {
   const Icon = tone === "warning" ? AlertTriangle : tone === "critical" ? XCircle : tone === "good" ? CheckCircle2 : Info;
-  const color = tone === "warning" ? "text-warning border-warning/30 bg-warning/5" : tone === "critical" ? "text-critical border-critical/30 bg-critical/5" : tone === "good" ? "text-good border-good/30 bg-good/5" : "text-[#7fb2f0] border-series-2/30 bg-series-2/5";
+  const color = tone === "warning" ? "text-warning border-warning/30 bg-warning/5" : tone === "critical" ? "text-critical border-critical/30 bg-critical/5" : tone === "good" ? "text-good border-good/30 bg-good/5" : "text-info border-series-2/30 bg-series-2/5";
   return (
     <div className={cx("flex gap-3 rounded-[var(--radius)] border px-4 py-3 text-[13px]", color)} role={tone === "critical" ? "alert" : "status"}>
       <Icon className="mt-0.5 size-4 shrink-0" aria-hidden />
@@ -77,9 +77,9 @@ export function SectionTitle({ eyebrow, title, children, id }: { eyebrow?: strin
 
 export const buttonClass = {
   primary:
-    "inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-[14px] font-semibold text-brand-ink transition hover:brightness-110 disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg bg-ink px-4 py-2.5 text-[14px] font-semibold text-white shadow-sm transition hover:bg-[#16304a] disabled:cursor-not-allowed disabled:opacity-50",
   secondary:
-    "inline-flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-surface-2 px-4 py-2.5 text-[14px] font-semibold text-ink transition hover:bg-surface-3 disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-surface px-4 py-2.5 text-[14px] font-semibold text-ink shadow-sm transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50",
   ghost: "inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-2 transition hover:bg-surface-2 hover:text-ink disabled:opacity-50",
 };
 

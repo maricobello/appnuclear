@@ -1,37 +1,38 @@
 @import "tailwindcss";
 
 /*
- * UFV Invest — sistema de design.
- * Escuro por padrão (plataforma de investimento on-chain), contraste alto, números tabulares.
- * Marca: âmbar solar (ação/destaque) sobre azul-noite; verde reservado a estados "bom".
- * Paleta de gráficos validada (skill de dataviz) contra a superfície #0c1219:
- *   série principal (geração/usina) #c98500 · série secundária (P90/benchmarks) #3987e5 ·
- *   negativo #e66767. Âmbar claro #f5a524 é cor de interface (botões), não de marca de dado.
+ * Tema claro, sóbrio (padrão fintech): fundo frio quase branco, tinta azul-noite,
+ * botões principais escuros, âmbar solar só como destaque. Paleta dos gráficos validada
+ * (skill de dataviz) contra a superfície branca: âmbar #c07f00, azul #2a78d6, negativo #e34948.
  */
 :root {
-  color-scheme: dark;
-  --page: #070b10;
-  --surface: #0c1219;
-  --surface-2: #111a24;
-  --surface-3: #18232f;
-  --border: rgba(148, 163, 184, 0.12);
-  --border-strong: rgba(148, 163, 184, 0.22);
-  --ink: #eef2f6;
-  --ink-2: #b9c3cf;
-  --muted: #8592a3;
-  --brand: #f5a524;
-  --brand-ink: #1a1203;
-  --brand-soft: rgba(245, 165, 36, 0.12);
-  --series-1: #c98500;
-  --series-2: #3987e5;
-  --series-neg: #e66767;
-  --grid: #1a2430;
-  --axis: #2a3644;
-  --good: #22c55e;
-  --warning: #fab219;
-  --serious: #ec835a;
-  --critical: #ef5350;
-  --radius: 10px;
+  color-scheme: light;
+  --page: #f6f8fa;
+  --surface: #ffffff;
+  --surface-2: #f2f5f8;
+  --surface-3: #e7ecf2;
+  --border: rgba(15, 30, 50, 0.08);
+  --border-strong: rgba(15, 30, 50, 0.16);
+  --ink: #0b1b2b;
+  --ink-2: #33475b;
+  --muted: #64748b;
+  /* âmbar/bronze para texto e preenchimentos com contraste ≥ 4,5:1 sobre o branco */
+  --brand: #a35d00;
+  --brand-ink: #ffffff;
+  --brand-soft: #fff5e3;
+  /* sol: só decorativo (barras, brilhos, ícones) */
+  --sun: #f5a524;
+  --series-1: #c07f00;
+  --series-2: #2a78d6;
+  --series-neg: #e34948;
+  --grid: #e6ebf1;
+  --axis: #cbd5e1;
+  --good: #11804f;
+  --warning: #9a5b00;
+  --serious: #c2410c;
+  --critical: #c62828;
+  --info: #1d5fb8;
+  --radius: 12px;
 }
 
 @theme inline {
@@ -53,6 +54,8 @@
   --color-warning: var(--warning);
   --color-serious: var(--serious);
   --color-critical: var(--critical);
+  --color-info: var(--info);
+  --color-sun: var(--sun);
   --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, Menlo, monospace;
 }
@@ -72,7 +75,7 @@ body {
 }
 
 ::selection {
-  background: rgba(245, 165, 36, 0.35);
+  background: rgba(245, 165, 36, 0.3);
 }
 
 :focus-visible {
@@ -85,19 +88,90 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-/* brilho do herói: radial âmbar discreto, sem imagem externa */
+/* brilho suave do herói (âmbar + azul), sem imagem externa */
 .hero-glow {
   background:
-    radial-gradient(60rem 30rem at 85% -10%, rgba(245, 165, 36, 0.16), transparent 60%),
-    radial-gradient(40rem 24rem at -10% 20%, rgba(57, 135, 229, 0.12), transparent 60%);
+    radial-gradient(48rem 26rem at 88% -8%, rgba(245, 165, 36, 0.16), transparent 62%),
+    radial-gradient(40rem 22rem at -6% 12%, rgba(42, 120, 214, 0.08), transparent 60%);
 }
 
-.grid-texture {
-  background-image:
-    linear-gradient(to right, rgba(148, 163, 184, 0.05) 1px, transparent 1px),
-    linear-gradient(to bottom, rgba(148, 163, 184, 0.05) 1px, transparent 1px);
-  background-size: 44px 44px;
-  mask-image: radial-gradient(ellipse at center, black 30%, transparent 75%);
+/* ─── Componentes no estilo Magic UI (implementação local, sem dependências) ─── */
+
+/* Dot pattern com máscara radial */
+.dot-pattern {
+  background-image: radial-gradient(rgba(15, 30, 50, 0.16) 1px, transparent 1px);
+  background-size: 22px 22px;
+  mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%);
+}
+
+/* Texto com brilho deslizante (Animated Shiny Text) */
+.shiny-text {
+  background: linear-gradient(110deg, var(--ink-2) 35%, var(--sun) 50%, var(--ink-2) 65%);
+  background-size: 250% 100%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  animation: shiny 3.2s linear infinite;
+}
+@keyframes shiny {
+  from { background-position: 100% 0; }
+  to { background-position: -100% 0; }
+}
+
+/* Marquee */
+.marquee {
+  mask-image: linear-gradient(to right, transparent, black 10%, black 90%, transparent);
+}
+.marquee-track {
+  animation: marquee 32s linear infinite;
+}
+.marquee:hover .marquee-track {
+  animation-play-state: paused;
+}
+@keyframes marquee {
+  from { transform: translateX(0); }
+  to { transform: translateX(-50%); }
+}
+
+/* Border Beam: feixe de luz percorrendo a borda do card */
+.border-beam {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1.5px;
+  pointer-events: none;
+  background: conic-gradient(from var(--beam-angle), transparent 0deg 300deg, var(--sun) 330deg, #ffd27a 345deg, transparent 360deg);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: beam 6s linear infinite;
+}
+@property --beam-angle {
+  syntax: "<angle>";
+  initial-value: 0deg;
+  inherits: false;
+}
+@keyframes beam {
+  to { --beam-angle: 360deg; }
+}
+
+/* Shimmer button */
+.shimmer-btn {
+  position: relative;
+  overflow: hidden;
+  isolation: isolate;
+}
+.shimmer-btn::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(110deg, transparent 30%, rgba(255, 255, 255, 0.22) 50%, transparent 70%);
+  transform: translateX(-100%);
+  animation: shimmer 2.8s ease-in-out infinite;
+  z-index: -1;
+}
+@keyframes shimmer {
+  60%, 100% { transform: translateX(100%); }
 }
 
 @media (prefers-reduced-motion: reduce) {

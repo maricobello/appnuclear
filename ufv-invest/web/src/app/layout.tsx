@@ -18,7 +18,7 @@ export const metadata: Metadata = {
   openGraph: { title: "UFV Invest", description: "Cotas tokenizadas de usinas solares na BNB Chain", type: "website", locale: "pt_BR" },
 };
 
-export const viewport: Viewport = { themeColor: "#070b10", colorScheme: "dark" };
+export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const initialState = cookieToInitialState(wagmiConfig, (await headers()).get("cookie"));

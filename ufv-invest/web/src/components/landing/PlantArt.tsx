@@ -9,11 +9,11 @@ type Variant = { sky: [string, string, string]; ground: [string, string]; veg: s
 
 const VARIANTS: Record<string, Variant> = {
   // cerrado do norte de Minas, fim de tarde
-  "ufv-janauba-1": { sky: ["#0b1626", "#3b2a3a", "#f0a040"], ground: ["#6b5a36", "#2e2a1c"], veg: ["#3f5a2a", "#56703a", "#2f4420"], sunX: 380 },
+  "ufv-janauba-1": { sky: ["#4f9ee0", "#a8d2f2", "#fbe3b8"], ground: ["#a08a5c", "#6e5a36"], veg: ["#4f6b2e", "#65803a", "#3e5524"], sunX: 380 },
   // caatinga do Vale do São Francisco, luz alta com rio ao lado
-  "ufv-petrolina-1": { sky: ["#0d2036", "#2c4a6a", "#e8b860"], ground: ["#8a6a40", "#3a2c1a"], veg: ["#6e6a3a", "#857a44", "#4f4a28"], sunX: 120, river: true },
+  "ufv-petrolina-1": { sky: ["#5aa8e8", "#b3dbf7", "#fdebc6"], ground: ["#b8925a", "#7a5a32"], veg: ["#7d7a40", "#938a4c", "#5e5a30"], sunX: 120, river: true },
   // oeste baiano, solo avermelhado, manhã
-  "ufv-bom-jesus-da-lapa-1": { sky: ["#0a1424", "#40303a", "#f5a524"], ground: ["#8a4a2e", "#3a1e14"], veg: ["#4a5a2c", "#5e6c34", "#38461f"], sunX: 90 },
+  "ufv-bom-jesus-da-lapa-1": { sky: ["#4c9be0", "#a6d0f2", "#fde2b0"], ground: ["#b0663e", "#74391f"], veg: ["#55672f", "#6b7c39", "#435224"], sunX: 90 },
 };
 
 function rng(seedStr: string) {
@@ -126,8 +126,8 @@ export function PlantArt({ slug, mounting, className, title }: { slug: string; m
           <stop offset="1" stopColor="#f5a524" stopOpacity="0" />
         </radialGradient>
         <linearGradient id={`fade-${id}`} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0.55" stopColor="#070b10" stopOpacity="0" />
-          <stop offset="1" stopColor="#070b10" stopOpacity="0.75" />
+          <stop offset="0.6" stopColor="#0b1b2b" stopOpacity="0" />
+          <stop offset="1" stopColor="#0b1b2b" stopOpacity="0.45" />
         </linearGradient>
       </defs>
 
@@ -135,7 +135,7 @@ export function PlantArt({ slug, mounting, className, title }: { slug: string; m
       <circle cx={v.sunX} cy={HORIZON - 6} r="70" fill={`url(#sun-${id})`} />
       <circle cx={v.sunX} cy={HORIZON - 6} r="11" fill="#fff1c9" />
       {/* serras ao fundo */}
-      <path d={`M0,${HORIZON} L40,${HORIZON - 12} L90,${HORIZON - 6} L150,${HORIZON - 18} L210,${HORIZON - 8} L270,${HORIZON - 15} L330,${HORIZON - 5} L400,${HORIZON - 16} L480,${HORIZON - 7} L480,${HORIZON + 2} L0,${HORIZON + 2}Z`} fill="#1a1c22" opacity="0.55" />
+      <path d={`M0,${HORIZON} L40,${HORIZON - 12} L90,${HORIZON - 6} L150,${HORIZON - 18} L210,${HORIZON - 8} L270,${HORIZON - 15} L330,${HORIZON - 5} L400,${HORIZON - 16} L480,${HORIZON - 7} L480,${HORIZON + 2} L0,${HORIZON + 2}Z`} fill="#6f86a3" opacity="0.45" />
       <rect y={HORIZON} width={W} height={H - HORIZON} fill={`url(#ground-${id})`} />
 
       {v.river && <path d={`M480,${HORIZON + 6} C430,${HORIZON + 40} 470,${HORIZON + 90} 420,${H}`} stroke="#3a7fb5" strokeWidth="16" fill="none" opacity="0.7" />}

@@ -48,7 +48,7 @@ export function Showcase({ items, cards }: { items: PlantSummary[]; cards: Recor
                 onClick={() => setFilter(f.id)}
                 className={cx(
                   "rounded-full border px-3.5 py-1.5 text-[13px] font-medium transition",
-                  filter === f.id ? "border-brand bg-brand text-brand-ink" : "border-line-strong bg-surface text-ink-2 hover:text-ink",
+                  filter === f.id ? "border-ink bg-ink text-white" : "border-line-strong bg-surface text-ink-2 hover:text-ink",
                 )}
               >
                 {f.label} <span className="ml-1 tnum opacity-70">{count}</span>
