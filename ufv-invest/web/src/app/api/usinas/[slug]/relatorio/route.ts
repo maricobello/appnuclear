@@ -7,6 +7,13 @@ import { siteUrl } from "@/lib/web3/chains";
 
 export const maxDuration = 60;
 
+/**
+ * Cache do PDF por usina (mesma análise = mesmo relatório): a geração custa ~1 s de CPU, então
+ * requisições repetidas reaproveitam o arquivo enquanto o hash dos dados não mudar (máx. 15 min).
+ */
+const pdfCache = new Map<string, { at: number; dataHash: string; reportId: string; bytes: Uint8Array }>();
+const PDF_TTL_MS = 15 * 60_000;
+
 /** Relatório de auditoria técnica e econômica em PDF (com o JSON canônico anexado). */
 export async function GET(req: NextRequest, ctx: RouteContext<"/api/usinas/[slug]/relatorio">) {
   const limited = rateLimit(req, "report", 10, 60_000);
@@ -15,9 +22,15 @@ export async function GET(req: NextRequest, ctx: RouteContext<"/api/usinas/[slug
   const analysis = await getPlantAnalysis(slug);
   if (!analysis) return NextResponse.json({ error: "usina não encontrada" }, { status: 404 });
 
-  const onChain = await readOnChainState(slug).catch(() => null);
-  const reportId = defaultReportId(analysis, new Date());
-  const pdf = await renderAuditReport(analysis, { siteUrl, onChain, reportId });
+  let entry = pdfCache.get(slug);
+  if (!entry || entry.dataHash !== analysis.dataHash || Date.now() - entry.at > PDF_TTL_MS) {
+    const onChain = await readOnChainState(slug).catch(() => null);
+    const reportId = defaultReportId(analysis, new Date());
+    const bytes = await renderAuditReport(analysis, { siteUrl, onChain, reportId });
+    entry = { at: Date.now(), dataHash: analysis.dataHash, reportId, bytes };
+    pdfCache.set(slug, entry);
+  }
+  const { reportId, bytes: pdf } = entry;
   return new NextResponse(Buffer.from(pdf), {
     headers: {
       "Content-Type": "application/pdf",

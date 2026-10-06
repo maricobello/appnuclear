@@ -134,15 +134,16 @@ export function VerifyReport() {
               </div>
             )}
             {res.embeddedHash && (
-              <div className={cx("flex gap-3 rounded-xl border p-3", res.jsonOk ? "border-good/30 bg-good/5" : "border-warning/30 bg-warning/5")}>
-                {res.jsonOk ? <CheckCircle2 className="size-5 shrink-0 text-good" /> : <XCircle className="size-5 shrink-0 text-warning" />}
+              <div className={cx("flex gap-3 rounded-xl border p-3", res.jsonOk ? "border-line bg-surface-2" : "border-warning/30 bg-warning/5")}>
+                {res.jsonOk ? <CheckCircle2 className="size-5 shrink-0 text-muted" /> : <XCircle className="size-5 shrink-0 text-warning" />}
                 <div className="text-ink-2">
                   {res.jsonOk ? (
                     <>
-                      <b className="text-ink">Dados íntegros.</b> O JSON anexado ao PDF reproduz a impressão digital declarada no relatório.
+                      <b className="text-ink">Consistência interna ok.</b> O JSON anexado reproduz a impressão digital impressa no relatório. Isso mostra que o PDF não
+                      foi editado de forma descuidada, mas não prova a origem: só a correspondência com o registro on-chain (acima) prova que o documento é o oficial.
                     </>
                   ) : (
-                    <>Os dados anexados não reproduzem a impressão digital declarada — o PDF pode ter sido alterado.</>
+                    <>Os dados anexados não reproduzem a impressão digital declarada no relatório — o PDF foi alterado depois de gerado.</>
                   )}
                   <div className="mt-1 break-all font-mono text-[11px] text-muted">dados {res.embeddedHash}</div>
                 </div>
