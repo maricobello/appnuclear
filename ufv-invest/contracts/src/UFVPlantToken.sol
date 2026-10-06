@@ -29,13 +29,19 @@ import {IIdentityRegistry} from "./interfaces/IIdentityRegistry.sol";
  *           uma transferência fica com quem transferiu.
  *
  * @dev PRESSUPOSTOS DE CONFIANÇA (leia antes de investir/auditar):
- *      - `DEFAULT_ADMIN_ROLE` é poderoso: concede/revoga papéis, pode `recover` (mover saldo e
- *        receita pendente de qualquer carteira para outra carteira verificada — exigido para
- *        valores mobiliários, mas é uma permissão de custódia) e retirar tokens enviados por engano
- *        (`rescueTokens`, que NUNCA toca a receita reservada aos investidores). Por isso o admin
+ *      - `DEFAULT_ADMIN_ROLE` é poderoso: concede/revoga papéis (exceto `MINTER_ROLE`), pode
+ *        `recover` (mover saldo e receita pendente de qualquer carteira para outra carteira
+ *        verificada — exigido para valores mobiliários, mas é uma permissão de custódia) e retirar
+ *        tokens enviados por engano (`rescueTokens`, que NUNCA toca a receita reservada aos
+ *        investidores). Por isso o admin
  *        DEVE ser uma Safe multisig (recomendado: ≥ 3 de 5, signatários independentes) e, de
  *        preferência, atrás de um timelock para `recover`. A troca de admin é em 2 etapas com
  *        atraso (`AccessControlDefaultAdminRules`).
+ *      - EMISSOR ÚNICO E IMUTÁVEL: o `MINTER_ROLE` é definido uma única vez com `setMinter` (a
+ *        oferta) e é administrado por `MINTER_ADMIN_ROLE`, que ninguém possui nem pode receber —
+ *        portanto nem o admin consegue conceder, revogar ou trocar o emissor depois. Ninguém além
+ *        da oferta emite cotas, e ninguém impede a oferta de entregá-las.
+ *      - DOCUMENTOS: só `DOCUMENT_ROLE` (a Safe) publica/remove relatórios; a carteira de KYC não.
  *      - O `IdentityRegistry` é confiável: quem controla o `COMPLIANCE_ROLE` de lá decide quem
  *        pode transferir e sacar receita.
  *      - `PAUSER_ROLE` pode pausar transferências, distribuições e saques de receita (não pausa
@@ -57,14 +63,17 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
 
     // ─── Papéis e constantes ────────────────────────────────────────────────────────────────
 
-    /// @notice Emite cotas (concedido ao contrato da oferta).
+    /// @notice Emite cotas. Concedido uma única vez, via `setMinter`, ao contrato da oferta.
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
+    /// @notice Papel-administrador do `MINTER_ROLE`. NINGUÉM o possui e ele administra a si mesmo,
+    ///         então `grantRole`/`revokeRole` de `MINTER_ROLE` são impossíveis para sempre.
+    bytes32 public constant MINTER_ADMIN_ROLE = keccak256("MINTER_ADMIN_ROLE");
     /// @notice Deposita a receita da SPE para distribuição (tesouraria/multisig da SPE).
     bytes32 public constant DISTRIBUTOR_ROLE = keccak256("DISTRIBUTOR_ROLE");
     /// @notice Pausa/despausa transferências, distribuições e saques.
     bytes32 public constant PAUSER_ROLE = keccak256("PAUSER_ROLE");
-    /// @notice Gerencia o registro de documentos (junto com o admin).
-    bytes32 public constant COMPLIANCE_ROLE = keccak256("COMPLIANCE_ROLE");
+    /// @notice Publica/remove documentos (relatórios de auditoria). Deve ficar só com a Safe do admin.
+    bytes32 public constant DOCUMENT_ROLE = keccak256("DOCUMENT_ROLE");
 
     /// @notice Atraso inicial para trocar o `DEFAULT_ADMIN_ROLE`.
     uint48 public constant ADMIN_TRANSFER_DELAY = 2 days;
@@ -84,6 +93,8 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
 
     /// @notice `true` depois de `finishMinting` (irreversível). Distribuições só depois disso.
     bool public mintingFinished;
+    /// @notice Único emissor (a oferta), definido uma vez por `setMinter`; zero até lá.
+    address public minter;
 
     /// @notice Total de `payoutToken` já depositado via `distribute`.
     uint256 public totalDistributed;
@@ -109,6 +120,7 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
 
     // ─── Eventos ────────────────────────────────────────────────────────────────────────────
 
+    event MinterSet(address indexed minter, address indexed operator);
     event MintingFinished(uint256 totalSupply);
     event RevenueDistributed(
         address indexed distributor, bytes32 indexed periodRef, uint256 amount, uint256 magnifiedRevenuePerShare
@@ -135,6 +147,7 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
     error NotVerified(address account);
     error MaxSupplyExceeded(uint256 requestedSupply, uint256 maxSupply);
     error MintingAlreadyFinished();
+    error MinterAlreadySet(address minter);
     error MintingNotFinished();
     error NoSupply();
     error TransferAmountMismatch(uint256 expected, uint256 received);
@@ -169,6 +182,9 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
         maxSupply = maxSupply_;
         identityRegistry = registry_;
         payoutToken = payoutToken_;
+        // MINTER_ROLE fica sob um papel que ninguém tem e que só ele mesmo administra
+        _setRoleAdmin(MINTER_ROLE, MINTER_ADMIN_ROLE);
+        _setRoleAdmin(MINTER_ADMIN_ROLE, MINTER_ADMIN_ROLE);
     }
 
     /// @notice Cotas são indivisíveis.
@@ -177,6 +193,18 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
     }
 
     // ─── Emissão ────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Define o emissor (o contrato da oferta). Só `DEFAULT_ADMIN_ROLE`, UMA ÚNICA VEZ:
+     *         depois disso ninguém (nem o admin) concede, revoga ou troca o `MINTER_ROLE`.
+     */
+    function setMinter(address minter_) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        if (minter != address(0)) revert MinterAlreadySet(minter);
+        if (minter_ == address(0)) revert ZeroAddress();
+        minter = minter_;
+        _grantRole(MINTER_ROLE, minter_);
+        emit MinterSet(minter_, msg.sender);
+    }
 
     /**
      * @notice Emite `amount` cotas para `to`. Só `MINTER_ROLE`, respeitando `maxSupply`, e só
@@ -192,9 +220,8 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
 
     /**
      * @notice Encerra a emissão para sempre. Chamado pela oferta ao terminar a liquidação.
-     * @dev Só `MINTER_ROLE`. Se o admin precisar encerrar manualmente, ele concede a si mesmo o
-     *      `MINTER_ROLE` (ação explícita e auditável) — evita encerrar por engano antes da oferta
-     *      entregar as cotas.
+     * @dev Só `MINTER_ROLE` (a oferta, imutável): o admin não consegue encerrar a emissão antes de
+     *      a oferta entregar as cotas.
      */
     function finishMinting() external onlyRole(MINTER_ROLE) {
         if (mintingFinished) revert MintingAlreadyFinished();
@@ -282,21 +309,14 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
 
     // ─── Documentos (ERC-1643) ──────────────────────────────────────────────────────────────
 
-    modifier onlyDocumentManager() {
-        if (!hasRole(DEFAULT_ADMIN_ROLE, msg.sender) && !hasRole(COMPLIANCE_ROLE, msg.sender)) {
-            revert AccessControlUnauthorizedAccount(msg.sender, COMPLIANCE_ROLE);
-        }
-        _;
-    }
-
     /**
-     * @notice Publica ou atualiza um documento (ex.: relatório de auditoria em PDF).
+     * @notice Publica ou atualiza um documento (ex.: relatório de auditoria em PDF). Só `DOCUMENT_ROLE`.
      * @param name Identificador (ex.: `bytes32("AUDIT-2027-Q1")`). Use nomes distintos por
      *        relatório para manter o histórico consultável sem depender de eventos.
      * @param uri Onde o arquivo está (https/ipfs).
      * @param documentHash SHA-256 do arquivo, para o investidor conferir a integridade.
      */
-    function setDocument(bytes32 name, string calldata uri, bytes32 documentHash) external onlyDocumentManager {
+    function setDocument(bytes32 name, string calldata uri, bytes32 documentHash) external onlyRole(DOCUMENT_ROLE) {
         if (name == bytes32(0)) revert InvalidDocumentName();
         if (bytes(uri).length == 0) revert EmptyDocumentUri();
         if (_documentPosition[name] == 0) {
@@ -308,7 +328,7 @@ contract UFVPlantToken is ERC20, AccessControlDefaultAdminRules, Pausable, Reent
     }
 
     /// @notice Remove um documento do índice.
-    function removeDocument(bytes32 name) external onlyDocumentManager {
+    function removeDocument(bytes32 name) external onlyRole(DOCUMENT_ROLE) {
         uint256 position = _documentPosition[name];
         if (position == 0) revert DocumentNotFound(name);
         Document memory doc = _documents[name];

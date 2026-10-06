@@ -24,6 +24,7 @@ const errorText: Record<string, string> = {
   ExceedsHardCap: "Não há cotas suficientes disponíveis na oferta.",
   TransferAmountMismatch: "Token de pagamento incompatível (taxa na transferência).",
   NoCommitment: "Você não tem aporte nesta oferta.",
+  RecommitAfterWithdrawal: "Você desistiu desta oferta e não pode aportar novamente nela.",
   WithdrawalWindowClosed: "O prazo de desistência (5 dias) já passou.",
   WithdrawalPeriodOpen: "Ainda há prazo de desistência aberto; o encerramento só ocorre depois dele.",
   NothingToRefund: "Não há valor a ser devolvido.",

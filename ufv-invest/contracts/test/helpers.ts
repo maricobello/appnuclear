@@ -11,6 +11,8 @@ export const ROLES = {
   DEFAULT_ADMIN: ethers.ZeroHash,
   COMPLIANCE: ethers.id("COMPLIANCE_ROLE"),
   MINTER: ethers.id("MINTER_ROLE"),
+  MINTER_ADMIN: ethers.id("MINTER_ADMIN_ROLE"),
+  DOCUMENT: ethers.id("DOCUMENT_ROLE"),
   DISTRIBUTOR: ethers.id("DISTRIBUTOR_ROLE"),
   PAUSER: ethers.id("PAUSER_ROLE"),
 } as const;
@@ -59,8 +61,8 @@ export async function deployBase() {
 }
 
 /**
- * Token de uma usina com `admin` também como MINTER (para testar o token isoladamente, sem a
- * oferta). Investidores com KYC válido por 1 ano e o distribuidor com USDT aprovado.
+ * Token de uma usina com `admin` como emissor (setMinter) para testar o token isoladamente, sem a
+ * oferta, e com DOCUMENT_ROLE. Investidores com KYC válido por 1 ano e o distribuidor com USDT aprovado.
  */
 export async function deployTokenFixture() {
   const base = await deployBase();
@@ -75,10 +77,10 @@ export async function deployTokenFixture() {
     admin.address,
   ])) as unknown as UFVPlantToken;
 
-  await token.connect(admin).grantRole(ROLES.MINTER, admin.address);
+  await token.connect(admin).setMinter(admin.address);
   await token.connect(admin).grantRole(ROLES.DISTRIBUTOR, distributor.address);
   await token.connect(admin).grantRole(ROLES.PAUSER, pauser.address);
-  await token.connect(admin).grantRole(ROLES.COMPLIANCE, compliance.address);
+  await token.connect(admin).grantRole(ROLES.DOCUMENT, admin.address);
 
   await kyc(registry, compliance, investors);
 
@@ -106,7 +108,11 @@ export type OfferingParams = typeof OFFERING_DEFAULTS;
  * Oferta completa: token (admin) + oferta (MINTER no token). Investidores com KYC e USDT aprovado.
  * Começa em `startDelay` a partir de agora (estado Pending).
  */
-export async function deployOffering(overrides: Partial<OfferingParams> = {}, paymentTokenAddress?: string) {
+export async function deployOffering(
+  overrides: Partial<OfferingParams> = {},
+  paymentTokenAddress?: string,
+  opts: { setMinter?: boolean } = {},
+) {
   const base = await deployBase();
   const { admin, compliance, distributor, pauser, treasury, registry, usdt, investors } = base;
   const p = { ...OFFERING_DEFAULTS, ...overrides };
@@ -142,7 +148,8 @@ export async function deployOffering(overrides: Partial<OfferingParams> = {}, pa
   const offering = (await ethers.deployContract("UFVOffering", [config])) as unknown as UFVOffering;
   const offeringAddress = await offering.getAddress();
 
-  await token.connect(admin).grantRole(ROLES.MINTER, offeringAddress);
+  if (opts.setMinter !== false) await token.connect(admin).setMinter(offeringAddress);
+  await token.connect(admin).grantRole(ROLES.DOCUMENT, admin.address);
   await token.connect(admin).grantRole(ROLES.DISTRIBUTOR, distributor.address);
   await token.connect(admin).grantRole(ROLES.PAUSER, pauser.address);
   await offering.connect(admin).grantRole(ROLES.PAUSER, pauser.address);

@@ -28,6 +28,7 @@ Tokenização de usinas fotovoltaicas (UFV) em **cotas**: cada usina tem um toke
 12. [Análise estática (Slither)](#análise-estática-slither)
 13. [Limitações conhecidas](#limitações-conhecidas)
 14. [Auditoria externa](#auditoria-externa)
+15. [Correções da auditoria independente](#correções-da-auditoria-independente)
 
 ## Arquitetura
 
@@ -90,6 +91,8 @@ function COMPLIANCE_ROLE() / ADMIN_TRANSFER_DELAY()
 constructor(string name_, string symbol_, uint256 maxSupply_, IIdentityRegistry registry_, IERC20 payoutToken_, address admin_)
 // ERC-20 (decimals() == 0): name, symbol, decimals, totalSupply, balanceOf, transfer, transferFrom, approve, allowance
 function maxSupply() / identityRegistry() / payoutToken() / mintingFinished() external view
+function setMinter(address minter_) external                             // DEFAULT_ADMIN, UMA ÚNICA VEZ (a oferta)
+function minter() external view returns (address)                        // emissor definido (0 até setMinter)
 function mint(address to, uint256 amount) external                       // MINTER_ROLE (a oferta)
 function finishMinting() external                                        // MINTER_ROLE, irreversível
 function distribute(uint256 amount, bytes32 periodRef) external          // DISTRIBUTOR_ROLE
@@ -97,15 +100,17 @@ function claim() external returns (uint256 amount)                       // inve
 function claimable(address) / claimed(address) / accumulativeRevenueOf(address) external view returns (uint256)
 function totalDistributed() / totalClaimed() / magnifiedRevenuePerShare() external view returns (uint256)
 function revenueByPeriod(bytes32 periodRef) external view returns (uint256)
-function setDocument(bytes32 name, string uri, bytes32 documentHash) external   // admin ou COMPLIANCE_ROLE
-function removeDocument(bytes32 name) external                                   // admin ou COMPLIANCE_ROLE
+function setDocument(bytes32 name, string uri, bytes32 documentHash) external   // DOCUMENT_ROLE (só a Safe)
+function removeDocument(bytes32 name) external                                   // DOCUMENT_ROLE (só a Safe)
 function getDocument(bytes32 name) external view returns (string uri, bytes32 documentHash, uint256 timestamp)
 function getAllDocuments() external view returns (bytes32[])
 function recover(address lostWallet, address newWallet) external returns (uint256 balance, uint256 pendingRevenue) // DEFAULT_ADMIN
 function rescueTokens(IERC20 asset, address to, uint256 amount) external  // DEFAULT_ADMIN (USDT: só excedente)
 function pause() / unpause() external                                      // PAUSER_ROLE
-// eventos: RevenueDistributed(distributor, periodRef, amount, magnifiedRevenuePerShare), RevenueClaimed,
+// papéis: MINTER_ROLE (administrado por MINTER_ADMIN_ROLE, que ninguém tem), DISTRIBUTOR_ROLE, PAUSER_ROLE, DOCUMENT_ROLE
+// eventos: RevenueDistributed(distributor, periodRef, amount, magnifiedRevenuePerShare), RevenueClaimed, MinterSet,
 //          MintingFinished, DocumentUpdated, DocumentRemoved, WalletRecovered, TokensRescued, Transfer, Approval
+// erros novos: MinterAlreadySet(address minter)
 ```
 
 ### UFVOffering
@@ -118,8 +123,8 @@ constructor(Config cfg)
 enum State { Pending, Active, Succeeded, Failed, Finalized, Cancelled }   // state() retorna uint8 nesta ordem
 
 // investidor
-function commit(uint256 cotas) external          // Active, KYC, approve de cotas × pricePerCota
-function withdraw() external                     // desistência (posição inteira) até lastCommitAt + withdrawalWindow
+function commit(uint256 cotas) external          // Active, KYC, approve de cotas × pricePerCota; cada aporte = 1 tranche
+function withdraw() external                     // desistência das tranches com < withdrawalWindow; depois disso não reaporta
 function refund() external                       // Failed ou Cancelled
 function refundFor(address investor) external    // qualquer um dispara; o dinheiro vai ao investidor
 function claimTokens() external                  // após Finalized, recebe as próprias cotas
@@ -136,11 +141,16 @@ function pricePerCota() / minCotas() / maxCotasPerInvestor() / softCapCotas() / 
 function startTime() / endTime() / withdrawalWindow() / latestCommitAt() external view returns (uint64)
 function cotasSold() / totalRaised() / investorCount() / cotasDelivered() / settleCursor() / remainingCotas() external view returns (uint256)
 function commitmentOf(address) external view returns (uint256 cotas, uint256 paid, uint64 lastCommitAt, bool settled, bool refunded)
-function withdrawalDeadline(address) external view returns (uint256)   // 0 se sem posição
+function withdrawableOf(address) external view returns (uint256 cotas, uint256 amount, uint256 deadline) // o que withdraw() devolveria agora
+function tranchesOf(address) external view returns ((uint64 committedAt, uint128 cotas)[])               // aportes da posição atual
+function hasWithdrawn(address) external view returns (bool)             // true → commit reverte RecommitAfterWithdrawal
+function withdrawalDeadline(address) external view returns (uint256)   // prazo da tranche mais recente (0 se sem posição)
 function withdrawalsCloseAt() external view returns (uint256)          // finalize só quando block.timestamp > isto
+function finalizeDeadline() external view returns (uint256)            // não finalizada até aqui → state() = Failed
 function investorsLength() / investorAt(uint256) / finalized() / cancelled() / settlementCompleted()
-// eventos: Committed, Withdrawn, Refunded, OfferingFinalized, OfferingCancelled, TokensDelivered,
-//          SettlementCompleted, TokensRescued, Paused, Unpaused
+// eventos: Committed, Withdrawn(investor, cotas, amount) (agora só das tranches desistidas), Refunded,
+//          OfferingFinalized, OfferingCancelled, TokensDelivered, SettlementCompleted, TokensRescued, Paused, Unpaused
+// erros novos: RecommitAfterWithdrawal()
 ```
 
 ### MockUSDT (somente testnet)
@@ -152,12 +162,12 @@ function investorsLength() / investorAt(uint256) / finalized() / cancelled() / s
 
 | Contrato | Papel | Quem deve ter | O que pode fazer |
 |---|---|---|---|
-| todos | `DEFAULT_ADMIN_ROLE` | **Safe multisig** (ex.: 3 de 5) | conceder/revogar papéis; no token: `recover`, `rescueTokens` (só excedente), documentos; na oferta: `cancel`, `finalize`, `rescueTokens` |
-| Registry | `COMPLIANCE_ROLE` | backend de KYC (hot wallet dedicada) | habilitar/remover carteiras |
-| Token | `MINTER_ROLE` | **somente** o contrato da oferta | emitir até `maxSupply`, encerrar a emissão |
+| todos | `DEFAULT_ADMIN_ROLE` | **Safe multisig** (ex.: 3 de 5) | conceder/revogar papéis (exceto `MINTER_ROLE`); no token: `setMinter` (uma vez), `recover`, `rescueTokens` (só excedente); na oferta: `cancel`, `finalize`, `rescueTokens` |
+| Registry | `COMPLIANCE_ROLE` | backend de KYC (hot wallet dedicada) | habilitar/remover carteiras — **nenhum papel nos tokens** |
+| Token | `MINTER_ROLE` | **somente** o contrato da oferta, fixado por `setMinter` | emitir até `maxSupply`, encerrar a emissão. Imutável: administrado por `MINTER_ADMIN_ROLE`, que ninguém possui |
 | Token | `DISTRIBUTOR_ROLE` | tesouraria/Safe da SPE | depositar receita (`distribute`) |
 | Token | `PAUSER_ROLE` | Safe (ou um "guardian" com resposta rápida) | pausar transferências, distribuição e saques |
-| Token | `COMPLIANCE_ROLE` | compliance | publicar/remover documentos |
+| Token | `DOCUMENT_ROLE` | **somente a Safe** do admin | publicar/remover relatórios (hash SHA-256) |
 | Oferta | `PAUSER_ROLE` | Safe/guardian | pausar novos aportes |
 
 **Pressupostos explícitos (o investidor precisa confiar nisto):**
@@ -170,12 +180,19 @@ function investorsLength() / investorAt(uint256) / finalized() / cancelled() / s
 - A troca de admin é em **2 etapas com atraso de 2 dias** (`AccessControlDefaultAdminRules`); `grantRole(DEFAULT_ADMIN_ROLE)` direto é bloqueado.
 - **O `IdentityRegistry` é confiável:** quem controla o `COMPLIANCE_ROLE` decide quem transfere,
   aporta e saca receita. Uma chave de compliance comprometida pode habilitar/desabilitar carteiras,
-  mas **não** move tokens nem dinheiro. O admin deve monitorar `InvestorSet/InvestorRemoved`.
-- **A oferta deve ser o único MINTER.** Se o admin conceder `MINTER_ROLE` a outro endereço, pode
-  emitir cotas fora da oferta (até `maxSupply`). O `finalize` se recusa a liberar o dinheiro se a
-  oferta não puder entregar todas as cotas vendidas.
+  mas **não** move tokens nem dinheiro, **não** emite cotas e **não** altera documentos/hashes de
+  relatórios (esses são `DOCUMENT_ROLE`, só da Safe). O admin deve monitorar `InvestorSet/InvestorRemoved`.
+- **Emissor único e imutável.** O `MINTER_ROLE` do token é concedido uma única vez, por
+  `setMinter(oferta)`, e o papel que o administra (`MINTER_ADMIN_ROLE`) não pertence a ninguém e só
+  administra a si mesmo: **nem o admin** consegue se conceder `MINTER_ROLE`, emitir o supply não
+  vendido para si, revogar o emissor ou encerrar a emissão antes da entrega das cotas. O `finalize`
+  ainda confere que a oferta é a emissora antes de liberar o dinheiro.
+- **Documentos só pela Safe.** Os hashes dos relatórios de auditoria que o investidor confere em
+  `/verificar` só mudam via `DOCUMENT_ROLE` (concedido pelo deploy apenas ao `ADMIN_ADDRESS`).
 - **A tesouraria é imutável** por oferta; o dinheiro só sai do escrow para ela (no `finalize`) ou de
-  volta ao próprio investidor (desistência/reembolso). Nenhum papel consegue sacar o escrow.
+  volta ao próprio investidor (desistência/reembolso). Nenhum papel consegue sacar o escrow, e ele
+  nunca congela: se a oferta bem-sucedida não puder ser finalizada até `finalizeDeadline()`
+  (`endTime + 5 dias + 60 dias`), ela vira `Failed` e todos podem pedir reembolso.
 - **A receita reservada é intocável:** `rescueTokens` no token só retira USDT acima de
   `totalDistributed − totalClaimed`; na oferta, só acima de `totalRaised` antes de finalizar.
 - O deployer é admin temporário até a Safe aceitar a transferência (≥ 2 dias). Use uma carteira de
@@ -198,25 +215,30 @@ function investorsLength() / investorAt(uint256) / finalized() / cancelled() / s
 
 1. **Pending** → antes de `startTime`.
 2. **Active** → `startTime ≤ agora ≤ endTime` e abaixo do hardcap. `commit(cotas)` exige KYC vigente,
-   `cotas ≥ minCotas` (exceto para completar exatamente o hardcap), posição total ≤ `maxCotasPerInvestor`
-   e não passar do hardcap; puxa `cotas × pricePerCota` em USDT (valor recebido conferido — tokens com
-   taxa são rejeitados).
-3. **Desistência (`withdraw`)** → até `withdrawalWindow` (5 dias) após o aporte **mais recente** do
-   investidor, devolve **toda** a posição (simplificação: não há desistência por aporte; um novo
-   aporte reinicia o prazo da posição inteira). Nunca é pausável.
+   que o endereço **nunca tenha desistido** nesta oferta, `cotas ≥ minCotas` (exceto para completar
+   exatamente o hardcap), posição total ≤ `maxCotasPerInvestor` e não passar do hardcap; puxa
+   `cotas × pricePerCota` em USDT (valor recebido conferido — tokens com taxa são rejeitados). Cada
+   aporte vira uma **tranche** com a sua própria janela de desistência.
+3. **Desistência (`withdraw`)** → devolve as tranches com menos de `withdrawalWindow` (5 dias) de
+   idade; as mais antigas continuam em escrow como qualquer aporte (uma recarga **não** reabre a
+   desistência da posição antiga). Depois de desistir, o endereço **não pode aportar de novo** nesta
+   oferta (`RecommitAfterWithdrawal`). `withdrawableOf(investidor)` mostra o que seria devolvido agora.
+   Nunca é pausável.
 4. **Succeeded** → hardcap atingido, ou fim com `cotasSold ≥ softCapCotas`. Desistências dentro da
    janela ainda valem (podem levar a oferta de volta a Active ou para Failed).
 5. **finalize()** → só quando ninguém mais pode desistir: `agora > withdrawalsCloseAt()` =
    `endTime + 5 dias` (ou `último aporte + 5 dias` se o hardcap foi atingido — encerramento antecipado).
    Confere que a oferta é MINTER, a emissão está aberta e há supply; envia `totalRaised` à tesouraria
    **uma única vez**. Admin a qualquer momento após isso; **qualquer pessoa após mais 30 dias**
-   (o dinheiro nunca fica preso se o admin sumir).
+   (o dinheiro nunca fica preso se o admin sumir). Se mesmo assim ninguém conseguir finalizar
+   (ex.: tesouraria bloqueada pelo emissor do USDT) até `finalizeDeadline()` =
+   `endTime + withdrawalWindow + 60 dias`, o estado passa a **Failed** e os reembolsos são liberados.
 6. **Entrega das cotas** → `settle(n)` (permissionless, lotes com cursor) e/ou `claimTokens()`.
    Cada investidor é marcado `settled` antes do mint (sem dupla emissão). O mint **não exige KYC
    vigente** (KYC vencido depois do aporte não trava a liquidação; o investidor só não transfere nem
    saca receita até renovar). Ao entregar a última cota, a oferta chama `token.finishMinting()` e a
    distribuição de receita fica liberada.
-7. **Failed / Cancelled** → `refund()` / `refundFor(investor)` devolvem 100 % do valor, uma vez.
+7. **Failed / Cancelled** → `refund()` / `refundFor(investor)` devolvem 100 % do valor em escrow, uma vez.
 
 `cotasSold`, `totalRaised` e `investorCount` refletem o que está em escrow: caem com desistências e
 reembolsos e ficam fixos após `Finalized`.
@@ -263,18 +285,20 @@ cada conta com um modelo racional exato e verifica `Σ sacado + Σ claimable + p
 cd ufv-invest/contracts
 npm install
 npm run compile        # solc 0.8.28 (solcjs/WASM, offline)
-npm test               # 115 testes
+npm test               # 137 testes
 npm run test:gas       # relatório de gás
 npm run coverage       # solidity-coverage
 npm run typecheck      # TypeScript dos scripts/testes
 npm run export:abi     # gera ../web/src/lib/web3/abi.ts
 ```
 
-Cobertura atual: **100 % de linhas, statements e funções; ~96 % de branches** nos contratos principais.
+Cobertura atual: **100 % de linhas, statements e funções; ~95 % de branches** nos contratos principais
+(os ramos não cobertos são checagens de defesa em profundidade do `finalize` que ficaram inalcançáveis
+com o emissor imutável).
 
-Gás médio (BSC, 200 runs): `commit` ~181k (1º aporte ~297k), `withdraw` ~61k, `refund` ~64k,
-`finalize` ~79k, `claimTokens` ~107k, `settle` ~100k + ~60k por investidor, `distribute` ~87k,
-`claim` ~87k, `transfer` ~59k. Deploy: token ~2,95M, oferta ~2,73M, registry ~1,2M.
+Gás médio (BSC, 200 runs): `commit` ~237k (1º aporte ~344k — inclui a tranche), `withdraw` ~96k,
+`refund` ~64k, `finalize` ~80k, `claimTokens` ~103k, `settle` ~101k + ~60k por investidor, `distribute` ~87k,
+`claim` ~87k, `transfer` ~59k. Deploy: token ~3,05M, oferta ~3,23M, registry ~1,2M.
 
 ### Compilador offline
 
@@ -290,8 +314,9 @@ então a verificação no BscScan funciona normalmente.
    - `BSC_TESTNET_RPC_URL` / `BSC_RPC_URL` — de preferência um provedor dedicado.
    - `ADMIN_ADDRESS` — **Safe multisig** (obrigatório na mainnet; o script recusa endereço sem código, salvo `ALLOW_EOA_ADMIN=true`).
    - `TREASURY_ADDRESS` — tesouraria da SPE (obrigatório na mainnet; `treasury` por usina em `config/plants.json` sobrepõe).
-   - `DISTRIBUTOR_ADDRESS`, `COMPLIANCE_ADDRESS` — padrão: `ADMIN_ADDRESS`.
-   - `PAYMENT_TOKEN_ADDRESS` — vazio = MockUSDT (testnet) / USDT oficial `0x55d3…7955` (mainnet; o script confere `symbol == USDT` e 18 casas).
+   - `DISTRIBUTOR_ADDRESS`, `COMPLIANCE_ADDRESS` — padrão: `ADMIN_ADDRESS`. O `COMPLIANCE_ADDRESS`
+     recebe só o `COMPLIANCE_ROLE` do `IdentityRegistry` (nenhum papel nos tokens).
+   - `PAYMENT_TOKEN_ADDRESS` — vazio = MockUSDT (testnet) / USDT oficial `0x55d3…7955` (mainnet; o script confere `symbol == USDT` e 18 casas). Na mainnet, qualquer endereço diferente do USDT oficial é recusado, salvo `ALLOW_CUSTOM_PAYMENT_TOKEN=true`.
 2. Revise `config/plants.json` (preço em USDT, caps, datas ISO ou relativas `+1d`/`+60d`).
 3. Ensaie localmente: `npm run deploy:local` (rede in-process; não grava no front).
 4. Testnet: `npm run deploy:testnet`. Mainnet: `npm run deploy:mainnet`.
@@ -299,7 +324,8 @@ então a verificação no BscScan funciona normalmente.
 O script:
 - implanta `IdentityRegistry`, o token de pagamento (MockUSDT só fora da mainnet) e, por usina,
   `UFVPlantToken` + `UFVOffering`;
-- concede `MINTER_ROLE` à oferta, `DISTRIBUTOR_ROLE`, `PAUSER_ROLE` e `COMPLIANCE_ROLE` conforme o `.env`;
+- fixa o emissor do token com `setMinter(oferta)` (uma única vez, imutável) e concede `DISTRIBUTOR_ROLE`,
+  `PAUSER_ROLE` e `DOCUMENT_ROLE` (este **só** ao `ADMIN_ADDRESS`), além do `COMPLIANCE_ROLE` do registro;
 - se `ADMIN_ADDRESS` ≠ deployer, inicia `beginDefaultAdminTransfer(ADMIN_ADDRESS)` em todos os
   contratos (o deployer nunca recebe papéis operacionais);
 - grava `deployments/<chainId>.json` (endereços, argumentos de construtor, txs — **versione** para 97/56)
@@ -332,7 +358,7 @@ parâmetros por variáveis de ambiente (`hardhat run` não aceita argumentos):
 |---|---|---|
 | `ADDRESSES=0x..,0x.. COUNTRY=76 DAYS=365 npm run admin:kyc -- --network bscTestnet` | aprovar KYC (`REMOVE=true` remove) | COMPLIANCE |
 | `PLANT=ufv-janauba-1 AMOUNT=31234.56 PERIOD=2027-03 npm run admin:distribute -- --network …` | depositar receita do mês (recusa período repetido sem `ALLOW_DUPLICATE_PERIOD=true`) | DISTRIBUTOR |
-| `PLANT=… NAME=AUDIT-2027-Q1 URI=ipfs://… FILE=./relatorio.pdf npm run admin:document -- --network …` | publicar relatório com SHA-256 do PDF | admin/COMPLIANCE |
+| `PLANT=… NAME=AUDIT-2027-Q1 URI=ipfs://… FILE=./relatorio.pdf npm run admin:document -- --network …` | publicar relatório com SHA-256 do PDF (se a chave local não tiver `DOCUMENT_ROLE`, o script recusa e imprime o hash para a Safe) | DOCUMENT_ROLE (Safe) |
 | `PLANT=… BATCH=100 npm run admin:finalize -- --network …` | finalizar e entregar as cotas em lotes | admin (finalize) |
 | `npm run admin:accept -- --network …` | lote do Transaction Builder para a Safe aceitar o admin | — |
 | `npm run admin:status -- --network …` | resumo on-chain das ofertas/tokens | — |
@@ -362,7 +388,10 @@ o histórico consultável on-chain; o investidor confere o PDF com `sha256sum re
 - [x] `ReentrancyGuard` em toda função que move fundos; checks-effects-interactions (inclusive `settle`, que marca tudo antes de emitir).
 - [x] `SafeERC20` em todas as transferências; valor recebido conferido (rejeita fee-on-transfer) em `commit` e `distribute`.
 - [x] Escrow: dinheiro só sai para o próprio investidor ou para a tesouraria imutável, uma vez; `finalize` só após fechar todas as janelas de desistência.
-- [x] Desistência, reembolso e entrega de cotas não são pausáveis; `finalize` vira permissionless após 30 dias.
+- [x] Desistência, reembolso e entrega de cotas não são pausáveis; `finalize` vira permissionless após 30 dias; sem finalização até `finalizeDeadline()` a oferta vira `Failed` (escrow nunca congela).
+- [x] Desistência por tranche e sem reaporte após desistir: segurar o hardcap de graça com carteiras KYC não funciona.
+- [x] Emissor do token fixado uma única vez e imutável (`setMinter`); documentos só com `DOCUMENT_ROLE` (Safe).
+- [x] Deploy na mainnet só com o USDT BEP-20 oficial (salvo opt-in explícito).
 - [x] Sem dupla emissão (`settled`), sem duplo reembolso (`paid = 0`), sem duplo `finalize`.
 - [x] KYC vencido após o aporte não trava a liquidação.
 - [x] Arredondamento a favor da solvência (Σ saques ≤ distribuído), testado com invariante aleatório.
@@ -377,17 +406,23 @@ o histórico consultável on-chain; o investidor confere o PDF com `sha256sum re
 
 `slither . --compile-force-framework hardhat --hardhat-ignore-compile --filter-paths "node_modules|src/mocks"`
 (Slither 0.11.6 sobre o build-info do Hardhat; rode `npx hardhat compile --force` antes para não
-misturar build-infos antigos). Resultado: **0 alta/média**; 12 informativos, todos aceitos:
+misturar build-infos antigos). Resultado após as correções da auditoria: **0 alta/média**; 16
+informativos, todos aceitos:
 
 - `timestamp` — comparações com `block.timestamp` (janelas de dias; desvio de segundos dos validadores é irrelevante);
 - `calls-loop` — `settle` emite em loop para o token (contrato confiável e imutável; o mint não checa
   KYC nem chama hooks, então nenhum investidor consegue travar o lote; lotes limitados por `maxInvestors`);
-- `incorrect-equality` — sentinela `== 0` no `MockUSDT` (testnet);
+- `incorrect-equality` — checagens `cotas == 0` (posição vazia) em `withdrawableOf`/`tranchesOf` e a
+  sentinela `== 0` no `MockUSDT` (testnet);
 - `cyclomatic-complexity` (validação do construtor da oferta) e `naming-convention` (`MINTER_ROLE()` segue o padrão OZ).
 
 ## Limitações conhecidas
 
-- **Desistência é da posição inteira** e o prazo conta do aporte mais recente (não por aporte).
+- **Quem desiste não reaporta:** um endereço que exerceu a desistência (mesmo parcial) não pode
+  aportar de novo na mesma oferta. É o preço de impedir o ataque de reciclagem do hardcap (M-01);
+  o investidor que mudar de ideia de novo precisa de outra oferta.
+- **Desistência por tranche:** cada aporte tem a sua janela de 5 dias; o custo de `withdraw` cresce
+  com o número de tranches ainda na janela do próprio investidor (só ele paga).
 - **Mínimo por aporte** (`minCotas`), não por posição; exceção para completar exatamente o hardcap.
 - **Cotas não vendidas não existem:** se a oferta vender menos que `maxSupply`, a receita é dividida
   só entre as cotas vendidas. Se a SPE/patrocinador deve reter parte, ela precisa aportar como
@@ -398,6 +433,9 @@ misturar build-infos antigos). Resultado: **0 alta/média**; 12 informativos, to
 - **Sem congelamento parcial / transferência forçada** além do `recover`; sem limite de número de titulares.
 - **Reembolso de investidor sancionado** após o aporte: não há função para expulsar um investidor
   específico; a alternativa é `cancel()` (reembolsa todos) ou tratar fora da cadeia antes de finalizar.
+- **`setMinter` é irreversível:** se for chamado com o endereço errado, o token nunca poderá ser
+  emitido por aquela oferta (ela não finaliza e o escrow volta por `cancel` ou após `finalizeDeadline`);
+  é preciso implantar um token novo. O script de deploy faz isso automaticamente e confere na retomada.
 - `claim` exige KYC vigente e é pausável — a receita nunca se perde, mas fica retida enquanto isso.
 - Poeira de arredondamento (≤ 10⁻¹⁸ USDT por titular por evento) fica no contrato.
 - Deploy na mainnet depende de a Safe aceitar o admin; até lá (≥ 2 dias) o deployer é admin.
@@ -412,3 +450,17 @@ ConsenSys Diligence, Spearbit/Cantina ou um concurso Code4rena/Sherlock), com es
 congelar o código no commit auditado, publicar o relatório (e o hash dele via `setDocument`) e
 verificar os contratos no BscScan. Considerar também verificação formal do invariante de receita e um
 programa de bug bounty (ex.: Immunefi) após o lançamento.
+
+## Correções da auditoria independente
+
+Provas em `test/Audit.test.ts` (cada ataque é reproduzido e agora falha):
+
+| ID | Achado | Correção |
+|---|---|---|
+| M-01 | Carteiras KYC enchiam o hardcap na abertura, desistiam e reaportavam no mesmo bloco antes de cada janela fechar (oferta presa em `Succeeded`, captação bloqueada) e saíam em massa após o fim, de graça; uma recarga de 1 cota reabria a desistência da posição inteira. | Desistência **por tranche** (só aportes com < 5 dias voltam; os antigos ficam em escrow) e **sem reaporte após desistir** (`RecommitAfterWithdrawal`). Views `withdrawableOf`, `tranchesOf`, `hasWithdrawn`. |
+| M-02 | O admin podia se conceder `MINTER_ROLE`, emitir o supply não vendido para si (diluição) ou impedir a entrega depois de o dinheiro ir à tesouraria. | `setMinter` uma única vez; `MINTER_ROLE` administrado por `MINTER_ADMIN_ROLE`, que ninguém possui. `grantRole`/`revokeRole` de `MINTER_ROLE` são impossíveis. |
+| M-03 | A hot wallet de KYC (COMPLIANCE no token) podia trocar/apagar o hash dos relatórios de auditoria. | `DOCUMENT_ROLE` dedicado, concedido só ao admin (Safe); o token não tem mais `COMPLIANCE_ROLE`. |
+| M-04 | Retomar um deploy interrompido no hand-off deixava o deployer como admin. | `handOff` idempotente também para usinas já implantadas. |
+| L-01 | Oferta `Succeeded` impossível de finalizar congelava o escrow (só o `cancel` do admin destravava). | Após `finalizeDeadline()` (`endTime + janela + 2 × 30 dias`) sem finalizar, `state()` = `Failed` → `refund`. Ancorado em `endTime` para o estado ser monotônico. |
+| I-03 | Deploy na mainnet aceitava qualquer `PAYMENT_TOKEN_ADDRESS`. | Só o USDT BEP-20 oficial, salvo `ALLOW_CUSTOM_PAYMENT_TOKEN=true`. |
+

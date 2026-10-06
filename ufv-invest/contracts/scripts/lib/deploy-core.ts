@@ -1,5 +1,5 @@
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
-import { ZeroHash, id, type BaseContract, type ContractTransactionResponse } from "ethers";
+import { ZeroAddress, ZeroHash, getAddress, id, type BaseContract, type ContractTransactionResponse } from "ethers";
 import { loadPlants, type PlantParams } from "./plants-config";
 import {
   BSC_USDT_MAINNET,
@@ -16,12 +16,26 @@ import {
 /** hash do papel (OpenZeppelin AccessControl: keccak256 do nome; DEFAULT_ADMIN_ROLE = 0x00) */
 export const ROLE = (name: string) => (name === "DEFAULT_ADMIN_ROLE" ? ZeroHash : id(name));
 
+/**
+ * I-03: na mainnet só o USDT BEP-20 oficial é aceito como token de pagamento, salvo opt-in explícito
+ * (`ALLOW_CUSTOM_PAYMENT_TOKEN=true`). Evita apontar a oferta para um token falso/errado por engano.
+ */
+export function checkPaymentTokenPolicy(chainId: number, paymentToken: string | undefined, allowCustom = false) {
+  if (chainId !== 56 || !paymentToken || allowCustom) return;
+  if (getAddress(paymentToken) !== getAddress(BSC_USDT_MAINNET)) {
+    throw new Error(
+      `mainnet: PAYMENT_TOKEN_ADDRESS ${paymentToken} não é o USDT BEP-20 oficial (${BSC_USDT_MAINNET}); ` +
+        "use ALLOW_CUSTOM_PAYMENT_TOKEN=true se for intencional",
+    );
+  }
+}
+
 export interface DeployOptions {
   /** admin final (recomendado: Safe). Padrão: deployer. */
   admin?: string;
   /** DISTRIBUTOR_ROLE nos tokens. Padrão: admin. */
   distributor?: string;
-  /** COMPLIANCE_ROLE no registro e nos tokens. Padrão: admin. */
+  /** COMPLIANCE_ROLE no IdentityRegistry (KYC). Não recebe nenhum papel nos tokens. Padrão: admin. */
   compliance?: string;
   /** tesouraria que recebe a captação (obrigatória na mainnet). Padrão em testes: admin. */
   treasury?: string;
@@ -33,6 +47,8 @@ export interface DeployOptions {
   forceRedeploy?: boolean;
   /** permite admin EOA (sem código) na mainnet — NÃO recomendado */
   allowEoaAdminOnMainnet?: boolean;
+  /** permite token de pagamento diferente do USDT oficial na mainnet — NÃO recomendado */
+  allowCustomPaymentToken?: boolean;
   plantsFile?: string;
   /** registro detalhado da rede; `null` = não grava */
   recordFile?: string | null;
@@ -69,6 +85,7 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
   const compliance = norm(opts.compliance, "COMPLIANCE_ADDRESS") ?? admin;
   const treasuryDefault = norm(opts.treasury, "TREASURY_ADDRESS");
 
+  checkPaymentTokenPolicy(chainId, opts.paymentToken, opts.allowCustomPaymentToken);
   if (isMainnet) {
     if (!opts.admin) throw new Error("mainnet: defina ADMIN_ADDRESS (Safe multisig)");
     if (!treasuryDefault) throw new Error("mainnet: defina TREASURY_ADDRESS");
@@ -128,6 +145,16 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
     };
     if (await ac.hasRole(ROLE(role), account)) return;
     await wait(ac.grantRole(ROLE(role), account), `${label}: ${role} → ${account}`);
+  };
+  /** M-02: o emissor do token é definido uma única vez (setMinter) — idempotente na retomada. */
+  const setMinter = async (c: BaseContract, label: string, minter: string) => {
+    const t = c as unknown as {
+      minter(): Promise<string>;
+      setMinter(a: string): Promise<ContractTransactionResponse>;
+    };
+    const current = await t.minter();
+    if (current === ZeroAddress) await wait(t.setMinter(minter), `${label}: emissor (setMinter) → ${minter}`);
+    else if (getAddress(current) !== getAddress(minter)) throw new Error(`${label}: emissor já definido como ${current}`);
   };
   const handOff = async (c: BaseContract, label: string) => {
     if (admin === deployer.address) return;
@@ -234,10 +261,11 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
     };
     const offeringD = await deploy("UFVOffering", [config]);
 
-    await grant(tokenD.contract, `${p.symbol}`, "MINTER_ROLE", offeringD.rec.address);
+    await setMinter(tokenD.contract, `${p.symbol}`, offeringD.rec.address);
     await grant(tokenD.contract, `${p.symbol}`, "DISTRIBUTOR_ROLE", distributor);
     await grant(tokenD.contract, `${p.symbol}`, "PAUSER_ROLE", admin);
-    await grant(tokenD.contract, `${p.symbol}`, "COMPLIANCE_ROLE", compliance);
+    // M-03: documentos (hash dos relatórios de auditoria) só com o admin/Safe — nunca com o KYC
+    await grant(tokenD.contract, `${p.symbol}`, "DOCUMENT_ROLE", admin);
     await grant(offeringD.contract, `Oferta ${p.symbol}`, "PAUSER_ROLE", admin);
 
     record.plants[p.slug] = {

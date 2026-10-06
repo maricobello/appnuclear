@@ -943,6 +943,17 @@ export const plantTokenAbi = [
     "type": "error"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "minter",
+        "type": "address"
+      }
+    ],
+    "name": "MinterAlreadySet",
+    "type": "error"
+  },
+  {
     "inputs": [],
     "name": "MintingAlreadyFinished",
     "type": "error"
@@ -1181,6 +1192,25 @@ export const plantTokenAbi = [
       }
     ],
     "name": "DocumentUpdated",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "minter",
+        "type": "address"
+      },
+      {
+        "indexed": true,
+        "internalType": "address",
+        "name": "operator",
+        "type": "address"
+      }
+    ],
+    "name": "MinterSet",
     "type": "event"
   },
   {
@@ -1449,19 +1479,6 @@ export const plantTokenAbi = [
   },
   {
     "inputs": [],
-    "name": "COMPLIANCE_ROLE",
-    "outputs": [
-      {
-        "internalType": "bytes32",
-        "name": "",
-        "type": "bytes32"
-      }
-    ],
-    "stateMutability": "view",
-    "type": "function"
-  },
-  {
-    "inputs": [],
     "name": "DEFAULT_ADMIN_ROLE",
     "outputs": [
       {
@@ -1488,12 +1505,38 @@ export const plantTokenAbi = [
   },
   {
     "inputs": [],
+    "name": "DOCUMENT_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "MAGNITUDE",
     "outputs": [
       {
         "internalType": "uint256",
         "name": "",
         "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "MINTER_ADMIN_ROLE",
+    "outputs": [
+      {
+        "internalType": "bytes32",
+        "name": "",
+        "type": "bytes32"
       }
     ],
     "stateMutability": "view",
@@ -1941,6 +1984,19 @@ export const plantTokenAbi = [
   },
   {
     "inputs": [],
+    "name": "minter",
+    "outputs": [
+      {
+        "internalType": "address",
+        "name": "",
+        "type": "address"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "mintingFinished",
     "outputs": [
       {
@@ -2193,6 +2249,19 @@ export const plantTokenAbi = [
       }
     ],
     "name": "setDocument",
+    "outputs": [],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "minter_",
+        "type": "address"
+      }
+    ],
+    "name": "setMinter",
     "outputs": [],
     "stateMutability": "nonpayable",
     "type": "function"
@@ -2620,6 +2689,11 @@ export const offeringAbi = [
   {
     "inputs": [],
     "name": "OfferingNotMinter",
+    "type": "error"
+  },
+  {
+    "inputs": [],
+    "name": "RecommitAfterWithdrawal",
     "type": "error"
   },
   {
@@ -3338,6 +3412,19 @@ export const offeringAbi = [
   },
   {
     "inputs": [],
+    "name": "finalizeDeadline",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
     "name": "finalized",
     "outputs": [
       {
@@ -3413,6 +3500,25 @@ export const offeringAbi = [
       }
     ],
     "name": "hasRole",
+    "outputs": [
+      {
+        "internalType": "bool",
+        "name": "",
+        "type": "bool"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "investor",
+        "type": "address"
+      }
+    ],
+    "name": "hasWithdrawn",
     "outputs": [
       {
         "internalType": "bool",
@@ -3844,6 +3950,37 @@ export const offeringAbi = [
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "investor",
+        "type": "address"
+      }
+    ],
+    "name": "tranchesOf",
+    "outputs": [
+      {
+        "components": [
+          {
+            "internalType": "uint64",
+            "name": "committedAt",
+            "type": "uint64"
+          },
+          {
+            "internalType": "uint128",
+            "name": "cotas",
+            "type": "uint128"
+          }
+        ],
+        "internalType": "struct UFVOffering.Tranche[]",
+        "name": "",
+        "type": "tuple[]"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "treasury",
     "outputs": [
@@ -3868,6 +4005,35 @@ export const offeringAbi = [
     "name": "withdraw",
     "outputs": [],
     "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "investor",
+        "type": "address"
+      }
+    ],
+    "name": "withdrawableOf",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "cotas",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "amount",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "deadline",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
     "type": "function"
   },
   {
@@ -4046,6 +4212,17 @@ export const offeringAbi = [
       }
     ],
     "name": "MaxSupplyExceeded",
+    "type": "error"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "address",
+        "name": "minter",
+        "type": "address"
+      }
+    ],
+    "name": "MinterAlreadySet",
     "type": "error"
   },
   {
@@ -4923,11 +5100,17 @@ export const mockUsdtAbi = [
 export const offeringStates = ["Pending", "Active", "Succeeded", "Failed", "Finalized", "Cancelled"] as const;
 export type OfferingState = (typeof offeringStates)[number];
 
-/** Hashes dos papéis (AccessControl). DEFAULT_ADMIN_ROLE = 0x00…00. */
+/**
+ * Hashes dos papéis (AccessControl). DEFAULT_ADMIN_ROLE = 0x00…00. COMPLIANCE_ROLE existe só no
+ * IdentityRegistry; DOCUMENT_ROLE, MINTER_ROLE (imutável) e DISTRIBUTOR_ROLE no token; PAUSER_ROLE
+ * no token e na oferta.
+ */
 export const roles = {
   DEFAULT_ADMIN_ROLE: "0x0000000000000000000000000000000000000000000000000000000000000000",
   COMPLIANCE_ROLE: "0x442a94f1a1fac79af32856af2a64f63648cfa2ef3b98610a5bb7cbec4cee6985",
   MINTER_ROLE: "0x9f2df0fed2c77648de5860a4cc508cd0818c85b8b8a1ab4ceeef8d981c8956a6",
+  MINTER_ADMIN_ROLE: "0x70480ee89cb38eff00b7d23da25713d52ce19c6ed428691d22c58b2f615e3d67",
   DISTRIBUTOR_ROLE: "0xfbd454f36a7e1a388bd6fc3ab10d434aa4578f811acbbcf33afb1c697486313c",
   PAUSER_ROLE: "0x65d7a28e3265b37a6474929f336521b332c1681b933f6cb9f3376673440d862a",
+  DOCUMENT_ROLE: "0xdd7c9aafbb91d54fb2041db1d5b172ea665309b32f5fffdbddf452802a1e3b20",
 } as const;

@@ -1,6 +1,7 @@
 /**
  * Publica um documento (ex.: relatório de auditoria) no token da usina com o SHA-256 do arquivo.
- * Exige DEFAULT_ADMIN_ROLE ou COMPLIANCE_ROLE no token.
+ * Exige DOCUMENT_ROLE no token — por padrão só a Safe do admin o tem (a carteira de KYC não);
+ * nesse caso o script recusa e imprime o SHA-256 para montar setDocument no Transaction Builder.
  *   PLANT=ufv-janauba-1 NAME=AUDIT-2027-Q1 URI=ipfs://bafy... FILE=./relatorio.pdf \
  *     npm run admin:document -- --network bscTestnet
  * Em vez de FILE, pode-se passar HASH=0x<sha256>.

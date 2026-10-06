@@ -29,7 +29,7 @@ async function tokenWithPayout(payoutName: "FeeOnTransferERC20" | "ReentrantERC2
     await payout.getAddress(),
     admin.address,
   ])) as unknown as UFVPlantToken;
-  await token.connect(admin).grantRole(ROLES.MINTER, admin.address);
+  await token.connect(admin).setMinter(admin.address);
   await token.connect(admin).grantRole(ROLES.DISTRIBUTOR, distributor.address);
   await kyc(registry, compliance, [alice, bob]);
   await token.connect(admin).mint(alice.address, 600n);

@@ -78,7 +78,7 @@ const exportsList: [string, string, AbiItem[]][] = [
 ];
 
 const roles = Object.fromEntries(
-  ["COMPLIANCE_ROLE", "MINTER_ROLE", "DISTRIBUTOR_ROLE", "PAUSER_ROLE"].map((r) => [r, id(r)]),
+  ["COMPLIANCE_ROLE", "MINTER_ROLE", "MINTER_ADMIN_ROLE", "DISTRIBUTOR_ROLE", "PAUSER_ROLE", "DOCUMENT_ROLE"].map((r) => [r, id(r)]),
 );
 
 const banner = `/* eslint-disable */
@@ -97,7 +97,11 @@ body += `
 export const offeringStates = ["Pending", "Active", "Succeeded", "Failed", "Finalized", "Cancelled"] as const;
 export type OfferingState = (typeof offeringStates)[number];
 
-/** Hashes dos papéis (AccessControl). DEFAULT_ADMIN_ROLE = 0x00…00. */
+/**
+ * Hashes dos papéis (AccessControl). DEFAULT_ADMIN_ROLE = 0x00…00. COMPLIANCE_ROLE existe só no
+ * IdentityRegistry; DOCUMENT_ROLE, MINTER_ROLE (imutável) e DISTRIBUTOR_ROLE no token; PAUSER_ROLE
+ * no token e na oferta.
+ */
 export const roles = {
   DEFAULT_ADMIN_ROLE: "0x${"0".repeat(64)}",
 ${Object.entries(roles)

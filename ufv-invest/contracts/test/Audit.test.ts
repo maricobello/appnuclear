@@ -2,9 +2,8 @@
  * Auditoria independente (UFV Invest) — provas de conceito.
  *
  * Cada `describe` corresponde a um achado do relatório de auditoria (IDs M-xx / L-xx / I-xx) ou a
- * um ataque suspeito que foi testado e NÃO funciona (prefixo "[falha]"). Os testes dos achados em
- * aberto passam porque demonstram o comportamento atual (o problema); os de achados corrigidos
- * verificam a correção.
+ * um ataque suspeito que foi testado e NÃO funciona (prefixo "[falha]"). Todos os achados estão
+ * corrigidos ("(corrigido)"): os testes reproduzem o ataque original e provam que agora ele FALHA.
  */
 import { expect } from "chai";
 import hre, { ethers, network } from "hardhat";
@@ -49,73 +48,120 @@ async function sameBlock(send: () => Promise<void>) {
 }
 
 describe("Auditoria — UFVOffering", () => {
-  describe("M-01 trava do hardcap: carteiras KYC (sybil) bloqueiam a captação de graça e derrubam a oferta", () => {
-    it("PoC: atacantes enchem o hardcap na abertura, reciclam a posição a cada 5 dias e saem após o fim", async () => {
+  describe("M-01 (corrigido) trava do hardcap: desistir impede reaportar e a desistência é por tranche", () => {
+    const attackersOf = (f: Fixture): [HardhatEthersSigner, bigint][] => [
+      [f.alice, 3000n],
+      [f.bob, 3000n],
+      [f.carol, 3000n],
+      [f.dave, 1000n],
+    ];
+
+    it("o ataque falha: reciclar a posição no mesmo bloco não funciona e o hardcap volta para os investidores", async () => {
       const f: Fixture = await loadFixture(offeringFixture);
-      const { offering, usdt, alice, bob, carol, dave, erin } = f;
-      // hardcap 10 000, teto por carteira 3 000 → 4 identidades KYC bastam
-      const attackers: [HardhatEthersSigner, bigint][] = [
-        [alice, 3000n],
-        [bob, 3000n],
-        [carol, 3000n],
-        [dave, 1000n],
-      ];
-      const victim = erin; // investidor legítimo
-      const before = await Promise.all(attackers.map(([a]) => usdt.balanceOf(a.address)));
+      const { offering, admin, treasury, usdt, erin: victim, frank } = f;
+      const attackers = attackersOf(f);
 
       await time.increaseTo(f.startTime);
       for (const [a, n] of attackers) await offering.connect(a).commit(n);
       expect(await offering.state()).to.equal(State.Succeeded);
       await expect(offering.connect(victim).commit(100n)).to.be.revertedWithCustomError(offering, "InvalidState").withArgs(State.Succeeded);
 
-      // antes de cada janela fechar (o que permitiria finalizar), sai e reentra no mesmo bloco
-      let rounds = 0;
-      while (true) {
-        const closesAt = await offering.withdrawalsCloseAt();
-        if (closesAt >= f.endTime) break;
-        await time.increaseTo(closesAt - 60n);
-        await sameBlock(async () => {
-          for (const [a, n] of attackers) {
-            await offering.connect(a).withdraw({ gasLimit: 300_000 });
-            await offering.connect(a).commit(n, { gasLimit: 400_000 });
-          }
-        });
-        rounds++;
-        expect(await offering.state()).to.equal(State.Succeeded);
-        expect(await offering.cotasSold()).to.equal(10_000n);
-        await expect(offering.connect(victim).commit(100n)).to.be.revertedWithCustomError(offering, "InvalidState");
+      // antes da janela fechar, tentam sair e reentrar no mesmo bloco (bundle privado)
+      const closesAt = await offering.withdrawalsCloseAt();
+      await time.increaseTo(closesAt - 60n);
+      await sameBlock(async () => {
+        for (const [a, n] of attackers) {
+          await offering.connect(a).withdraw({ gasLimit: 300_000 });
+          await offering.connect(a).commit(n, { gasLimit: 400_000 });
+        }
+      });
+      // as desistências passaram, todos os reaportes reverteram: o hardcap foi liberado
+      expect(await offering.cotasSold()).to.equal(0n);
+      expect(await offering.state()).to.equal(State.Active);
+      for (const [a] of attackers) {
+        expect(await offering.hasWithdrawn(a.address)).to.equal(true);
+        await expect(offering.connect(a).commit(10n)).to.be.revertedWithCustomError(offering, "RecommitAfterWithdrawal");
       }
-      expect(rounds).to.be.greaterThan(3); // 30 dias de oferta travados
 
-      // fim da oferta: o último aporte ainda está na janela → todos desistem
+      // os investidores legítimos entram; depois do fim ninguém sai em massa (tranches antigas travadas)
+      await offering.connect(victim).commit(3000n);
+      await offering.connect(frank).commit(1500n);
       await time.increaseTo(f.endTime + 1n);
-      for (const [a] of attackers) await offering.connect(a).withdraw();
-      expect(await offering.state()).to.equal(State.Failed);
-      expect(await offering.totalRaised()).to.equal(0n);
+      await expect(offering.connect(victim).withdraw()).to.be.revertedWithCustomError(offering, "WithdrawalWindowClosed");
+      expect(await offering.state()).to.equal(State.Succeeded);
+      await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
+      await offering.connect(admin).finalize();
+      expect(await usdt.balanceOf(treasury.address)).to.equal(4500n * f.params.price);
+    });
 
-      // custo do ataque: só gás (100% do capital devolvido); a vítima nunca conseguiu investir
-      const after = await Promise.all(attackers.map(([a]) => usdt.balanceOf(a.address)));
-      expect(after).to.deep.equal(before);
-      expect((await offering.commitmentOf(victim.address)).cotas).to.equal(0n);
+    it("quem segura o hardcap além de 5 dias fica travado: não há saída em massa e a oferta encerra antes", async () => {
+      const f: Fixture = await loadFixture(offeringFixture);
+      const { offering, admin, treasury, usdt } = f;
+      const attackers = attackersOf(f);
+      await time.increaseTo(f.startTime);
+      for (const [a, n] of attackers) await offering.connect(a).commit(n);
+      await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
+      for (const [a] of attackers) {
+        await expect(offering.connect(a).withdraw()).to.be.revertedWithCustomError(offering, "WithdrawalWindowClosed");
+      }
+      // encerramento antecipado: o capital "do ataque" vira captação real
+      await offering.connect(admin).finalize();
+      expect(await usdt.balanceOf(treasury.address)).to.equal(10_000n * f.params.price);
+      await time.increaseTo(f.endTime + 1n);
+      expect(await offering.state()).to.equal(State.Finalized);
+    });
+
+    it("recarga mínima não reabre a desistência da posição inteira", async () => {
+      const f: Fixture = await loadFixture(offeringFixture);
+      const { offering, alice } = f;
+      await time.increaseTo(f.startTime);
+      await offering.connect(alice).commit(2990n);
+      await time.increase(4n * DAY);
+      await offering.connect(alice).commit(10n); // recarga de 10 cotas (o mínimo) no dia 4
+      await time.increase(4n * DAY); // dia 8: a posição de 2 990 já está travada
+      await expect(offering.connect(alice).withdraw()).to.emit(offering, "Withdrawn").withArgs(alice.address, 10n, 10n * f.params.price);
+      expect((await offering.commitmentOf(alice.address)).cotas).to.equal(2990n);
+      await time.increaseTo(f.endTime + 1n);
+      await expect(offering.connect(alice).withdraw()).to.be.revertedWithCustomError(offering, "WithdrawalWindowClosed");
     });
   });
 
-  describe("L-01 escrow congelado se a oferta perder o MINTER_ROLE (sem caminho permissionless para reembolso)", () => {
-    it("PoC: após a carência, ninguém finaliza nem reembolsa; só o cancel() do admin destrava", async () => {
-      const f = await loadFixture(softCapFixture);
-      const { offering, token, admin, outsider, alice } = f;
+  describe("L-01 (corrigido) escrow nunca congela: oferta bem-sucedida não finalizada vira Failed após finalizeDeadline", () => {
+    it("tesouraria bloqueada pelo emissor do token torna o finalize impossível → após o prazo todos reembolsam", async () => {
+      const blockable = await ethers.deployContract("BlockableERC20");
+      const f = await deployOffering({}, await blockable.getAddress());
+      const { offering, token, admin, outsider, treasury, alice, bob, carol } = f;
+      const offeringAddr = await offering.getAddress();
+      for (const s of [alice, bob, carol]) {
+        await blockable.mint(s.address, USDT(100_000));
+        await blockable.connect(s).approve(offeringAddr, ethers.MaxUint256);
+      }
+      await time.increaseTo(f.startTime);
+      for (const s of [alice, bob, carol]) await offering.connect(s).commit(1500n);
+
+      // o vetor original (admin revoga o MINTER da oferta) não existe mais (M-02)
+      await expect(token.connect(admin).revokeRole(ROLES.MINTER, offeringAddr))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(admin.address, ROLES.MINTER_ADMIN);
+
+      await blockable.setBlocked(treasury.address, true);
       await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
-      // admin (comprometido, ou erro operacional) revoga o MINTER da oferta
-      await token.connect(admin).revokeRole(ROLES.MINTER, await offering.getAddress());
-
+      await expect(offering.connect(admin).finalize()).to.be.revertedWithCustomError(blockable, "AccountBlocked");
       await time.increase(GRACE + 1n);
-      await expect(offering.connect(outsider).finalize()).to.be.revertedWithCustomError(offering, "OfferingNotMinter");
+      await expect(offering.connect(outsider).finalize()).to.be.revertedWithCustomError(blockable, "AccountBlocked");
       await expect(offering.connect(alice).refund()).to.be.revertedWithCustomError(offering, "InvalidState").withArgs(State.Succeeded);
-      await expect(offering.connect(alice).withdraw()).to.be.revertedWithCustomError(offering, "WithdrawalWindowClosed");
-      expect(await offering.state()).to.equal(State.Succeeded); // indefinidamente
 
-      await offering.connect(admin).cancel();
-      await expect(offering.connect(alice).refund()).to.emit(offering, "Refunded");
+      const deadline = await offering.finalizeDeadline();
+      expect(deadline).to.equal((await offering.withdrawalsCloseAt()) + 2n * GRACE);
+      await time.increaseTo(deadline);
+      expect(await offering.state()).to.equal(State.Succeeded);
+      await time.increaseTo(deadline + 1n);
+      expect(await offering.state()).to.equal(State.Failed);
+      for (const s of [alice, bob, carol]) {
+        await expect(offering.connect(outsider).refundFor(s.address)).to.changeTokenBalance(blockable, s, 1500n * f.params.price);
+      }
+      expect(await blockable.balanceOf(offeringAddr)).to.equal(0n);
+      expect(await offering.state()).to.equal(State.Failed);
     });
   });
 
@@ -331,57 +377,75 @@ describe("Auditoria — UFVPlantToken", () => {
     });
   });
 
-  describe("M-03 a chave quente de KYC (COMPLIANCE no token, pelo deploy) controla o registro de relatórios", () => {
-    it("PoC: o operador de KYC troca o hash do relatório oficial por um forjado e apaga o original", async () => {
+  describe("M-03 (corrigido) só a Safe (DOCUMENT_ROLE) mexe nos relatórios; a chave quente de KYC não", () => {
+    it("o operador de KYC não consegue trocar nem apagar o hash do relatório oficial", async () => {
       const f = await loadFixture(mintedFixture);
-      const { token, admin, compliance } = f;
+      const { token, registry, admin, compliance } = f;
       const name = ethers.encodeBytes32String("AUDIT-2027-Q1");
       const official = ethers.sha256(ethers.toUtf8Bytes("relatorio oficial"));
       const forged = ethers.sha256(ethers.toUtf8Bytes("relatorio forjado"));
       await token.connect(admin).setDocument(name, "ipfs://oficial", official); // publicado pela Safe
-      // deploy-core.ts concede COMPLIANCE_ROLE no token ao mesmo COMPLIANCE_ADDRESS do registro de KYC
-      await token.connect(compliance).setDocument(name, "ipfs://forjado", forged);
-      expect((await token.getDocument(name))[1]).to.equal(forged); // /verificar passa a dizer "Autêntico" ao forjado
-      await token.connect(compliance).removeDocument(name);
-      expect(await token.getAllDocuments()).to.deep.equal([]);
+      expect(await registry.hasRole(ROLES.COMPLIANCE, compliance.address)).to.equal(true); // é o operador de KYC
+      await expect(token.connect(compliance).setDocument(name, "ipfs://forjado", forged))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(compliance.address, ROLES.DOCUMENT);
+      await expect(token.connect(compliance).removeDocument(name))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(compliance.address, ROLES.DOCUMENT);
+      const [uri, hash] = await token.getDocument(name);
+      expect([uri, hash]).to.deep.equal(["ipfs://oficial", official]);
+      expect(await token.getAllDocuments()).to.deep.equal([name]);
     });
   });
 
-  describe("M-02 (centralização) admin pode diluir os cotistas antes de a liquidação terminar", () => {
-    it("PoC: admin se concede MINTER e emite o supply não vendido para si → captura parte da receita futura", async () => {
+  describe("M-02 (corrigido) emissor imutável: o admin não se torna minter nem bloqueia a entrega", () => {
+    async function finalizedOffering() {
       const f = await deployOffering({ maxSupply: 10_000n, hardCapCotas: 10_000n, softCapCotas: 4_000n });
-      const { offering, token, admin, distributor, alice, bob, carol } = f;
       await time.increaseTo(f.startTime);
-      for (const s of [alice, bob, carol]) await offering.connect(s).commit(1500n); // 4500 vendidas
-      await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
-      await offering.connect(admin).finalize();
+      for (const s of [f.alice, f.bob, f.carol]) await f.offering.connect(s).commit(1500n); // 4500 vendidas
+      await time.increaseTo((await f.offering.withdrawalsCloseAt()) + 1n);
+      await f.offering.connect(f.admin).finalize();
+      return f;
+    }
 
-      // janela entre finalize e o último settle: emissão ainda aberta
-      await token.connect(admin).grantRole(ROLES.MINTER, admin.address);
-      await token.connect(admin).mint(admin.address, 10_000n - 4500n);
-      await offering.settle(10n); // entrega normalmente e encerra a emissão
-      expect(await token.totalSupply()).to.equal(10_000n);
+    it("o admin não emite o supply não vendido para si: os cotistas recebem 100% da receita", async () => {
+      const f = await loadFixture(finalizedOffering);
+      const { offering, token, admin, distributor, alice } = f;
+      const offeringAddr = await offering.getAddress();
+      // janela entre finalize e o último settle: todas as rotas para virar emissor revertem
+      await expect(token.connect(admin).grantRole(ROLES.MINTER, admin.address))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(admin.address, ROLES.MINTER_ADMIN);
+      await expect(token.connect(admin).grantRole(ROLES.MINTER_ADMIN, admin.address))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(admin.address, ROLES.MINTER_ADMIN);
+      await expect(token.connect(admin).setMinter(admin.address))
+        .to.be.revertedWithCustomError(token, "MinterAlreadySet")
+        .withArgs(offeringAddr);
+      await expect(token.connect(admin).mint(admin.address, 5500n))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(admin.address, ROLES.MINTER);
 
-      await token.connect(distributor).distribute(USDT(10_000), PERIOD);
-      // quem pagou 100% da captação recebe só 45% da receita
-      expect(await token.claimable(alice.address)).to.equal(USDT(1500));
-      expect(await token.accumulativeRevenueOf(admin.address)).to.equal(USDT(5500));
+      await offering.settle(10n);
+      expect(await token.totalSupply()).to.equal(4500n);
+      await token.connect(distributor).distribute(USDT(9_000), PERIOD);
+      expect(await token.claimable(alice.address)).to.equal(USDT(3_000)); // 1500/4500 da receita
+      expect(await token.accumulativeRevenueOf(admin.address)).to.equal(0n);
     });
 
-    it("PoC: a checagem de supply do finalize não protege depois dele — o admin pode impedir a entrega após o dinheiro ir à tesouraria", async () => {
-      const f = await deployOffering({ maxSupply: 10_000n, hardCapCotas: 10_000n, softCapCotas: 4_000n });
-      const { offering, token, usdt, admin, treasury, alice, bob, carol, outsider } = f;
-      await time.increaseTo(f.startTime);
-      for (const s of [alice, bob, carol]) await offering.connect(s).commit(1500n);
-      await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
-      await offering.connect(admin).finalize();
-      expect(await usdt.balanceOf(treasury.address)).to.equal(4500n * f.params.price);
-
-      await token.connect(admin).grantRole(ROLES.MINTER, admin.address);
-      await token.connect(admin).mint(admin.address, 10_000n); // todo o maxSupply
-      await expect(offering.connect(outsider).settle(10n)).to.be.revertedWithCustomError(token, "MaxSupplyExceeded");
-      await expect(offering.connect(alice).claimTokens()).to.be.revertedWithCustomError(token, "MaxSupplyExceeded");
-      await expect(offering.connect(alice).refund()).to.be.revertedWithCustomError(offering, "InvalidState").withArgs(State.Finalized);
+    it("o admin não consegue impedir a entrega das cotas depois que o dinheiro foi à tesouraria", async () => {
+      const f = await loadFixture(finalizedOffering);
+      const { offering, token, admin, alice, outsider } = f;
+      const offeringAddr = await offering.getAddress();
+      await expect(token.connect(admin).revokeRole(ROLES.MINTER, offeringAddr))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(admin.address, ROLES.MINTER_ADMIN);
+      await expect(token.connect(admin).finishMinting()).to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount");
+      await offering.connect(alice).claimTokens();
+      await offering.connect(outsider).settle(10n);
+      expect(await token.balanceOf(alice.address)).to.equal(1500n);
+      expect(await token.totalSupply()).to.equal(4500n);
+      expect(await token.mintingFinished()).to.equal(true);
     });
   });
 });

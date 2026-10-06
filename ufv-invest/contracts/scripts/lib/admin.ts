@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { createHash } from "node:crypto";
 import type { HardhatRuntimeEnvironment } from "hardhat/types";
+import type { Signer } from "ethers";
 import { encodeBytes32String, formatUnits, getAddress, isAddress, parseUnits, ZeroHash } from "ethers";
 import { DEFAULT_WEB_DEPLOYMENTS_FILE, readRecord, recordPath, type WebDeployments } from "./deployments";
 
@@ -149,16 +150,24 @@ export async function distributeRevenue(
 export async function publishDocument(
   hre: HardhatRuntimeEnvironment,
   a: Addresses,
-  opts: { plant?: string; name: string; uri: string; file?: string; hash?: string; log?: (m: string) => void },
+  opts: { plant?: string; name: string; uri: string; file?: string; hash?: string; signer?: Signer; log?: (m: string) => void },
 ) {
   const log = opts.log ?? console.log;
   const p = plantOf(a, opts.plant);
   if (!opts.uri) throw new Error("defina URI");
+  const signer = opts.signer ?? (await hre.ethers.getSigners())[0];
   const documentHash = opts.file ? sha256File(opts.file) : opts.hash ? toBytes32(opts.hash) : ZeroHash;
   if (opts.file && opts.hash && toBytes32(opts.hash) !== documentHash) {
     throw new Error(`HASH informado difere do SHA-256 do arquivo (${documentHash})`);
   }
-  const token = await hre.ethers.getContractAt("UFVPlantToken", p.token);
+  const token = (await hre.ethers.getContractAt("UFVPlantToken", p.token)).connect(signer);
+  const who = await signer.getAddress();
+  if (!(await token.hasRole(await token.DOCUMENT_ROLE(), who))) {
+    throw new Error(
+      `${who} não tem DOCUMENT_ROLE no token (os documentos são da Safe do admin: gere ` +
+        `setDocument(name, uri, hash) no Transaction Builder; sha256=${documentHash})`,
+    );
+  }
   const tx = await token.setDocument(toBytes32(opts.name), opts.uri, documentHash);
   await tx.wait();
   log(`documento "${opts.name}" publicado em ${opts.plant}: ${opts.uri} sha256=${documentHash} (tx ${tx.hash})`);

@@ -4,7 +4,8 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { time } from "@nomicfoundation/hardhat-network-helpers";
-import { deployAll } from "../scripts/lib/deploy-core";
+import { checkPaymentTokenPolicy, deployAll } from "../scripts/lib/deploy-core";
+import { BSC_USDT_MAINNET } from "../scripts/lib/deployments";
 import { DEFAULT_PLANTS_FILE, loadPlants } from "../scripts/lib/plants-config";
 import { DAY, ROLES, USDT } from "./helpers";
 
@@ -78,9 +79,14 @@ describe("Deploy (scripts/lib/deploy-core)", () => {
       const offering = await ethers.getContractAt("UFVOffering", offeringAddr);
       all.push(token, offering);
       expect(await token.hasRole(ROLES.MINTER, offeringAddr)).to.equal(true);
+      expect(await token.minter()).to.equal(offeringAddr);
       expect(await token.hasRole(ROLES.DISTRIBUTOR, distributor.address)).to.equal(true);
       expect(await token.hasRole(ROLES.PAUSER, safe.address)).to.equal(true);
-      expect(await token.hasRole(ROLES.COMPLIANCE, compliance.address)).to.equal(true);
+      // M-03: documentos só com a Safe; a carteira de KYC não tem nenhum papel no token
+      expect(await token.hasRole(ROLES.DOCUMENT, safe.address)).to.equal(true);
+      for (const role of [ROLES.DOCUMENT, ROLES.MINTER, ROLES.DISTRIBUTOR, ROLES.PAUSER, ROLES.COMPLIANCE]) {
+        expect(await token.hasRole(role, compliance.address)).to.equal(false);
+      }
       expect(await offering.hasRole(ROLES.PAUSER, safe.address)).to.equal(true);
       expect(await token.identityRegistry()).to.equal(local.identityRegistry);
       expect(await token.payoutToken()).to.equal(local.paymentToken);
@@ -98,7 +104,7 @@ describe("Deploy (scripts/lib/deploy-core)", () => {
         expect(await token.symbol()).to.equal("UFVJAN1");
       }
       // o deployer não ficou com nenhum papel operacional
-      for (const role of [ROLES.MINTER, ROLES.DISTRIBUTOR, ROLES.PAUSER, ROLES.COMPLIANCE]) {
+      for (const role of [ROLES.MINTER, ROLES.DISTRIBUTOR, ROLES.PAUSER, ROLES.DOCUMENT]) {
         expect(await token.hasRole(role, deployer.address)).to.equal(false);
       }
       expect(await offering.hasRole(ROLES.PAUSER, deployer.address)).to.equal(false);
@@ -119,5 +125,15 @@ describe("Deploy (scripts/lib/deploy-core)", () => {
       expect(await ac.hasRole(ROLES.DEFAULT_ADMIN, deployer.address)).to.equal(false);
     }
     fs.rmSync(dir, { recursive: true, force: true });
+  });
+
+  it("I-03: na mainnet só aceita o USDT BEP-20 oficial como token de pagamento (salvo opt-in)", () => {
+    const fake = "0x000000000000000000000000000000000000dEaD";
+    expect(() => checkPaymentTokenPolicy(56, fake)).to.throw("não é o USDT BEP-20 oficial");
+    expect(() => checkPaymentTokenPolicy(56, fake, true)).not.to.throw();
+    expect(() => checkPaymentTokenPolicy(56, BSC_USDT_MAINNET)).not.to.throw();
+    expect(() => checkPaymentTokenPolicy(56, BSC_USDT_MAINNET.toLowerCase())).not.to.throw();
+    expect(() => checkPaymentTokenPolicy(56, undefined)).not.to.throw(); // vazio = USDT oficial
+    expect(() => checkPaymentTokenPolicy(97, fake)).not.to.throw();
   });
 });

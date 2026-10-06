@@ -43,10 +43,12 @@ const appControls = [
 const contractControls = [
   ["Token restrito (ERC-3643-lite)", "A cota é um BEP-20 com 0 decimais que só transfere entre carteiras com KYC válido no IdentityRegistry."],
   ["Oferta com custódia (escrow)", "O USDT fica no contrato da oferta até o encerramento. Meta mínima não atingida ou oferta cancelada → cada investidor resgata 100% do valor."],
-  ["Direito de desistência", "Até 5 dias após o aporte, você pode desistir e receber o valor de volta (inspirado na Resolução CVM 88)."],
+  ["Direito de desistência por aporte", "Cada aporte pode ser desistido em até 5 dias, com devolução integral (inspirado na Resolução CVM 88). Um novo aporte não reabre os anteriores, e quem desiste não pode aportar de novo na mesma oferta — isso impede que um grupo ocupe o teto da captação e desista no fim."],
+  ["Reembolso garantido por prazo", "Se a oferta atingir a meta mas não for encerrada no prazo, ela passa automaticamente a “não concluída” e cada investidor resgata o valor — o dinheiro não fica preso."],
   ["Distribuição pro-rata on-chain", "Acumulador por cota (padrão ERC-2222): receitas anteriores a uma transferência ficam com quem vendeu; ninguém resgata mais do que foi distribuído."],
   ["Imutáveis", "Sem proxy de atualização: o código que você audita é o código que roda para sempre."],
-  ["Papéis separados", "Admin (com atraso de transferência), compliance, distribuidor e pausa são papéis distintos; o admin deve ser um multisig."],
+  ["Papéis separados", "Admin (com atraso de 2 dias na transferência), KYC, distribuidor, documentos e pausa são papéis distintos; o admin e o registro de documentos ficam só com o multisig (a carteira do servidor de KYC não pode alterar o hash dos relatórios)."],
+  ["Emissão travada", "O contrato que pode emitir cotas é definido uma única vez no deploy (a oferta) e nunca mais pode ser trocado — nem o admin consegue emitir cotas para si."],
   ["Proteções padrão", "OpenZeppelin v5, ReentrancyGuard, SafeERC20 com checagem de saldo (rejeita tokens com taxa), checks-effects-interactions e erros customizados."],
 ];
 

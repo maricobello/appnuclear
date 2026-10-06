@@ -91,7 +91,18 @@ describe("Scripts de operação (scripts/lib/admin)", () => {
     // documento com SHA-256 do arquivo
     const pdf = path.join(dir, "relatorio.pdf");
     fs.writeFileSync(pdf, "%PDF-1.7 relatório de auditoria");
-    const h = await publishDocument(hre, a, { plant: "ufv-teste", name: "AUDIT-2027-Q1", uri: "ipfs://cid", file: pdf, log: quiet });
+    // M-03: a carteira de operação (KYC/distribuição) não publica documentos; só a Safe (DOCUMENT_ROLE)
+    await expect(
+      publishDocument(hre, a, { plant: "ufv-teste", name: "AUDIT-2027-Q1", uri: "ipfs://cid", file: pdf, log: quiet }),
+    ).to.be.rejectedWith("DOCUMENT_ROLE");
+    const h = await publishDocument(hre, a, {
+      plant: "ufv-teste",
+      name: "AUDIT-2027-Q1",
+      uri: "ipfs://cid",
+      file: pdf,
+      signer: safe,
+      log: quiet,
+    });
     expect(h).to.equal(sha256File(pdf));
     expect(h).to.equal(ethers.sha256(fs.readFileSync(pdf)));
     const [uri, docHash] = await token.getDocument(toBytes32("AUDIT-2027-Q1"));

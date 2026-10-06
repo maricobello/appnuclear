@@ -27,6 +27,7 @@ async function main() {
     only: envList("PLANTS"),
     forceRedeploy: envFlag("FORCE_REDEPLOY"),
     allowEoaAdminOnMainnet: envFlag("ALLOW_EOA_ADMIN"),
+    allowCustomPaymentToken: envFlag("ALLOW_CUSTOM_PAYMENT_TOKEN"),
     webFile: writeWeb ? env("WEB_DEPLOYMENTS_FILE") : null,
     confirmations: chainId === 56 ? 2 : 1,
   });

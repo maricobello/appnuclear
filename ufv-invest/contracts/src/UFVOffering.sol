@@ -14,9 +14,11 @@ import {IUFVPlantToken} from "./interfaces/IUFVPlantToken.sol";
  * @title UFVOffering — oferta primária de cotas com escrow, meta mínima e direito de desistência
  * @notice Inspirada na Resolução CVM 88 (crowdfunding de investimento):
  *         - o dinheiro dos investidores fica em escrow neste contrato até o encerramento;
- *         - o investidor pode desistir (`withdraw`) em até `withdrawalWindow` (ex.: 5 dias) após o
- *           seu aporte MAIS RECENTE, recebendo de volta TODA a sua posição (simplificação: não há
- *           desistência parcial por aporte);
+ *         - o investidor pode desistir (`withdraw`) de cada aporte ("tranche") em até
+ *           `withdrawalWindow` (ex.: 5 dias) depois DAQUELE aporte: `withdraw` devolve todas as
+ *           tranches ainda dentro da janela; as mais antigas ficam travadas em escrow como qualquer
+ *           aporte. Quem desiste não pode aportar de novo nesta oferta (impede reciclar a posição
+ *           para segurar o hardcap de graça — achado M-01 da auditoria);
  *         - se a meta mínima (`softCapCotas`) não for atingida, ou se a oferta for cancelada, cada
  *           investidor saca o valor integral (`refund`);
  *         - se a oferta tiver sucesso, `finalize` envia os recursos à tesouraria da SPE e as cotas
@@ -28,7 +30,8 @@ import {IUFVPlantToken} from "./interfaces/IUFVPlantToken.sol";
  *         - `Succeeded`: hardcap atingido, ou `endTime` passou com `cotasSold ≥ softCapCotas`;
  *           ainda não finalizada. Desistências dentro da janela continuam possíveis e podem levar a
  *           oferta de volta para `Active` (antes do fim) ou para `Failed` (depois do fim);
- *         - `Failed`: `endTime` passou com `cotasSold < softCapCotas` — reembolsos liberados;
+ *         - `Failed`: `endTime` passou com `cotasSold < softCapCotas`, ou a oferta bem-sucedida não
+ *           foi finalizada até `finalizeDeadline()` (escrow nunca fica congelado) — reembolsos liberados;
  *         - `Finalized`: recursos enviados à tesouraria; cotas sendo/entregues;
  *         - `Cancelled`: cancelada pelo admin antes de finalizar — reembolsos liberados.
  *
@@ -39,7 +42,10 @@ import {IUFVPlantToken} from "./interfaces/IUFVPlantToken.sol";
  *      emitir as cotas (tem `MINTER_ROLE`, emissão aberta e `maxSupply` suficiente).
  *
  *      `finalize` é do admin; se o admin não agir em `FINALIZE_GRACE_PERIOD` após o fim das
- *      desistências, qualquer pessoa pode finalizar (o dinheiro nunca fica preso em escrow).
+ *      desistências, qualquer pessoa pode finalizar. Se mesmo assim a finalização for impossível
+ *      (ex.: tesouraria bloqueada pelo emissor do USDT) até `finalizeDeadline()` =
+ *      `endTime + withdrawalWindow + 2 × FINALIZE_GRACE_PERIOD`, a oferta passa a `Failed` e todos
+ *      podem pedir reembolso (o dinheiro nunca fica preso em escrow).
  *
  *      Pausa (`PAUSER_ROLE`) bloqueia só novos aportes. Desistência, reembolso, finalização e
  *      entrega de cotas nunca são pausáveis — são direitos do investidor.
@@ -82,9 +88,16 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
     struct Commitment {
         uint256 cotas;
         uint256 paid;
+        /// @dev timestamp da tranche mais recente da posição atual (0 se nenhuma)
         uint64 lastCommitAt;
         bool settled;
         bool refunded;
+    }
+
+    /// @notice Um aporte individual; cada um tem a sua própria janela de desistência.
+    struct Tranche {
+        uint64 committedAt;
+        uint128 cotas;
     }
 
     // ─── Constantes ─────────────────────────────────────────────────────────────────────────
@@ -130,6 +143,10 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
     bool public settlementCompleted;
 
     mapping(address investor => Commitment) private _commitments;
+    /// @dev tranches da posição atual, em ordem cronológica (Σ cotas == `cotas` enquanto cotas > 0)
+    mapping(address investor => Tranche[]) private _tranches;
+    /// @notice `true` se o investidor já desistiu de algum aporte (não pode aportar de novo).
+    mapping(address investor => bool) public hasWithdrawn;
     address[] private _investors;
     mapping(address investor => bool) private _listed;
 
@@ -156,6 +173,7 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
     error ExceedsHardCap(uint256 cotas, uint256 remaining);
     error TransferAmountMismatch(uint256 expected, uint256 received);
     error NoCommitment();
+    error RecommitAfterWithdrawal();
     error WithdrawalWindowClosed(uint256 deadline);
     error WithdrawalPeriodOpen(uint256 closesAt);
     error NothingToRefund();
@@ -210,6 +228,8 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
         if (cancelled) return State.Cancelled;
         if (finalized) return State.Finalized;
         if (block.timestamp < startTime) return State.Pending;
+        // nunca finalizada no prazo: libera reembolso (monotônico — depois do fim só há saídas)
+        if (block.timestamp > finalizeDeadline()) return State.Failed;
         if (cotasSold >= hardCapCotas) return State.Succeeded;
         if (block.timestamp <= endTime) return State.Active;
         return cotasSold >= softCapCotas ? State.Succeeded : State.Failed;
@@ -224,11 +244,52 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
         return base + withdrawalWindow;
     }
 
-    /// @notice Prazo de desistência de `investor` (0 se não tem posição).
+    /**
+     * @notice Limite para finalizar. Se a oferta bem-sucedida não for finalizada até aqui, `state()`
+     *         vira `Failed` e o escrow é devolvido via `refund` (achado L-01 da auditoria).
+     * @dev Ancorado em `endTime` (e não no `withdrawalsCloseAt()` do encerramento antecipado) para o
+     *      estado ser monotônico: reembolsos que derrubem `cotasSold` abaixo do hardcap não podem
+     *      reabrir a captação. Em ofertas sem encerramento antecipado é `withdrawalsCloseAt() + 2 × carência`.
+     */
+    function finalizeDeadline() public view returns (uint256) {
+        return uint256(endTime) + withdrawalWindow + 2 * uint256(FINALIZE_GRACE_PERIOD);
+    }
+
+    /**
+     * @notice Prazo de desistência da tranche mais recente da posição de `investor` (0 se não tem
+     *         posição). Depois dele nada mais é desistível; antes dele, só as tranches dentro da
+     *         janela (ver `withdrawableOf`).
+     */
     function withdrawalDeadline(address investor) external view returns (uint256) {
         Commitment storage c = _commitments[investor];
         if (c.cotas == 0) return 0;
         return uint256(c.lastCommitAt) + withdrawalWindow;
+    }
+
+    /**
+     * @notice O que `withdraw()` devolveria agora a `investor`.
+     * @return cotas Cotas das tranches ainda dentro da janela de desistência.
+     * @return amount Valor correspondente (`cotas × pricePerCota`).
+     * @return deadline Quando a tranche desistível mais recente deixa de sê-lo (0 se nenhuma).
+     *         Tranches mais antigas expiram antes — `cotas` só diminui com o tempo.
+     */
+    function withdrawableOf(address investor) public view returns (uint256 cotas, uint256 amount, uint256 deadline) {
+        if (finalized || cancelled || _commitments[investor].cotas == 0) return (0, 0, 0);
+        Tranche[] storage tranches = _tranches[investor];
+        for (uint256 n = tranches.length; n > 0; --n) {
+            Tranche storage t = tranches[n - 1];
+            uint256 trancheDeadline = uint256(t.committedAt) + withdrawalWindow;
+            if (block.timestamp > trancheDeadline) break;
+            if (deadline == 0) deadline = trancheDeadline;
+            cotas += t.cotas;
+        }
+        amount = cotas * pricePerCota;
+    }
+
+    /// @notice Aportes (tranches) da posição atual de `investor`, do mais antigo ao mais recente.
+    function tranchesOf(address investor) external view returns (Tranche[] memory) {
+        if (_commitments[investor].cotas == 0) return new Tranche[](0);
+        return _tranches[investor];
     }
 
     /// @notice Cotas ainda disponíveis até o hardcap.
@@ -263,12 +324,14 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
      *         (exige `approve` prévio). Requer KYC vigente.
      * @dev `cotas ≥ minCotas`, exceto quando completa exatamente o hardcap restante (evita sobra
      *      invendável). A posição total do investidor não pode passar de `maxCotasPerInvestor`.
-     *      Cada aporte reinicia o prazo de desistência de TODA a posição do investidor.
+     *      Cada aporte é uma tranche com a sua própria janela de desistência (um aporte novo NÃO
+     *      reabre a desistência dos anteriores). Quem já desistiu não aporta de novo.
      */
     function commit(uint256 cotas) external nonReentrant whenNotPaused {
         State current = state();
         if (current != State.Active) revert InvalidState(current);
         if (!identityRegistry.isVerified(msg.sender)) revert NotVerified(msg.sender);
+        if (hasWithdrawn[msg.sender]) revert RecommitAfterWithdrawal();
         if (cotas == 0) revert ZeroAmount();
 
         uint256 remaining = hardCapCotas - cotasSold;
@@ -291,6 +354,7 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
         c.cotas = newCotas;
         c.paid = newPaid;
         c.lastCommitAt = uint64(block.timestamp);
+        _tranches[msg.sender].push(Tranche({committedAt: uint64(block.timestamp), cotas: uint128(cotas)}));
         cotasSold += cotas;
         totalRaised += cost;
         latestCommitAt = uint64(block.timestamp);
@@ -305,28 +369,44 @@ contract UFVOffering is AccessControlDefaultAdminRules, Pausable, ReentrancyGuar
     }
 
     /**
-     * @notice Desistência: devolve TODA a posição de `msg.sender` se ainda estiver dentro de
-     *         `withdrawalWindow` contado do seu aporte mais recente. Não é pausável.
+     * @notice Desistência: devolve as tranches de `msg.sender` ainda dentro de `withdrawalWindow`
+     *         (contado de cada aporte). Tranches mais antigas continuam em escrow. Depois de desistir,
+     *         o endereço não pode aportar de novo nesta oferta. Não é pausável.
+     * @dev Percorre só as tranches do próprio investidor, da mais recente para trás, e para na
+     *      primeira fora da janela (são cronológicas) — custo limitado pelos aportes dele mesmo.
      */
     function withdraw() external nonReentrant {
         State current = state();
         if (current == State.Finalized || current == State.Cancelled) revert InvalidState(current);
 
         Commitment storage c = _commitments[msg.sender];
-        uint256 cotas = c.cotas;
-        if (cotas == 0) revert NoCommitment();
-        uint256 deadline = uint256(c.lastCommitAt) + withdrawalWindow;
-        if (block.timestamp > deadline) revert WithdrawalWindowClosed(deadline);
+        if (c.cotas == 0) revert NoCommitment();
 
-        uint256 paid = c.paid;
-        c.cotas = 0;
-        c.paid = 0;
+        Tranche[] storage tranches = _tranches[msg.sender];
+        uint256 n = tranches.length;
+        uint256 cotas;
+        while (n > 0) {
+            Tranche storage t = tranches[n - 1];
+            if (block.timestamp > uint256(t.committedAt) + withdrawalWindow) break;
+            cotas += t.cotas;
+            tranches.pop();
+            --n;
+        }
+        if (cotas == 0) revert WithdrawalWindowClosed(uint256(tranches[n - 1].committedAt) + withdrawalWindow);
+
+        // efeitos
+        uint256 amount = cotas * pricePerCota; // paid == cotas × preço (preço imutável)
+        hasWithdrawn[msg.sender] = true;
+        c.cotas -= cotas;
+        c.paid -= amount;
+        c.lastCommitAt = n == 0 ? 0 : tranches[n - 1].committedAt;
         cotasSold -= cotas;
-        totalRaised -= paid;
-        investorCount -= 1;
+        totalRaised -= amount;
+        if (c.cotas == 0) investorCount -= 1;
 
-        paymentToken.safeTransfer(msg.sender, paid);
-        emit Withdrawn(msg.sender, cotas, paid);
+        // interação
+        paymentToken.safeTransfer(msg.sender, amount);
+        emit Withdrawn(msg.sender, cotas, amount);
     }
 
     /// @notice Reembolso integral quando a oferta falhou (`Failed`) ou foi cancelada (`Cancelled`).

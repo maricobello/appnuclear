@@ -169,6 +169,36 @@ describe("UFVOffering", () => {
       expect(await f.offering.state()).to.equal(State.Succeeded);
     });
 
+    it("Succeeded não finalizada vira Failed após finalizeDeadline (escrow nunca congela) e não volta atrás", async () => {
+      const f = await loadFixture(softCapReachedFixture);
+      const { offering, admin, alice, bob } = f;
+      const deadline = await offering.finalizeDeadline();
+      expect(deadline).to.equal(f.endTime + WINDOW + 2n * GRACE);
+      expect(deadline).to.equal((await offering.withdrawalsCloseAt()) + 2n * GRACE); // sem encerramento antecipado
+      await time.increaseTo(deadline);
+      expect(await offering.state()).to.equal(State.Succeeded);
+      await time.increaseTo(deadline + 1n);
+      expect(await offering.state()).to.equal(State.Failed);
+      await expect(offering.connect(admin).finalize())
+        .to.be.revertedWithCustomError(offering, "InvalidState")
+        .withArgs(State.Failed);
+      await offering.connect(alice).refund();
+      await offering.connect(bob).refund();
+      expect(await offering.state()).to.equal(State.Failed);
+    });
+
+    it("encerramento antecipado (hardcap) não finalizado também expira — e reembolsos não reabrem a captação", async () => {
+      const f = await loadFixture(activeOfferingFixture);
+      await fillHardCap(f);
+      await time.increaseTo((await f.offering.finalizeDeadline()) + 1n);
+      expect(await f.offering.state()).to.equal(State.Failed);
+      await f.offering.connect(f.alice).refund(); // cotasSold < hardcap
+      expect(await f.offering.state()).to.equal(State.Failed);
+      await expect(f.offering.connect(f.erin).commit(10n))
+        .to.be.revertedWithCustomError(f.offering, "InvalidState")
+        .withArgs(State.Failed);
+    });
+
     it("Cancelled prevalece sobre qualquer outro estado", async () => {
       const f = await loadFixture(softCapReachedFixture);
       await f.offering.connect(f.admin).cancel();
@@ -197,17 +227,30 @@ describe("UFVOffering", () => {
       expect(await offering.remainingCotas()).to.equal(10_000n - 100n);
     });
 
-    it("aportes adicionais somam e reiniciam o prazo de desistência", async () => {
+    it("aportes adicionais somam e viram tranches, cada uma com a sua janela", async () => {
       const { offering, alice } = await loadFixture(activeOfferingFixture);
       await offering.connect(alice).commit(100n);
+      const t1 = await now();
       await time.increase(3n * DAY);
       await expect(offering.connect(alice).commit(50n))
         .to.emit(offering, "Committed")
         .withArgs(alice.address, 50n, 50n * PRICE, 150n, 150n * PRICE);
-      const ts = await now();
-      expect(await offering.commitmentOf(alice.address)).to.deep.equal([150n, 150n * PRICE, ts, false, false]);
+      const t2 = await now();
+      expect(await offering.commitmentOf(alice.address)).to.deep.equal([150n, 150n * PRICE, t2, false, false]);
+      expect((await offering.tranchesOf(alice.address)).map((t) => [t.committedAt, t.cotas])).to.deep.equal([
+        [t1, 100n],
+        [t2, 50n],
+      ]);
+      expect(await offering.withdrawableOf(alice.address)).to.deep.equal([150n, 150n * PRICE, t2 + WINDOW]);
+      expect(await offering.withdrawalDeadline(alice.address)).to.equal(t2 + WINDOW);
       expect(await offering.investorCount()).to.equal(1n);
       expect(await offering.investorsLength()).to.equal(1n);
+      // a 1ª tranche expira antes; a 2ª continua desistível
+      await time.increaseTo(t1 + WINDOW + 1n);
+      expect(await offering.withdrawableOf(alice.address)).to.deep.equal([50n, 50n * PRICE, t2 + WINDOW]);
+      await time.increaseTo(t2 + WINDOW + 1n);
+      expect(await offering.withdrawableOf(alice.address)).to.deep.equal([0n, 0n, 0n]);
+      expect(await offering.tranchesOf(ethers.ZeroAddress)).to.deep.equal([]);
     });
 
     it("exige KYC vigente", async () => {
@@ -273,7 +316,7 @@ describe("UFVOffering", () => {
     });
 
     it("pausa bloqueia só novos aportes (desistência continua)", async () => {
-      const { offering, pauser, outsider, alice } = await loadFixture(activeOfferingFixture);
+      const { offering, pauser, outsider, alice, bob } = await loadFixture(activeOfferingFixture);
       await offering.connect(alice).commit(100n);
       await expect(offering.connect(outsider).pause())
         .to.be.revertedWithCustomError(offering, "AccessControlUnauthorizedAccount")
@@ -282,7 +325,8 @@ describe("UFVOffering", () => {
       await expect(offering.connect(alice).commit(10n)).to.be.revertedWithCustomError(offering, "EnforcedPause");
       await offering.connect(alice).withdraw();
       await offering.connect(pauser).unpause();
-      await offering.connect(alice).commit(10n);
+      await expect(offering.connect(alice).commit(10n)).to.be.revertedWithCustomError(offering, "RecommitAfterWithdrawal");
+      await offering.connect(bob).commit(10n);
     });
 
     it("falha sem allowance suficiente", async () => {
@@ -318,11 +362,14 @@ describe("UFVOffering", () => {
       expect(await offering.totalRaised()).to.equal(0n);
       expect(await offering.investorCount()).to.equal(0n);
       expect(await offering.withdrawalDeadline(alice.address)).to.equal(0n);
+      expect(await offering.withdrawableOf(alice.address)).to.deep.equal([0n, 0n, 0n]);
+      expect(await offering.tranchesOf(alice.address)).to.deep.equal([]);
+      expect(await offering.hasWithdrawn(alice.address)).to.equal(true);
       await expect(offering.connect(alice).withdraw()).to.be.revertedWithCustomError(offering, "NoCommitment");
-      // pode aportar de novo depois de desistir, sem duplicar a lista
-      await offering.connect(alice).commit(10n);
+      // quem desiste não aporta de novo (M-01: impede reciclar a posição para segurar o hardcap)
+      await expect(offering.connect(alice).commit(10n)).to.be.revertedWithCustomError(offering, "RecommitAfterWithdrawal");
       expect(await offering.investorsLength()).to.equal(1n);
-      expect(await offering.investorCount()).to.equal(1n);
+      expect(await offering.investorCount()).to.equal(0n);
     });
 
     it("vale até o último segundo da janela, não depois", async () => {
@@ -339,13 +386,41 @@ describe("UFVOffering", () => {
         .withArgs(deadlineB);
     });
 
-    it("prazo conta do aporte mais recente (simplificação documentada)", async () => {
+    it("desistência por tranche: só os aportes dentro da janela voltam; os antigos ficam em escrow", async () => {
+      const { offering, usdt, alice } = await loadFixture(activeOfferingFixture);
+      await offering.connect(alice).commit(3000n - 10n);
+      const t1 = await now();
+      await time.increase(4n * DAY);
+      await offering.connect(alice).commit(10n); // "recarga" de 10 cotas não reabre a janela dos 2 990
+      const t2 = await now();
+      await time.increase(4n * DAY); // 8 dias após o 1º aporte, 4 após o 2º
+      expect(await offering.withdrawableOf(alice.address)).to.deep.equal([10n, 10n * PRICE, t2 + WINDOW]);
+      const tx = offering.connect(alice).withdraw();
+      await expect(tx).to.emit(offering, "Withdrawn").withArgs(alice.address, 10n, 10n * PRICE);
+      await expect(tx).to.changeTokenBalances(usdt, [offering, alice], [-10n * PRICE, 10n * PRICE]);
+      expect(await offering.commitmentOf(alice.address)).to.deep.equal([2990n, 2990n * PRICE, t1, false, false]);
+      expect(await offering.cotasSold()).to.equal(2990n);
+      expect(await offering.totalRaised()).to.equal(2990n * PRICE);
+      expect(await offering.investorCount()).to.equal(1n); // ainda tem posição
+      expect(await offering.withdrawalDeadline(alice.address)).to.equal(t1 + WINDOW);
+      await expect(offering.connect(alice).withdraw())
+        .to.be.revertedWithCustomError(offering, "WithdrawalWindowClosed")
+        .withArgs(t1 + WINDOW);
+      await expect(offering.connect(alice).commit(10n)).to.be.revertedWithCustomError(offering, "RecommitAfterWithdrawal");
+    });
+
+    it("várias tranches dentro da janela voltam juntas; a fora da janela fica", async () => {
       const { offering, alice } = await loadFixture(activeOfferingFixture);
       await offering.connect(alice).commit(100n);
-      await time.increase(4n * DAY);
-      await offering.connect(alice).commit(100n);
-      await time.increase(4n * DAY); // 8 dias após o 1º aporte, 4 após o 2º
-      await expect(offering.connect(alice).withdraw()).to.emit(offering, "Withdrawn").withArgs(alice.address, 200n, 200n * PRICE);
+      const t1 = await now();
+      await time.increase(5n * DAY + 1n);
+      await offering.connect(alice).commit(20n);
+      await offering.connect(alice).commit(30n);
+      const t3 = await now();
+      expect(await offering.withdrawableOf(alice.address)).to.deep.equal([50n, 50n * PRICE, t3 + WINDOW]);
+      await expect(offering.connect(alice).withdraw()).to.emit(offering, "Withdrawn").withArgs(alice.address, 50n, 50n * PRICE);
+      expect((await offering.tranchesOf(alice.address)).map((t) => [t.committedAt, t.cotas])).to.deep.equal([[t1, 100n]]);
+      expect((await offering.commitmentOf(alice.address)).lastCommitAt).to.equal(t1);
     });
 
     it("desistência após o hardcap reabre a captação", async () => {
@@ -580,24 +655,32 @@ describe("UFVOffering", () => {
         .withArgs(f.treasury.address, 4500n * PRICE, 4500n, f.outsider.address);
     });
 
-    it("não libera o dinheiro se a oferta não puder emitir as cotas", async () => {
-      const f = await loadFixture(readyToFinalizeFixture);
-      const { offering, token, admin, outsider } = f;
-      const offeringAddr = await offering.getAddress();
-
-      await token.connect(admin).revokeRole(ROLES.MINTER, offeringAddr);
+    it("não libera o dinheiro se a oferta não for a emissora do token", async () => {
+      const f = await deployOffering({}, undefined, { setMinter: false });
+      const { offering, token, admin, usdt, treasury, alice, bob, carol } = f;
+      await time.increaseTo(f.startTime);
+      for (const s of [alice, bob, carol]) await offering.connect(s).commit(1500n);
+      await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
       await expect(offering.connect(admin).finalize()).to.be.revertedWithCustomError(offering, "OfferingNotMinter");
-      await token.connect(admin).grantRole(ROLES.MINTER, offeringAddr);
+      expect(await usdt.balanceOf(treasury.address)).to.equal(0n);
+      // o admin define o emissor (uma única vez) e só então a captação é liberada
+      await token.connect(admin).setMinter(await offering.getAddress());
+      await offering.connect(admin).finalize();
+      expect(await usdt.balanceOf(treasury.address)).to.equal(4500n * PRICE);
+    });
 
-      // alguém emitiu fora da oferta e sobrou menos supply que o vendido
-      await token.connect(admin).grantRole(ROLES.MINTER, admin.address);
-      await token.connect(admin).mint(outsider.address, 6000n); // restam 4000 < 4500
-      await expect(offering.connect(admin).finalize())
-        .to.be.revertedWithCustomError(offering, "TokenSupplyInsufficient")
-        .withArgs(4000n, 4500n);
-
-      await token.connect(admin).finishMinting();
-      await expect(offering.connect(admin).finalize()).to.be.revertedWithCustomError(offering, "TokenMintingFinished");
+    it("emissor definido para outro endereço: nunca finaliza e o escrow volta (cancel ou finalizeDeadline)", async () => {
+      const f = await deployOffering({}, undefined, { setMinter: false });
+      const { offering, token, admin, outsider, alice, bob, carol, usdt } = f;
+      await token.connect(admin).setMinter(admin.address); // erro operacional irreversível
+      await time.increaseTo(f.startTime);
+      for (const s of [alice, bob, carol]) await offering.connect(s).commit(1500n);
+      await time.increaseTo((await offering.withdrawalsCloseAt()) + GRACE + 1n);
+      await expect(offering.connect(outsider).finalize()).to.be.revertedWithCustomError(offering, "OfferingNotMinter");
+      await time.increaseTo((await offering.finalizeDeadline()) + 1n);
+      expect(await offering.state()).to.equal(State.Failed);
+      for (const s of [alice, bob, carol]) await offering.refundFor(s.address);
+      expect(await usdt.balanceOf(await offering.getAddress())).to.equal(0n);
     });
 
     it("protegido contra reentrância", async () => {
@@ -774,10 +857,11 @@ describe("UFVOffering", () => {
         price: USDT("18.2"),
       });
       const { offering, token, usdt, admin, treasury, distributor, signers, compliance, registry } = f;
-      // 10 investidores com 13 000 cotas (hardcap exato)
+      // 10 investidores com 13 000 cotas (hardcap exato) + 1 que entra no lugar de quem desistir
       const investors = signers.slice(6, 16) as HardhatEthersSigner[];
-      await kyc(registry, compliance, investors);
-      for (const s of investors) {
+      const replacement = signers[16] as HardhatEthersSigner;
+      await kyc(registry, compliance, [...investors, replacement]);
+      for (const s of [...investors, replacement]) {
         await usdt.connect(admin).mint(s.address, USDT(300_000));
         await usdt.connect(s).approve(await offering.getAddress(), ethers.MaxUint256);
       }
@@ -786,11 +870,16 @@ describe("UFVOffering", () => {
       expect(await offering.state()).to.equal(State.Succeeded);
       expect(await offering.totalRaised()).to.equal(USDT(2_366_000)); // 130 000 × 18,2
 
-      // um desiste no dia 4; outro entra no lugar
+      // um desiste no dia 4 (não pode voltar); outro entra no lugar
       await time.increase(4n * DAY);
       await offering.connect(investors[3]).withdraw();
       expect(await offering.state()).to.equal(State.Active);
-      await offering.connect(investors[3]).commit(13_000n);
+      await expect(offering.connect(investors[3]).commit(13_000n)).to.be.revertedWithCustomError(
+        offering,
+        "RecommitAfterWithdrawal",
+      );
+      await offering.connect(replacement).commit(13_000n);
+      investors[3] = replacement;
 
       await time.increaseTo((await offering.withdrawalsCloseAt()) + 1n);
       await offering.connect(admin).finalize();
@@ -833,6 +922,13 @@ describe("UFVOffering", () => {
           for (const s of investors) {
             const c = await o.commitmentOf(s.address);
             expect(c.paid).to.equal(c.cotas * PRICE);
+            // Σ tranches == posição; lastCommitAt == tranche mais recente
+            const tranches = await o.tranchesOf(s.address);
+            expect(tranches.reduce((acc, t) => acc + t.cotas, 0n)).to.equal(c.cotas);
+            if (tranches.length) expect(c.lastCommitAt).to.equal(tranches[tranches.length - 1].committedAt);
+            const [wc, wa] = await o.withdrawableOf(s.address);
+            expect(wa).to.equal(wc * PRICE);
+            expect(wc <= c.cotas).to.equal(true);
             sumCotas += c.cotas;
             sumPaid += c.paid;
             if (c.cotas > 0n) active++;
@@ -848,6 +944,10 @@ describe("UFVOffering", () => {
           const s = rnd.pick(investors);
           const r = rnd.next();
           if (r < 0.65) {
+            if (await offering.hasWithdrawn(s.address)) {
+              await expect(offering.connect(s).commit(10n)).to.be.reverted;
+              continue;
+            }
             const c = await offering.commitmentOf(s.address);
             const room = 3000n - c.cotas;
             const remaining = await offering.remainingCotas();
@@ -855,9 +955,18 @@ describe("UFVOffering", () => {
             if (max < 10n || (await offering.state()) !== State.Active) continue;
             await offering.connect(s).commit(rnd.big(10n, max));
           } else if (r < 0.85) {
-            const deadline = await offering.withdrawalDeadline(s.address);
-            if (deadline === 0n || (await now()) + 1n > deadline) continue;
-            await offering.connect(s).withdraw();
+            // a tx roda em now+1: soma as tranches (da mais recente para trás) ainda na janela
+            const at = (await now()) + 1n;
+            const tranches = [...(await offering.tranchesOf(s.address))].reverse();
+            let expected = 0n;
+            for (const t of tranches) {
+              if (at > t.committedAt + WINDOW) break;
+              expected += t.cotas;
+            }
+            if (expected === 0n) continue;
+            await expect(offering.connect(s).withdraw())
+              .to.emit(offering, "Withdrawn")
+              .withArgs(s.address, expected, expected * PRICE);
           } else {
             await time.increase(rnd.int(1, 3) * 86_400);
           }

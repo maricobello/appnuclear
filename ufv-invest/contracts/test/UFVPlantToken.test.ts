@@ -66,7 +66,7 @@ describe("UFVPlantToken", () => {
         await usdt.getAddress(),
         admin.address,
       ]);
-      await token.connect(admin).grantRole(ROLES.MINTER, admin.address);
+      await token.connect(admin).setMinter(admin.address);
       await token.connect(admin).mint(alice.address, 60n);
       await expect(token.connect(admin).mint(alice.address, 41n))
         .to.be.revertedWithCustomError(token, "MaxSupplyExceeded")
@@ -108,9 +108,49 @@ describe("UFVPlantToken", () => {
       );
     });
 
-    it("admin sem MINTER_ROLE não emite nem encerra a emissão", async () => {
-      const { token, admin, alice } = await loadFixture(deployTokenFixture);
-      await token.connect(admin).revokeRole(ROLES.MINTER, admin.address);
+    it("emissor definido uma única vez: ninguém (nem o admin) concede, revoga ou troca o MINTER_ROLE", async () => {
+      const { registry, usdt, admin, alice, outsider } = await loadFixture(deployTokenFixture);
+      const token = await ethers.deployContract("UFVPlantToken", [
+        "n",
+        "s",
+        100n,
+        await registry.getAddress(),
+        await usdt.getAddress(),
+        admin.address,
+      ]);
+      expect(await token.minter()).to.equal(ethers.ZeroAddress);
+      expect(await token.getRoleAdmin(ROLES.MINTER)).to.equal(ROLES.MINTER_ADMIN);
+      expect(await token.getRoleAdmin(ROLES.MINTER_ADMIN)).to.equal(ROLES.MINTER_ADMIN);
+      // antes do setMinter, ninguém emite (nem o admin)
+      await expect(token.connect(admin).mint(alice.address, 1n))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(admin.address, ROLES.MINTER);
+      await expect(token.connect(outsider).setMinter(outsider.address))
+        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+        .withArgs(outsider.address, ROLES.DEFAULT_ADMIN);
+      await expect(token.connect(admin).setMinter(ethers.ZeroAddress)).to.be.revertedWithCustomError(token, "ZeroAddress");
+
+      await expect(token.connect(admin).setMinter(outsider.address))
+        .to.emit(token, "MinterSet")
+        .withArgs(outsider.address, admin.address)
+        .and.to.emit(token, "RoleGranted")
+        .withArgs(ROLES.MINTER, outsider.address, admin.address);
+      expect(await token.minter()).to.equal(outsider.address);
+      expect(await token.hasRole(ROLES.MINTER, outsider.address)).to.equal(true);
+
+      await expect(token.connect(admin).setMinter(admin.address))
+        .to.be.revertedWithCustomError(token, "MinterAlreadySet")
+        .withArgs(outsider.address);
+      for (const call of [
+        () => token.connect(admin).grantRole(ROLES.MINTER, admin.address),
+        () => token.connect(admin).revokeRole(ROLES.MINTER, outsider.address),
+        () => token.connect(admin).grantRole(ROLES.MINTER_ADMIN, admin.address),
+        () => token.connect(admin).revokeRole(ROLES.MINTER_ADMIN, admin.address),
+      ]) {
+        await expect(call())
+          .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+          .withArgs(admin.address, ROLES.MINTER_ADMIN);
+      }
       await expect(token.connect(admin).mint(alice.address, 1n)).to.be.revertedWithCustomError(
         token,
         "AccessControlUnauthorizedAccount",
@@ -119,6 +159,8 @@ describe("UFVPlantToken", () => {
         token,
         "AccessControlUnauthorizedAccount",
       );
+      await token.connect(outsider).mint(alice.address, 1n);
+      expect(await token.hasRole(ROLES.MINTER, outsider.address)).to.equal(true);
     });
   });
 
@@ -196,16 +238,23 @@ describe("UFVPlantToken", () => {
   });
 
   describe("documentos (ERC-1643)", () => {
-    it("admin e COMPLIANCE publicam; demais não", async () => {
+    it("só DOCUMENT_ROLE publica/remove (nem compliance, nem o admin sem o papel)", async () => {
       const { token, admin, compliance, outsider } = await loadFixture(deployTokenFixture);
       await expect(token.connect(admin).setDocument(NAME, "ipfs://cid1", HASH))
         .to.emit(token, "DocumentUpdated")
         .withArgs(NAME, "ipfs://cid1", HASH);
-      await token.connect(compliance).setDocument(NAME2, "https://ufv.invest/prospecto.pdf", ethers.ZeroHash);
-      await expect(token.connect(outsider).setDocument(NAME3, "x", HASH))
-        .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
-        .withArgs(outsider.address, ROLES.COMPLIANCE);
-      await expect(token.connect(outsider).removeDocument(NAME)).to.be.revertedWithCustomError(
+      await token.connect(admin).setDocument(NAME2, "https://ufv.invest/prospecto.pdf", ethers.ZeroHash);
+      for (const s of [compliance, outsider]) {
+        await expect(token.connect(s).setDocument(NAME3, "x", HASH))
+          .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+          .withArgs(s.address, ROLES.DOCUMENT);
+        await expect(token.connect(s).removeDocument(NAME))
+          .to.be.revertedWithCustomError(token, "AccessControlUnauthorizedAccount")
+          .withArgs(s.address, ROLES.DOCUMENT);
+      }
+      // admin que abre mão do DOCUMENT_ROLE deixa de publicar (o papel é explícito)
+      await token.connect(admin).renounceRole(ROLES.DOCUMENT, admin.address);
+      await expect(token.connect(admin).setDocument(NAME3, "x", HASH)).to.be.revertedWithCustomError(
         token,
         "AccessControlUnauthorizedAccount",
       );
@@ -391,12 +440,14 @@ describe("UFVPlantToken", () => {
         [() => t.distribute(1n, ethers.ZeroHash), ROLES.DISTRIBUTOR],
         [() => t.pause(), ROLES.PAUSER],
         [() => t.unpause(), ROLES.PAUSER],
-        [() => t.setDocument(NAME, "x", HASH), ROLES.COMPLIANCE],
-        [() => t.removeDocument(NAME), ROLES.COMPLIANCE],
+        [() => t.setDocument(NAME, "x", HASH), ROLES.DOCUMENT],
+        [() => t.removeDocument(NAME), ROLES.DOCUMENT],
+        [() => t.setMinter(outsider.address), ROLES.DEFAULT_ADMIN],
         [() => t.recover(alice.address, outsider.address), ROLES.DEFAULT_ADMIN],
         [() => t.rescueTokens(usdtAddr, outsider.address, 1n), ROLES.DEFAULT_ADMIN],
-        [() => t.grantRole(ROLES.MINTER, outsider.address), ROLES.DEFAULT_ADMIN],
-        [() => t.revokeRole(ROLES.MINTER, outsider.address), ROLES.DEFAULT_ADMIN],
+        [() => t.grantRole(ROLES.MINTER, outsider.address), ROLES.MINTER_ADMIN],
+        [() => t.revokeRole(ROLES.MINTER, outsider.address), ROLES.MINTER_ADMIN],
+        [() => t.grantRole(ROLES.DOCUMENT, outsider.address), ROLES.DEFAULT_ADMIN],
         [() => t.beginDefaultAdminTransfer(outsider.address), ROLES.DEFAULT_ADMIN],
         [() => t.changeDefaultAdminDelay(0), ROLES.DEFAULT_ADMIN],
       ];

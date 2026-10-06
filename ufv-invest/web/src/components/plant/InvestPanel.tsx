@@ -79,11 +79,12 @@ export function InvestPanel({
       { address: off, abi: offeringAbi, functionName: "startTime", chainId: TARGET_CHAIN_ID },
       { address: off, abi: offeringAbi, functionName: "endTime", chainId: TARGET_CHAIN_ID },
       { address: off, abi: offeringAbi, functionName: "commitmentOf", args: [me], chainId: TARGET_CHAIN_ID },
-      { address: off, abi: offeringAbi, functionName: "withdrawalDeadline", args: [me], chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "withdrawableOf", args: [me], chainId: TARGET_CHAIN_ID },
       { address: registry, abi: identityRegistryAbi, functionName: "isVerified", args: [me], chainId: TARGET_CHAIN_ID },
       { address: pay, abi: erc20Abi, functionName: "balanceOf", args: [me], chainId: TARGET_CHAIN_ID },
       { address: pay, abi: erc20Abi, functionName: "allowance", args: [me, off], chainId: TARGET_CHAIN_ID },
       { address: tok, abi: plantTokenAbi, functionName: "balanceOf", args: [me], chainId: TARGET_CHAIN_ID },
+      { address: off, abi: offeringAbi, functionName: "hasWithdrawn", args: [me], chainId: TARGET_CHAIN_ID },
     ],
   });
 
@@ -99,11 +100,13 @@ export function InvestPanel({
   const start = v<bigint>(7);
   const end = v<bigint>(8);
   const commitment = v<readonly [bigint, bigint, bigint, boolean, boolean]>(9);
-  const deadline = v<bigint>(10);
+  // desistência por aporte (tranche): só aportes com menos de 5 dias são devolvidos
+  const withdrawable = v<readonly [bigint, bigint, bigint]>(10);
   const verified = isConnected ? v<boolean>(11) : undefined;
   const balance = isConnected ? v<bigint>(12) : undefined;
   const allowance = isConnected ? v<bigint>(13) : undefined;
   const tokenBalance = isConnected ? v<bigint>(14) : undefined;
+  const withdrewBefore = isConnected ? v<boolean>(15) === true : false;
   const dec = c?.paymentTokenDecimals ?? 18;
 
   // teto: um campo com centenas de dígitos vira Infinity e BigInt(Infinity) derrubaria o render
@@ -113,7 +116,10 @@ export function InvestPanel({
   const myPaid = commitment?.[1] ?? 0n;
   const settled = commitment?.[3] ?? false;
   const refunded = commitment?.[4] ?? false;
-  const canWithdraw = myCotas > 0 && deadline !== undefined && now <= Number(deadline) && (state === 1 || state === 2 || state === 3);
+  const wCotas = withdrawable ? Number(withdrawable[0]) : 0;
+  const wAmount = withdrawable?.[1] ?? 0n;
+  const wDeadline = withdrawable ? Number(withdrawable[2]) : 0;
+  const canWithdraw = wCotas > 0 && now <= wDeadline && (state === 1 || state === 2 || state === 3);
 
   const progress = useMemo(() => (hardCap ? Number((sold * 10000n) / hardCap) / 100 : 0), [sold, hardCap]);
   const softPct = hardCap && softCap ? Number((softCap * 10000n) / hardCap) / 100 : 0;
@@ -192,9 +198,12 @@ export function InvestPanel({
           )}
           {canWithdraw && (
             <>
-              <p className="mt-2 text-[12px] text-muted">Você pode desistir até {dateBR(Number(deadline) * 1000, true)} e receber {fmtU(myPaid)} de volta.</p>
+              <p className="mt-2 text-[12px] text-muted">
+                Direito de desistência: {num(wCotas)} cotas dos aportes dos últimos 5 dias ({fmtU(wAmount)}) podem ser devolvidas até {dateBR(wDeadline * 1000, true)}.
+                {wCotas < myCotas && " Aportes mais antigos já estão firmes na custódia."} Ao desistir, esta carteira não poderá aportar de novo nesta oferta.
+              </p>
               <button className={cx(buttonClass.secondary, "mt-2 w-full")} disabled={tx.busy} onClick={async () => (await tx.run("Desistência", { address: offering, abi: offeringAbi, functionName: "withdraw" })) && after()}>
-                Desistir e receber {fmtU(myPaid)}
+                Desistir e receber {fmtU(wAmount)}
               </button>
             </>
           )}
@@ -218,7 +227,12 @@ export function InvestPanel({
         ) : state === 0 ? (
           <Notice tone="info">A oferta abre em {start ? dateBR(Number(start) * 1000, true) : "—"}.</Notice>
         ) : state === 1 ? (
-          verified === false ? (
+          withdrewBefore ? (
+            <Notice tone="info" title="Você desistiu desta oferta">
+              Para evitar que o teto da captação seja bloqueado por reservas que desistem no fim, uma carteira que exerceu a desistência não pode aportar de novo
+              nesta oferta.
+            </Notice>
+          ) : verified === false ? (
             <Notice tone="warning" title="Verificação de identidade necessária">
               Só carteiras com KYC aprovado podem investir.{" "}
               <Link href="/carteira#kyc" className="font-medium text-brand underline-offset-2 hover:underline">
@@ -294,7 +308,10 @@ export function InvestPanel({
                   {allowance !== undefined && cost !== undefined && allowance >= cost ? "Passo 2 de 2: " : ""}Investir em {num(cotas)} cotas
                 </button>
               )}
-              <p className="text-[12px] text-muted">O valor fica em custódia no contrato. Você pode desistir em até 5 dias; se a meta mínima não for atingida, tudo é devolvido.</p>
+              <p className="text-[12px] text-muted">
+                O valor fica em custódia no contrato. Cada aporte tem 5 dias próprios para desistência (um novo aporte não reabre os anteriores); se a meta mínima não
+                for atingida, tudo é devolvido.
+              </p>
             </div>
           )
         ) : state === 2 ? (
@@ -308,7 +325,10 @@ export function InvestPanel({
             .
           </Notice>
         ) : state === 3 || state === 5 ? (
-          <Notice tone="warning">{state === 3 ? "A meta mínima não foi atingida." : "A oferta foi cancelada."} Quem investiu pode resgatar 100% do valor.</Notice>
+          <Notice tone="warning">
+            {state === 3 ? "A oferta não foi concluída (meta mínima não atingida ou encerramento fora do prazo)." : "A oferta foi cancelada."} Quem investiu pode resgatar
+            100% do valor.
+          </Notice>
         ) : null}
       </div>
       <TxStatus state={tx.state} />

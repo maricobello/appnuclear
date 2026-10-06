@@ -82,10 +82,29 @@ Wallet é nativa da BNB Chain; a Phantom é focada em Solana.
 segredo no cliente, nenhuma chave privada no servidor.
 
 **Contratos:** token BEP-20 com 0 decimais que só transfere entre carteiras com KYC; oferta com
-custódia, meta mínima, reembolso e direito de desistência de 5 dias; distribuição de receita por
-acumulador (padrão ERC-2222); registro de documentos (hash do relatório); sem proxy de atualização;
-papéis separados com atraso na troca do admin. Detalhes e premissas de confiança em
-`contracts/README.md`.
+custódia, meta mínima, reembolso e direito de desistência de 5 dias por aporte; distribuição de receita
+por acumulador (padrão ERC-2222); registro de documentos (hash do relatório) só pelo multisig; emissor
+de cotas definido uma única vez; sem proxy de atualização; papéis separados com atraso na troca do
+admin. Detalhes e premissas de confiança em `contracts/README.md`.
+
+### Auditoria interna (resultado)
+
+Uma revisão independente da equipe (contratos + dApp) não encontrou falhas críticas ou altas; os seis
+pontos médios foram corrigidos e cada ataque tem um teste que prova que ele falha
+(`contracts/test/Audit.test.ts`, `web/tests/auth.siwe.test.ts`, `web/tests/pdfAttachment.test.ts`):
+
+| Ponto | Correção |
+|---|---|
+| Grupo ocupava o teto da oferta e desistia no fim (sem custo) | desistência por aporte + quem desiste não aporta de novo |
+| Admin podia virar emissor e emitir cotas não vendidas para si | emissor definido uma única vez (`setMinter`), papel travado |
+| Carteira do servidor de KYC podia trocar o hash do relatório | `DOCUMENT_ROLE` exclusivo do multisig |
+| Retomar um deploy interrompido podia deixar o deployer como admin | hand-off idempotente |
+| Cookie de sessão reaproveitado como nonce no login SIWE | HMAC com propósito + formato de nonce validado |
+| CSP quebrava o modal do WalletConnect | regras específicas quando o WalletConnect está ativo |
+
+Pendências para a **mainnet**: auditoria externa, timelock na frente do Safe, rate limit e nonces em
+armazenamento compartilhado (ex.: Vercel KV/Firewall), provedor de KYC certificado com política de
+retenção (LGPD) e o enquadramento regulatório (Resolução CVM 88).
 
 ## Caminho para produção
 
