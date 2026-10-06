@@ -6,7 +6,12 @@ const testnetRpcs = [process.env.NEXT_PUBLIC_BSC_TESTNET_RPC_URL, "https://data-
 
 export const RPC_URLS: Record<56 | 97, string[]> = { 56: mainnetRpcs, 97: testnetRpcs };
 
-export const siteUrl = process.env.NEXT_PUBLIC_SITE_URL ?? "http://localhost:3000";
+/** URL pública: configurada → domínio de produção da Vercel → URL do deploy (preview) → local */
+export const siteUrl =
+  process.env.NEXT_PUBLIC_SITE_URL ??
+  (process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_PROJECT_PRODUCTION_URL}` : undefined) ??
+  (process.env.NEXT_PUBLIC_VERCEL_URL ? `https://${process.env.NEXT_PUBLIC_VERCEL_URL}` : undefined) ??
+  "http://localhost:3000";
 
 export const chainName = TARGET_CHAIN_ID === 56 ? "BNB Smart Chain" : "BNB Smart Chain Testnet";
 
