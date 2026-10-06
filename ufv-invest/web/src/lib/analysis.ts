@@ -106,9 +106,14 @@ export async function getAllAnalyses(): Promise<PlantAnalysis[]> {
   return all.filter((a): a is PlantAnalysis => a !== null);
 }
 
-/** Resumo enxuto para listagens (cards) */
+/** Resumo enxuto para listagens (cards da vitrine) */
 export function summarize(a: PlantAnalysis) {
   const { plant, generation: g, finance: f } = a;
+  const tags: string[] = [];
+  if (plant.tech.modalidade === "geracao-compartilhada") tags.push("Geração compartilhada");
+  if (plant.finance.accessRequestYear <= 2022) tags.push("Fio B isento até 2045");
+  if (plant.tech.mounting === "single-axis") tags.push("Seguidor solar");
+  if (plant.tech.module.bifacial) tags.push("Bifacial");
   return {
     slug: plant.slug,
     name: plant.name,
@@ -117,20 +122,30 @@ export function summarize(a: PlantAnalysis) {
     illustrative: plant.illustrative,
     municipio: plant.location.municipio,
     uf: plant.location.uf,
+    distribuidora: plant.location.distribuidora,
     dcKWp: plant.tech.dcKWp,
     mounting: plant.tech.mounting,
     p50MWh: g.annualP50MWh,
     specificYield: g.specificYieldKWhPerKWp,
     irrNominalPct: f.irrNominalPct,
     irrRealPct: f.irrRealPct,
+    irrP10Pct: f.monteCarlo.irrP10Pct,
+    probIrrBelowCdiPct: f.monteCarlo.probIrrBelowCdiPct,
     paybackYears: f.paybackYears,
     firstYearYieldPct: f.firstYearYieldPct,
     cotaPriceBRL: plant.token.cotaPriceBRL,
+    minInvestmentBRL: plant.token.minCotas * plant.token.cotaPriceBRL,
     totalCotas: plant.token.totalCotas,
+    softCapCotas: plant.token.softCapCotas,
     investmentBRL: f.investmentBRL,
     monthlyPerCotaBRL: f.perCota.avgMonthlyIncomeBRL,
+    horizonYears: plant.finance.horizonYears,
+    offeringStart: plant.token.offeringStart ?? null,
+    offeringEnd: plant.token.offeringEnd ?? null,
     co2: g.co2AvoidedTonsYear,
     symbol: plant.token.symbol,
+    tags,
+    cover: plant.cover ?? null,
   };
 }
 export type PlantSummary = ReturnType<typeof summarize>;

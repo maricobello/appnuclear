@@ -161,6 +161,8 @@ export interface Plant {
   token: PlantToken;
   /** climatologia de referência embarcada, usada quando as APIs não respondem */
   fallbackClimate: MonthlyClimate & { source: string; interannualCvPct: number };
+  /** imagem de capa em /public (ex.: "/images/ufv-janauba-1.jpg"); sem ela, a vitrine usa a ilustração vetorial */
+  cover?: string;
   /** histórico de geração medida (usinas em operação), MWh por mês */
   measured?: { month: string; energyMWh: number }[];
 }
