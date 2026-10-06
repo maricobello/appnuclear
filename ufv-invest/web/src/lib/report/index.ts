@@ -11,7 +11,7 @@ import { AFRelationship, PDFDocument } from "pdf-lib";
 import QRCode from "qrcode";
 import type { OnChainState, PlantAnalysis } from "@/lib/types";
 import { canonicalAnalysisJson } from "./canonical";
-import type { ReportContext } from "./context";
+import type { ReportContext, ReportVariant } from "./context";
 import { compactDate, fmtDateTime, shortHash } from "./format";
 import { Layout, type Fonts } from "./layout";
 import { renderCover } from "./sections/cover";
@@ -22,9 +22,11 @@ import { renderEconomics } from "./sections/economics";
 import { renderRisk } from "./sections/risk";
 import { renderTokenization } from "./sections/tokenization";
 import { renderSources } from "./sections/sources";
+import { renderResumoCover, renderResumoInvestment, renderResumoPlant, renderResumoToken } from "./sections/resumo";
 import { C, PAGE } from "./theme";
 
 export { canonicalAnalysisJson, canonicalJson } from "./canonical";
+export type { ReportVariant } from "./context";
 
 export const REPORT_TITLE = "Relatório de Auditoria Técnica e Econômica";
 export const ATTACHMENT_NAME = "dados-analise.json";
@@ -37,6 +39,18 @@ export interface RenderAuditReportOptions {
   reportId?: string;
   /** instante de emissão (padrão: agora) — útil para saídas determinísticas em testes */
   now?: Date;
+  /** "resumo" (padrão, até 4 páginas para o investidor) ou "completo" (relatório técnico integral) */
+  variant?: ReportVariant;
+}
+
+export const VARIANT_LABEL: Record<ReportVariant, string> = {
+  resumo: "Resumo para o investidor",
+  completo: "Versão completa",
+};
+
+/** Normaliza o parâmetro de URL `?versao=` (completa/completo → "completo"; qualquer outro → "resumo"). */
+export function parseReportVariant(v: string | null | undefined): ReportVariant {
+  return /^complet[ao]$/i.test((v ?? "").trim()) ? "completo" : "resumo";
 }
 
 // caminhos literais (escopo estático) para o rastreamento de arquivos do Next/Turbopack incluir
@@ -80,6 +94,7 @@ export async function renderAuditReport(
   const siteUrl = (opts.siteUrl || "").replace(/\/+$/, "");
   const plant = analysis.plant;
   const reportId = opts.reportId ?? defaultReportId(analysis, now);
+  const variant: ReportVariant = opts.variant === "completo" ? "completo" : "resumo";
   const plantUrl = `${siteUrl}/usinas/${plant.slug}`;
 
   const pdf = await PDFDocument.create();
@@ -96,7 +111,9 @@ export async function renderAuditReport(
   const title = `Relatório de Auditoria — ${plant.name}`;
   pdf.setTitle(title, { showInWindowTitleBar: true });
   pdf.setSubject(
-    `${REPORT_TITLE} da ${plant.name} (${plant.location.municipio}/${plant.location.uf}): recurso solar, geração P50/P90, análise econômica, riscos e tokenização.` +
+    (variant === "resumo"
+      ? `${REPORT_TITLE} da ${plant.name} (${plant.location.municipio}/${plant.location.uf}) — ${VARIANT_LABEL.resumo.toLowerCase()}: rentabilidade × Selic, simulação de investimento, usina, tokenização e avisos.`
+      : `${REPORT_TITLE} da ${plant.name} (${plant.location.municipio}/${plant.location.uf}): recurso solar, geração P50/P90, análise econômica, riscos e tokenização.`) +
       (plant.illustrative ? " Projeto ilustrativo." : ""),
   );
   pdf.setAuthor("UFV Invest");
@@ -112,6 +129,7 @@ export async function renderAuditReport(
     plant.slug,
     plant.token.symbol,
     reportId,
+    `versao:${variant}`,
     `sha256:${analysis.dataHash}`,
     analysis.dataHash,
   ]);
@@ -154,17 +172,25 @@ export async function renderAuditReport(
     now,
     qr,
     attachmentName: ATTACHMENT_NAME,
+    variant,
   };
 
-  renderCover(ctx);
-  l.addPage();
-  renderLocation(ctx);
-  renderResource(ctx);
-  renderGeneration(ctx);
-  renderEconomics(ctx);
-  renderRisk(ctx);
-  renderTokenization(ctx);
-  renderSources(ctx);
+  if (variant === "resumo") {
+    renderResumoCover(ctx);
+    renderResumoInvestment(ctx);
+    renderResumoPlant(ctx);
+    renderResumoToken(ctx);
+  } else {
+    renderCover(ctx);
+    l.addPage();
+    renderLocation(ctx);
+    renderResource(ctx);
+    renderGeneration(ctx);
+    renderEconomics(ctx);
+    renderRisk(ctx);
+    renderTokenization(ctx);
+    renderSources(ctx);
+  }
 
   drawChrome(ctx);
   return pdf.save();
@@ -183,7 +209,8 @@ function drawChrome(ctx: ReportContext): void {
     if (!isCover) l.rect(0, PAGE.headerHeight, PAGE.width, 1.6, { fill: C.amber });
     const cy = PAGE.headerHeight / 2;
     drawLogo(l, PAGE.marginX, cy);
-    l.text(`${REPORT_TITLE} · ${a.plant.name}`, PAGE.marginX + 90, cy + 2.6, {
+    const headerTitle = ctx.variant === "resumo" ? `Relatório de Auditoria · ${VARIANT_LABEL.resumo}` : REPORT_TITLE;
+    l.text(`${headerTitle} · ${a.plant.name}`, PAGE.marginX + 90, cy + 2.6, {
       size: 7.2,
       color: C.headerMuted,
       align: "right",

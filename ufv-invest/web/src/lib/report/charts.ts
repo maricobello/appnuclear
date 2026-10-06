@@ -72,7 +72,9 @@ export interface BarChartSpec {
   /** traço horizontal sobre cada categoria (ex.: P90) */
   markers?: { name: string; values: number[]; color: RGB }[];
   /** linhas no mesmo eixo */
-  lines?: { name: string; values: number[]; color: RGB; dash?: number[]; dots?: boolean; width?: number }[];
+  lines?: { name: string; values: number[]; color: RGB; dash?: number[]; dots?: boolean; width?: number; endLabel?: string }[];
+  /** espaço livre à direita do gráfico (ex.: rótulos no fim das linhas) */
+  rightPad?: number;
   /** faixa horizontal sombreada (ex.: ±1σ) */
   band?: { from: number; to: number; color: RGB; label?: string };
   yFormat: (v: number) => string;
@@ -107,7 +109,7 @@ export function barChart(l: Layout, r: Rect, spec: BarChartSpec): void {
   const titleH = spec.yTitle ? 0 : 0;
   const yLabelW = Math.max(...sc.ticks.map((t) => l.textWidth(spec.yFormat(t), "regular", AXIS_SIZE))) + 5;
   const px = r.x + yLabelW;
-  const pw = r.w - yLabelW - 2;
+  const pw = r.w - yLabelW - 2 - (spec.rightPad ?? 0);
   const py = r.y + legendH + titleH + 2;
   const ph = r.h - legendH - titleH - 2 - 13;
   const Y = (v: number) => py + ph - ((v - yMinV) / (sc.max - yMinV)) * ph;
@@ -183,6 +185,20 @@ export function barChart(l: Layout, r: Rect, spec: BarChartSpec): void {
     l.polyline(pts, { color: ln.color, width: ln.width ?? 1.2, dash: ln.dash });
     if (ln.dots) pts.forEach(([cx, cy]) => l.circle(cx, cy, 1.5, { fill: ln.color }));
   });
+  // rótulos no fim das linhas, afastados verticalmente para não colidir
+  const ends = (spec.lines ?? [])
+    .filter((ln) => ln.endLabel && ln.values.some(Number.isFinite))
+    .map((ln) => {
+      const i = ln.values.map((v, k) => (Number.isFinite(v) ? k : -1)).filter((k) => k >= 0).pop()!;
+      return { ln, x: px + i * slot + slot / 2, y: Y(ln.values[i]) };
+    })
+    .sort((p, q) => p.y - q.y);
+  const gapY = 9;
+  for (let k = 1; k < ends.length; k++) if (ends[k].y - ends[k - 1].y < gapY) ends[k].y = ends[k - 1].y + gapY;
+  for (const e of ends) {
+    l.circle(e.x, Y(e.ln.values.filter(Number.isFinite).pop()!), 2, { fill: e.ln.color });
+    l.text(e.ln.endLabel!, e.x + 6, e.y + 2.4, { font: "semibold", size: 6.8, color: e.ln.color });
+  }
 
   // eixo base
   l.line(px, py + ph, px + pw, py + ph, { color: C.subtle, width: 0.6 });

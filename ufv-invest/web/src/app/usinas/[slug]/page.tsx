@@ -65,7 +65,10 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
             </div>
             <div className="flex flex-wrap gap-2">
               <a href={`/api/usinas/${plant.slug}/relatorio`} className={buttonClass.primary}>
-                <Download className="size-4" /> Relatório de auditoria (PDF)
+                <Download className="size-4" /> Relatório para o investidor (PDF)
+              </a>
+              <a href={`/api/usinas/${plant.slug}/relatorio?versao=completa`} className={buttonClass.secondary}>
+                <Download className="size-4" /> Auditoria completa
               </a>
               <a href={`/api/usinas/${plant.slug}/analise`} target="_blank" rel="noopener" className={buttonClass.secondary}>
                 <FileJson className="size-4" /> Dados (JSON)

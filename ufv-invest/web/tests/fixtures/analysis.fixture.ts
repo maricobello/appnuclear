@@ -8,6 +8,7 @@
  */
 import { createHash } from "node:crypto";
 import { plants, getPlant } from "@/data/plants";
+import { computeBenchmarks } from "@/lib/finance/benchmarks";
 import { canonicalAnalysisJson } from "@/lib/report/canonical";
 import type {
   Benchmark,
@@ -521,17 +522,12 @@ export function buildAnalysisFixture(slugOrPlant: string | Plant = "ufv-janauba-
   }
 
   const N = fin.horizonYears;
-  const cdiNet = market.cdiPct * 0.85;
-  const ntnbGross = ((1 + market.realRatePct / 100) * (1 + market.ipcaLongTermPct / 100) - 1) * 100;
-  const poupanca = 8.25;
-  const fv = (pct: number) => r0(1000 * Math.pow(1 + pct / 100, N));
-  const benchmarks: Benchmark[] = [
-    { name: `${plant.name} (TIR P50)`, annualPct: r2(irrNom), finalValueOf1000BRL: fv(irrNom), note: "Fluxos reinvestidos à própria TIR; sem garantia; antes de IR sobre distribuições." },
-    { name: "CDI (líquido de IR 15 %)", annualPct: r2(cdiNet), finalValueOf1000BRL: fv(cdiNet), note: `CDI atual de ${market.cdiPct.toFixed(2).replace(".", ",")} % a.a. mantido no horizonte (hipótese simplificadora).` },
-    { name: "Tesouro IPCA+ 2045 (líquido)", annualPct: r2(ntnbGross * 0.85), finalValueOf1000BRL: fv(ntnbGross * 0.85), note: `IPCA ${market.ipcaLongTermPct.toFixed(1).replace(".", ",")} % + ${market.realRatePct.toFixed(1).replace(".", ",")} % real, IR de 15 %.` },
-    { name: "Poupança", annualPct: poupanca, finalValueOf1000BRL: fv(poupanca), note: "0,5 % a.m. + TR (Selic > 8,5 %); isenta de IR para pessoa física." },
-    { name: "IPCA (inflação)", annualPct: market.ipcaLongTermPct, finalValueOf1000BRL: fv(market.ipcaLongTermPct), note: "Valor necessário apenas para preservar o poder de compra." },
-  ];
+  // comparativos calculados pelo módulo financeiro real (mesma trajetória de CDI e regras de IR)
+  const benchmarks: Benchmark[] = computeBenchmarks(market, N, nets, irrNom).map((b) => ({
+    ...b,
+    annualPct: r2(b.annualPct),
+    finalValueOf1000BRL: r2(b.finalValueOf1000BRL),
+  }));
 
   const firstNet = flows[1].netCashFlowBRL;
   const fmtBR = (v: number, d = 2) => v.toFixed(d).replace(".", ",").replace(/\B(?=(\d{3})+(?!\d))/g, ".");

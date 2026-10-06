@@ -29,6 +29,20 @@ export function fioBRuleText(a: PlantAnalysis): string {
   return `Cobrança gradual do Fio B (Lei 14.300/2022, art. 27)${parts.length ? ": " + parts.join(", ") : ""}.`;
 }
 
+/** Regra do Fio B em poucas palavras (para listas de fatos) */
+export function fioBShortText(a: PlantAnalysis): string {
+  const f = a.plant.finance;
+  if (f.revenueModel === "ppa") return "Não se aplica (PPA)";
+  if (f.accessRequestYear < 2023) return "Isenta até 2045 (direito adquirido, acesso antes de 07/01/2023)";
+  const flows = a.finance.cashFlows.filter((c) => c.year > 0);
+  const first = flows[0];
+  const full = flows.find((c) => c.fioBChargedPct >= 100);
+  const parts: string[] = [];
+  if (first) parts.push(`${fmtNum(first.fioBChargedPct, 0)} % cobrado em ${first.calendarYear}`);
+  if (full && full !== first) parts.push(`100 % a partir de ${full.calendarYear}`);
+  return parts.join("; ") || "Cobrança gradual (transição da Lei 14.300)";
+}
+
 export function statusCounts(list: Provenance[]): Record<SourceStatus, number> {
   const out: Record<SourceStatus, number> = { live: 0, cache: 0, fallback: 0, error: 0 };
   for (const p of list) out[p.status] = (out[p.status] ?? 0) + 1;

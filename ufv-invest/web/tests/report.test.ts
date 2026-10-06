@@ -11,7 +11,7 @@ import {
 } from "pdf-lib";
 import { describe, expect, it } from "vitest";
 import { plants } from "@/data/plants";
-import { ATTACHMENT_NAME, canonicalAnalysisJson, defaultReportId, renderAuditReport } from "@/lib/report";
+import { ATTACHMENT_NAME, canonicalAnalysisJson, defaultReportId, renderAuditReport, type ReportVariant } from "@/lib/report";
 import { canonicalJson } from "@/lib/report/canonical";
 import type { OnChainState, PlantAnalysis } from "@/lib/types";
 import { analysisFixture, analysisFixturesBySlug, buildAnalysisFixture, onChainFixture } from "./fixtures/analysis.fixture";
@@ -22,8 +22,8 @@ const NOW = new Date("2026-10-04T13:30:00Z");
 const sha256 = (data: string | Uint8Array) => createHash("sha256").update(data).digest("hex");
 const clone = <T>(v: T): T => structuredClone(v);
 
-async function render(a: PlantAnalysis, onChain: OnChainState | null = null) {
-  const bytes = await renderAuditReport(a, { siteUrl: SITE, onChain, now: NOW });
+async function render(a: PlantAnalysis, onChain: OnChainState | null = null, variant: ReportVariant = "completo") {
+  const bytes = await renderAuditReport(a, { siteUrl: SITE, onChain, now: NOW, variant });
   const doc = await PDFDocument.load(bytes, { updateMetadata: false });
   return { bytes, doc };
 }
@@ -137,7 +137,7 @@ describe("canonicalAnalysisJson", () => {
   });
 });
 
-describe("renderAuditReport", () => {
+describe("renderAuditReport — versão completa", () => {
   it("gera o PDF completo com metadados, anexo verificável e tamanho contido", async () => {
     const { bytes, doc } = await render(analysisFixture, onChainFixture);
     expect(Buffer.from(bytes.slice(0, 5)).toString("latin1")).toBe("%PDF-");
@@ -165,7 +165,7 @@ describe("renderAuditReport", () => {
   });
 
   it("usa reportId informado e inclui links clicáveis (QR/BscScan)", async () => {
-    const bytes = await renderAuditReport(analysisFixture, { siteUrl: `${SITE}/`, onChain: onChainFixture, reportId: "RA-TESTE-001", now: NOW });
+    const bytes = await renderAuditReport(analysisFixture, { siteUrl: `${SITE}/`, onChain: onChainFixture, reportId: "RA-TESTE-001", now: NOW, variant: "completo" });
     const doc = await PDFDocument.load(bytes, { updateMetadata: false });
     expect(doc.getKeywords()).toContain("RA-TESTE-001");
     const uris: string[] = [];

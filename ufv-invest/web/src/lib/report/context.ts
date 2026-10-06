@@ -2,6 +2,9 @@ import type { PDFImage } from "pdf-lib";
 import type { OnChainState, PlantAnalysis, Provenance } from "@/lib/types";
 import type { Layout } from "./layout";
 
+/** "resumo" = até 4 páginas para o investidor (padrão); "completo" = relatório técnico integral */
+export type ReportVariant = "resumo" | "completo";
+
 export interface ReportContext {
   a: PlantAnalysis;
   l: Layout;
@@ -12,6 +15,7 @@ export interface ReportContext {
   now: Date;
   qr: PDFImage | null;
   attachmentName: string;
+  variant: ReportVariant;
 }
 
 export const STATUS_LABEL: Record<string, string> = {
