@@ -254,6 +254,8 @@ $env:SIN_OS_URL="https://sinos-iota.vercel.app"; $env:PLD_INGEST_KEY="sua-chave"
 node coletor-ccee.mjs --loop 60
 ```
 
+Guia completo, passo a passo (chave na Vercel e coletor no PC): [docs/coletor-ccee.md](docs/coletor-ccee.md).
+
 No Windows, `coletor-ccee.bat` (na mesma pasta do `.mjs`) faz tudo com duplo clique: pede a chave uma
 vez (guarda em `chave.txt`, que o `.gitignore` já ignora) e coleta a cada 60 min. **Plano B** se a API
 do portal falhar na sua conexão: baixe o CSV do PLD horário pelo navegador
