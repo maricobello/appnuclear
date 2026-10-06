@@ -18,8 +18,16 @@
  *   macOS/Linux:
  *     SIN_OS_URL=https://sinos-iota.vercel.app PLD_INGEST_KEY=sua-chave node coletor-ccee.mjs --loop 60
  *
- * Opções: --dias N (padrão 10, máx. 60) · --loop MIN
+ * Plano B (se a API do portal falhar na sua conexão): baixe o CSV do PLD horário pelo navegador
+ * (https://dadosabertos.ccee.org.br/dataset/pld_horario → recurso do ano → "Baixar") e envie:
+ *     node coletor-ccee.mjs --csv pld_horario_2026.csv
+ *
+ * No Windows, o arquivo coletor-ccee.bat faz tudo com duplo clique (pede a chave uma vez).
+ *
+ * Opções: --dias N (padrão 10, máx. 60) · --loop MIN · --csv ARQUIVO
  */
+import { pathToFileURL } from "node:url";
+
 const CKAN = "https://dadosabertos.ccee.org.br/api/3/action";
 const UA = "SIN-OS-coletor/1.0 (+https://github.com/maricobello/sinos)";
 
@@ -31,11 +39,7 @@ const APP = (process.env.SIN_OS_URL ?? "https://sinos-iota.vercel.app").replace(
 const KEY = process.env.PLD_INGEST_KEY;
 const DAYS = Math.min(60, Math.max(1, Number(arg("dias", 10)) || 10));
 const LOOP = arg("loop", null);
-
-if (!KEY) {
-  console.error("Defina PLD_INGEST_KEY (a mesma chave cadastrada na Vercel).");
-  process.exit(1);
-}
+const CSV = arg("csv", null);
 
 async function ckan(path) {
   const res = await fetch(`${CKAN}/${path}`, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(60_000) });
@@ -49,6 +53,60 @@ async function ckan(path) {
 }
 
 const yearOf = (r) => Number((`${r.name ?? ""} ${r.url ?? ""}`.match(/20\d\d/g) ?? []).pop() ?? NaN);
+
+/** CSV do portal (separador ; ou ,, latin1 ou utf-8) → registros com os nomes das colunas originais. */
+export function parseCsvRecords(buf) {
+  let text = new TextDecoder("utf-8", { fatal: false }).decode(buf);
+  if (text.includes("\uFFFD")) text = new TextDecoder("latin1").decode(buf);
+  text = text.replace(/^\uFEFF/, "");
+  const lines = text.split(/\r?\n/).filter((l) => l.trim() !== "");
+  if (lines.length < 2) throw new Error("CSV vazio ou sem linhas de dados");
+  const sep = (lines[0].match(/;/g) ?? []).length >= (lines[0].match(/,/g) ?? []).length ? ";" : ",";
+  const unq = (v) => v.trim().replace(/^"(.*)"$/, "$1");
+  const head = lines[0].split(sep).map(unq);
+  const out = [];
+  for (const line of lines.slice(1)) {
+    const cols = line.split(sep).map(unq);
+    if (cols.length !== head.length) continue;
+    const rec = {};
+    head.forEach((h, i) => (rec[h] = cols[i]));
+    out.push(rec);
+  }
+  if (!out.length) throw new Error("nenhuma linha do CSV tem o mesmo número de colunas do cabeçalho");
+  return out;
+}
+
+/** Fica com as linhas mais recentes (por MES_REFERENCIA e DIA, ou DATA), no máximo `need`. */
+export function newestRecords(records, need) {
+  const key = (r) => {
+    const get = (re) => Object.keys(r).find((k) => re.test(k));
+    const kMes = get(/^mes_referencia$/i), kDia = get(/^dia$/i), kData = get(/^data$/i), kHora = get(/^hora$/i);
+    const base = kMes && kDia ? `${String(r[kMes]).replace(/\D/g, "")}${String(r[kDia]).padStart(2, "0")}` : String(r[kData] ?? "").slice(0, 10).replace(/\D/g, "");
+    return `${base}${String(r[kHora] ?? "").padStart(2, "0")}`;
+  };
+  return records.slice().sort((a, b) => key(a).localeCompare(key(b))).slice(-need);
+}
+
+async function send(records, origem) {
+  const res = await fetch(`${APP}/api/pld/coletor`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", "x-coletor-key": KEY, "User-Agent": UA },
+    body: JSON.stringify({ records, origem }),
+    signal: AbortSignal.timeout(60_000),
+  });
+  const out = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(`SIN OS respondeu HTTP ${res.status}: ${out.error ?? "erro"}`);
+  const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
+  console.log(`[${now}] ${out.recebidos} registros · dias oficiais aceitos: ${out.dias_aceitos.join(", ") || "nenhum"} · novos gravados: ${out.gravados_agora}`);
+  for (const r of out.dias_rejeitados ?? []) console.log(`   ignorado ${r.date}: ${r.motivo}`);
+}
+
+async function collectCsv(file) {
+  const { readFile } = await import("node:fs/promises");
+  const records = newestRecords(parseCsvRecords(await readFile(file)), (DAYS + 2) * 24 * 4);
+  console.log(`CSV lido: ${records.length} linhas mais recentes de ${file}`);
+  await send(records, "coletor-ccee-csv");
+}
 
 async function collect() {
   const pkg = await ckan("package_show?id=pld_horario");
@@ -65,17 +123,7 @@ async function collect() {
   }
   if (!records.length) throw new Error("a CCEE não retornou registros");
 
-  const res = await fetch(`${APP}/api/pld/coletor`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", "x-coletor-key": KEY, "User-Agent": UA },
-    body: JSON.stringify({ records, origem: "coletor-ccee" }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  const out = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(`SIN OS respondeu HTTP ${res.status}: ${out.error ?? "erro"}`);
-  const now = new Date().toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" });
-  console.log(`[${now}] ${out.recebidos} registros · dias oficiais aceitos: ${out.dias_aceitos.join(", ") || "nenhum"} · novos gravados: ${out.gravados_agora}`);
-  for (const r of out.dias_rejeitados ?? []) console.log(`   ignorado ${r.date}: ${r.motivo}`);
+  await send(records, "coletor-ccee");
 }
 
 /** "ok", "erro" (tenta de novo no próximo ciclo) ou "parar" (a CCEE bloqueou esta conexão). */
@@ -89,14 +137,31 @@ async function once() {
   }
 }
 
-if (LOOP) {
-  const min = Math.max(30, Number(LOOP) || 60);
-  console.log(`Coletando a cada ${min} min — Ctrl+C para parar.`);
-  if ((await once()) !== "parar") {
-    const timer = setInterval(async () => {
-      if ((await once()) === "parar") clearInterval(timer);
-    }, min * 60_000);
+async function main() {
+  if (!KEY) {
+    console.error("Defina PLD_INGEST_KEY (a mesma chave cadastrada na Vercel).");
+    process.exit(1);
   }
-} else {
-  process.exit((await once()) === "ok" ? 0 : 1);
+  if (CSV) {
+    try {
+      await collectCsv(CSV);
+      process.exit(0);
+    } catch (e) {
+      console.error(`[erro] ${e.message}`);
+      process.exit(1);
+    }
+  } else if (LOOP) {
+    const min = Math.max(30, Number(LOOP) || 60);
+    console.log(`Coletando a cada ${min} min — Ctrl+C para parar.`);
+    if ((await once()) !== "parar") {
+      const timer = setInterval(async () => {
+        if ((await once()) === "parar") clearInterval(timer);
+      }, min * 60_000);
+    }
+  } else {
+    process.exit((await once()) === "ok" ? 0 : 1);
+  }
 }
+
+// só executa quando chamado direto (os testes importam as funções sem enviar nada)
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) await main();

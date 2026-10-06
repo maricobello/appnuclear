@@ -57,3 +57,39 @@ describe("coletor do PLD oficial", () => {
     expect(mergeOfficialDays(est, accepted.slice(0, 1)).coversLatest).toBe(false);
   });
 });
+
+describe("coletor — modo CSV (plano B: arquivo baixado do portal)", () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const lib = async () => (await import("../scripts/coletor-ccee.mjs")) as any;
+  const enc = (s: string) => new TextEncoder().encode(s);
+
+  it("lê o CSV do portal (separador ;, vírgula decimal) e o parser do servidor aceita", async () => {
+    const { parseCsvRecords } = await lib();
+    const rows = ["MES_REFERENCIA;SUBMERCADO;PERIODO_COMERCIALIZACAO;DIA;HORA;PLD_HORA"];
+    for (const d of [25, 26]) for (let h = 0; h < 24; h++) for (const s of Object.values(NAMES)) rows.push(`202609;${s};1;${d};${h};${d === 26 && h === 18 ? "263,43" : "90,50"}`);
+    const recs = parseCsvRecords(enc("﻿" + rows.join("\r\n") + "\r\n"));
+    expect(recs).toHaveLength(192);
+    expect(recs[0]).toMatchObject({ SUBMERCADO: "SUDESTE", DIA: "25", HORA: "0", PLD_HORA: "90,50" });
+    const { panel } = parsePldRecords(recs, 90);
+    expect(panel.ts).toHaveLength(48);
+    expect(panel.values.SE[24 + 18]).toBe(263.43);
+    const { accepted } = officialDaysFromPanel(panel, NOW);
+    expect(accepted.map((d) => d.date)).toEqual(["2026-09-25", "2026-09-26"]);
+  });
+
+  it("separador vírgula, aspas e latin1; linhas com número de colunas errado são ignoradas", async () => {
+    const { parseCsvRecords } = await lib();
+    const csv = '"MES_REFERENCIA","SUBMERCADO","DIA","HORA","PLD_HORA"\n"202609","NORDESTE","25","3","57.31"\n"202609","quebrada"\n';
+    const recs = parseCsvRecords(enc(csv));
+    expect(recs).toEqual([{ MES_REFERENCIA: "202609", SUBMERCADO: "NORDESTE", DIA: "25", HORA: "3", PLD_HORA: "57.31" }]);
+    expect(() => parseCsvRecords(enc("so_cabecalho"))).toThrow(/vazio/);
+  });
+
+  it("fica só com as linhas mais recentes (mês, dia e hora), independente da ordem do arquivo", async () => {
+    const { newestRecords } = await lib();
+    const mk = (mes: string, dia: number, hora: number) => ({ MES_REFERENCIA: mes, SUBMERCADO: "SUL", DIA: String(dia), HORA: String(hora), PLD_HORA: "60" });
+    const all = [mk("202609", 30, 0), mk("202610", 1, 5), mk("202609", 9, 23), mk("202610", 1, 2), mk("202608", 31, 23)];
+    const out = newestRecords(all, 3);
+    expect(out.map((r: Record<string, string>) => `${r.MES_REFERENCIA}-${r.DIA}-${r.HORA}`)).toEqual(["202609-30-0", "202610-1-2", "202610-1-5"]);
+  });
+});

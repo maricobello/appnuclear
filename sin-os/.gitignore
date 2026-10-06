@@ -46,3 +46,9 @@ next-env.d.ts
 
 # dados baixados para a avaliação em dados reais (npm run eval:real)
 /data
+
+# coletor do PLD: chave e CSV baixado ficam só no computador de quem roda
+scripts/chave.txt
+scripts/pld*.csv
+chave.txt
+pld*.csv
