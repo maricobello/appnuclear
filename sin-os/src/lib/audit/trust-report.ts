@@ -19,7 +19,7 @@ export async function buildTrustReport(now = Date.now()) {
     const meta = publicMeta(r);
     // sem dado real nesta leitura não existe selo; PLD estimado pelo CMO não é o PLD oficial
     const reasons = usable && id === "ccee_pld" && meta.fallback ? [...seal.reasons, "PLD estimado pelo CMO do ONS nesta leitura (não é o oficial da CCEE)"] : seal.reasons;
-    return { ...seal, reasons, level: (usable ? seal.level : "sem dado") as "alta" | "média" | "baixa" | "sem dado", name: SOURCES[id].name, provider: SOURCES[id].provider, meta, monitored: usable };
+    return { ...seal, reasons, level: (!usable ? "sem dado" : id === "ccee_pld" && meta.fallback && seal.level === "alta" ? "média" : seal.level) as "alta" | "média" | "baixa" | "sem dado", name: SOURCES[id].name, provider: SOURCES[id].provider, meta, monitored: usable };
   });
   const recentRevisions: Revision[] = revisions.slice(0, 20);
   return { generatedAt: now, windowDays: 10, seals, recentRevisions, totalRevisions30d: revisions.length };
