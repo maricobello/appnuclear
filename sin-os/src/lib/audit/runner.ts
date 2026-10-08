@@ -18,6 +18,7 @@ import { pldFromCmo } from "../market/brazil";
 import { claimSlot, euZoneStore, listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
 import { notifyHealthChange } from "./alert";
 import { auditSource, crossFx, crossPldCmo } from "./checks";
+import { runTrustCheck } from "./trust-run";
 import type { AuditRun, SourceAudit } from "./types";
 
 /** Sondas "frescas" (cache invalidado) de todas as fontes, em paralelo. */
@@ -120,6 +121,8 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
     await savePldDays(panelToDays(pldFromCmo(results.ons_cmo.data as SubPanel), PLD_FROM_CMO)).catch(() => 0);
   }
   await notifyPldPublished().catch(() => 0);
+  // revisões retroativas dos dados abertos (no máx. 1 verificação a cada 5 h, para poupar leituras)
+  if (await claimSlot("trust_check", 5 * 3600_000).catch(() => false)) await runTrustCheck(results).catch(() => undefined);
   return { run, previous, results, shouldInvokeAgent, reasons };
 }
 

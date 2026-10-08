@@ -6,6 +6,7 @@ title Coletor PLD - SIN OS
 rem Coletor do PLD oficial (CCEE Dados Abertos -> SIN OS). Duplo clique para rodar.
 rem Precisa do Node 18+ (https://nodejs.org). Pede a chave na primeira vez e guarda em chave.txt
 rem (nao compartilhe esse arquivo). Mantenha a janela aberta: coleta a cada 60 minutos.
+rem Se a CCEE bloquear a internet, o coletor pede para voce baixar o CSV (pld.csv) e envia sozinho.
 
 where node >nul 2>nul
 if not errorlevel 1 goto temnode
@@ -34,13 +35,6 @@ pause
 exit /b 1
 :temvalor
 if "%SIN_OS_URL%"=="" set SIN_OS_URL=https://sinos-iota.vercel.app
-
-rem Plano B: se voce baixou o CSV do portal, salve nesta pasta como pld.csv e ele envia esse arquivo.
-if not exist pld.csv goto coleta
-echo Enviando pld.csv ...
-node coletor-ccee.mjs --csv pld.csv
-pause
-exit /b
 
 :coleta
 node coletor-ccee.mjs --loop 60

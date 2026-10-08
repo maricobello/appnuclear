@@ -82,3 +82,21 @@ export interface AuditoriaResp {
 }
 
 export type BessResp = BessStudy & { meta: SourceMetaView; simulated: boolean; generatedAt: number };
+
+export interface ConfiancaResp {
+  generatedAt: number;
+  windowDays: number;
+  totalRevisions30d: number;
+  seals: {
+    source: string;
+    name: string;
+    provider: string;
+    monitored: boolean;
+    level: "alta" | "média" | "baixa" | "sem dado";
+    revisions30d: number;
+    reasons: string[];
+    completeness: { days: number; completeDays: number; incomplete: string[] } | null;
+    biggestRevision: { date: string; maxAbsDiff: number; maxRelDiff: number; changedPoints: number } | null;
+  }[];
+  recentRevisions: { source: string; date: string; detectedAt: number; changedPoints: number; maxAbsDiff: number; maxRelDiff: number; meanShift: number }[];
+}

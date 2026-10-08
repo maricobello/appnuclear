@@ -22,13 +22,17 @@
  * (https://dadosabertos.ccee.org.br/dataset/pld_horario → recurso do ano → "Baixar") e envie:
  *     node coletor-ccee.mjs --csv pld_horario_2026.csv
  *
+ * Com --loop, se a CCEE bloquear a API nesta conexão, o coletor passa sozinho para o plano B: vigia o
+ * arquivo pld.csv (que você baixa pelo navegador) e o envia sempre que ele aparecer ou mudar.
+ *
  * No Windows, o arquivo coletor-ccee.bat faz tudo com duplo clique (pede a chave uma vez).
  *
  * Opções: --dias N (padrão 10, máx. 60) · --loop MIN · --csv ARQUIVO
  */
 import { pathToFileURL } from "node:url";
 
-const CKAN = "https://dadosabertos.ccee.org.br/api/3/action";
+const CKAN = process.env.CCEE_CKAN ?? "https://dadosabertos.ccee.org.br/api/3/action";
+const POLL_MS = Number(process.env.COLETOR_POLL_MS) || 30_000;
 const UA = "SIN-OS-coletor/1.0 (+https://github.com/maricobello/sinos)";
 
 const arg = (name, def) => {
@@ -40,11 +44,22 @@ const KEY = process.env.PLD_INGEST_KEY;
 const DAYS = Math.min(60, Math.max(1, Number(arg("dias", 10)) || 10));
 const LOOP = arg("loop", null);
 const CSV = arg("csv", null);
+const CSV_WATCH = CSV ?? "pld.csv";
+
+/** Código de erro e IP que a página de bloqueio da CCEE mostra: é o que o chamado precisa. */
+export function blockInfo(body) {
+  const text = String(body ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/\s+/g, " ");
+  const code = /(?:error\s*code|c[óo]digo(?:\s+do\s+erro)?)\W{0,3}([\w.#-]*\d[\w.#-]*)/i.exec(text)?.[1]?.replace(/\.+$/, "");
+  const ip = /\b(?:\d{1,3}\.){3}\d{1,3}\b/.exec(text)?.[0];
+  return { code, ip };
+}
 
 async function ckan(path) {
   const res = await fetch(`${CKAN}/${path}`, { headers: { "User-Agent": UA, Accept: "application/json" }, signal: AbortSignal.timeout(60_000) });
   if (res.status === 403) {
-    throw new Error("a CCEE bloqueou esta conexão também (HTTP 403). O coletor não tenta disfarçar o acesso: use a Plataforma de Integração ou peça liberação à CCEE.");
+    const { code, ip } = blockInfo(await res.text().catch(() => ""));
+    const ids = [code && `código ${code}`, ip && `IP ${ip}`].filter(Boolean).join(" · ");
+    throw new Error(`a CCEE bloqueou esta conexão também (HTTP 403)${ids ? ` — ${ids}` : ""}. O coletor não tenta disfarçar o acesso.`);
   }
   if (!res.ok) throw new Error(`CCEE respondeu HTTP ${res.status} em ${path.split("?")[0]}`);
   const j = await res.json();
@@ -137,6 +152,41 @@ async function once() {
   }
 }
 
+/**
+ * Plano B automático: a CCEE bloqueou a API nesta conexão, então vigia o CSV que VOCÊ baixa pelo
+ * navegador e o envia sempre que o arquivo aparece ou muda (salve por cima do mesmo nome).
+ */
+async function watchCsv(file) {
+  const { stat } = await import("node:fs/promises");
+  const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+  console.log("");
+  console.log("PLANO B: baixe o CSV do PLD horário pelo navegador e salve nesta pasta como " + file);
+  console.log("  1) abra https://dadosabertos.ccee.org.br/dataset/pld_horario");
+  console.log("  2) entre no recurso do ano atual e clique em Baixar");
+  console.log(`  3) salve como ${file} (por cima do anterior, se já existir)`);
+  console.log("Eu envio sozinho assim que o arquivo aparecer ou mudar. Deixe esta janela aberta. Ctrl+C para parar.");
+  let last = 0;
+  let busy = false;
+  const tick = async () => {
+    if (busy) return; // um ciclo lento não pode se sobrepor ao próximo (enviaria duas vezes)
+    busy = true;
+    try {
+      const m = (await stat(file)).mtimeMs;
+      if (m === last) return;
+      await sleep(Math.min(2000, POLL_MS)); // espera o navegador terminar de gravar
+      if ((await stat(file)).mtimeMs !== m) return;
+      last = m;
+      await collectCsv(file);
+    } catch (e) {
+      if (e.code !== "ENOENT") console.error(`[erro] ${e.message} — corrija e salve o arquivo de novo`);
+    } finally {
+      busy = false;
+    }
+  };
+  await tick();
+  setInterval(tick, POLL_MS);
+}
+
 async function main() {
   if (!KEY) {
     console.error("Defina PLD_INGEST_KEY (a mesma chave cadastrada na Vercel).");
@@ -153,9 +203,14 @@ async function main() {
   } else if (LOOP) {
     const min = Math.max(30, Number(LOOP) || 60);
     console.log(`Coletando a cada ${min} min — Ctrl+C para parar.`);
-    if ((await once()) !== "parar") {
+    if ((await once()) === "parar") {
+      await watchCsv(CSV_WATCH);
+    } else {
       const timer = setInterval(async () => {
-        if ((await once()) === "parar") clearInterval(timer);
+        if ((await once()) === "parar") {
+          clearInterval(timer);
+          await watchCsv(CSV_WATCH);
+        }
       }, min * 60_000);
     }
   } else {

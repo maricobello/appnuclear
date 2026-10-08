@@ -215,6 +215,18 @@ texto. "Conversa contínua" volta a ouvir depois de responder.
 - **Privacidade:** o áudio vai direto para a transcrição e não é guardado; a conversa fica só na aba
   (sessionStorage).
 
+## Confiança nos dados abertos
+
+Origem: a comunidade de dados de energia relatou que bases públicas mudam em silêncio (o corte de
+eólica/solar do ONS não reflete contestações, a ANEEL republica tarifas com vigência errada) e que quem
+não guardou o histórico antigo nunca percebe. O auditor passa a guardar uma impressão digital (hash +
+valores) de cada dia fechado do PLD, CMO, carga, EAR e ENA (últimos 10 dias, no Firestore) e, a cada
+verificação (no máx. a cada 5 h), registra uma **revisão retroativa** quando o mesmo dia reaparece com
+valores diferentes: pontos alterados, maior mudança, deslocamento da média. Também mede a completude
+dos últimos 10 dias. O selo (alta/média/baixa) aparece na tela do auditor e em `GET /api/confianca`; a
+Iara responde "essa base foi revisada?" pela ferramenta `confianca_dados`. O selo mostra que o dado
+mudou, **não** qual versão está certa. Fonte sem dado real na leitura aparece como "sem dado".
+
 ## Agente auditor
 
 1. **Camada determinística** (sempre ativa): para cada API mede disponibilidade, latência, frescor vs SLA,
@@ -336,7 +348,7 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente Claude
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status, assistente (+voz)
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```

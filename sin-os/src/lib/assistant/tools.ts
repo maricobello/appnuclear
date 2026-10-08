@@ -65,6 +65,7 @@ export interface AssistantDeps {
   forecast: (sub: Sub) => Promise<{ fc: ForecastResult; simulated: boolean; fallback: string | null }>;
   bess: (p: BessParams) => Promise<{ study: BessStudy; pld: SourceResult<SubPanel> }>;
   latestAudit: () => Promise<AuditRun | null>;
+  trust: () => Promise<{ totalRevisions30d: number; windowDays: number; seals: { source: string; name: string; monitored: boolean; level: string; revisions30d: number; reasons: string[] }[] }>;
   dataMode: () => string;
 }
 
@@ -147,6 +148,14 @@ export const TOOL_DEFS: ToolDef[] = [
     function: {
       name: "saude_dados",
       description: "Saúde das fontes de dados segundo o agente auditor: score geral, fontes fora do ar ou degradadas com o erro, modo de dados (live = nunca simula) e o estado do PLD.",
+      parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "confianca_dados",
+      description: "Confiança nos dados abertos (ONS e CCEE): se alguma fonte republicou dias passados com valores diferentes nos últimos 30 dias (revisão retroativa), se há dias incompletos nos últimos 10 dias, e o selo (alta/média/baixa) de cada fonte. Use quando perguntarem se um dado é confiável, se foi revisado ou se a base mudou.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
     },
   },
@@ -371,6 +380,18 @@ async function saudeDados(_args: Record<string, unknown>, _ctx: ToolCtx, deps: A
   };
 }
 
+async function confiancaDados(_args: Record<string, unknown>, _ctx: ToolCtx, deps: AssistantDeps): Promise<ToolOutcome> {
+  const t = await deps.trust();
+  return {
+    result: {
+      janela_completude_dias: t.windowDays,
+      revisoes_retroativas_30d: t.totalRevisions30d,
+      fontes: t.seals.map((s) => ({ fonte: s.name, monitorada: s.monitored, selo: s.monitored ? s.level : "sem dado real nesta leitura", revisoes_30d: s.revisions30d, observacoes: s.reasons })),
+      nota: "O selo mostra que o dado mudou ou veio incompleto; não diz qual versão está correta.",
+    },
+  };
+}
+
 function navegar(args: Record<string, unknown>): ToolOutcome {
   const rota = typeof args.rota === "string" && args.rota in ROUTES ? (args.rota as Route) : null;
   if (!rota) return { result: { erro: `rota desconhecida; use uma de ${Object.keys(ROUTES).join(", ")}` } };
@@ -414,6 +435,8 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return await reservatorios(args, ctx, deps);
       case "saude_dados":
         return await saudeDados(args, ctx, deps);
+      case "confianca_dados":
+        return await confiancaDados(args, ctx, deps);
       case "navegar":
         return navegar(args);
       case "configurar_ativo":

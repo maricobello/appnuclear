@@ -4,7 +4,7 @@ import { Fragment, useMemo, useState } from "react";
 import { Bell, Bot, Database, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { EChart, type ChartOption } from "@/components/EChart";
 import { Badge, ErrorBox, Loading, PageHeader, Panel, statusLabel, statusLevel, Table } from "@/components/ui";
-import type { AuditoriaResp } from "@/lib/apiTypes";
+import type { AuditoriaResp, ConfiancaResp } from "@/lib/apiTypes";
 import { baseOption, C, line, timeAxis, valueAxis } from "@/lib/chart";
 import { ago, dateTime, num } from "@/lib/fmt";
 import { useApi } from "@/lib/useApi";
@@ -13,6 +13,7 @@ const KEY_STORE = "sinos.adminKey";
 
 export default function AuditoriaPage() {
   const { data, error, mutate, isValidating } = useApi<AuditoriaResp>("/api/auditoria", 30_000);
+  const trust = useApi<ConfiancaResp>("/api/confianca", 300_000).data;
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [key, setKey] = useState("");
@@ -181,6 +182,38 @@ export default function AuditoriaPage() {
               s.latencyP95 !== null ? `${num(s.latencyP95)} ms` : "—",
             ])}
           />
+        </Panel>
+      ) : null}
+
+      {trust ? (
+        <Panel
+          title="Confiança nos dados abertos"
+          subtitle={`Guardamos uma impressão digital de cada dia fechado (últimos ${trust.windowDays} dias) e avisamos quando a fonte republica o passado com valores diferentes, ou entrega dias incompletos. Não diz qual versão está certa: mostra que o dado mudou.`}
+        >
+          <div className="mb-3 flex flex-wrap gap-2 text-xs">
+            <Badge level={trust.totalRevisions30d === 0 ? "good" : "warning"}>{trust.totalRevisions30d} revisão(ões) retroativa(s) em 30 dias</Badge>
+          </div>
+          <Table
+            head={["Fonte", "Selo", "Completude (10 dias)", "Revisões (30 d)", "Observações"]}
+            align={["left", "left", "right", "right", "left"]}
+            rows={trust.seals.map((s) => [
+              s.name,
+              s.monitored ? <Badge key="l" level={s.level === "alta" ? "good" : s.level === "média" ? "warning" : "critical"}>{s.level}</Badge> : <Badge key="l" level="neutral">sem dado real</Badge>,
+              s.completeness ? `${s.completeness.completeDays}/${s.completeness.days}` : "—",
+              s.revisions30d,
+              s.reasons.length ? s.reasons.join(" · ") : s.monitored ? "nenhuma revisão nem lacuna detectada" : "fonte indisponível ou estimada nesta leitura",
+            ])}
+          />
+          {trust.recentRevisions.length ? (
+            <div className="mt-3">
+              <p className="mb-1 text-[11px] font-semibold text-ink-2">Últimas revisões detectadas</p>
+              <Table
+                head={["Detectada", "Fonte", "Dia revisado", "Pontos alterados", "Maior mudança", "Δ da média"]}
+                align={["left", "left", "left", "right", "right", "right"]}
+                rows={trust.recentRevisions.slice(0, 8).map((r) => [dateTime(r.detectedAt), r.source, r.date, r.changedPoints, `${num(r.maxAbsDiff, 2)} (${num(100 * r.maxRelDiff, 0)}%)`, num(r.meanShift, 2)])}
+              />
+            </div>
+          ) : null}
         </Panel>
       ) : null}
 

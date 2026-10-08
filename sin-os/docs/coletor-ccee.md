@@ -87,12 +87,15 @@ o app continua funcionando com os últimos dias oficiais já recebidos e estima 
 | `SIN OS respondeu HTTP 503: coletor desligado` | A variável não chegou no deploy: faça o redeploy (Parte 1, passo 4). |
 | `chave.txt está vazio` | Apague o `chave.txt` e rode o `.bat` de novo. |
 
-### Plano B — baixar o CSV pelo navegador
+### Plano B — baixar o CSV pelo navegador (agora automático)
+
+Se a CCEE bloquear a API, o coletor mostra o código do bloqueio (use no chamado) e **passa sozinho** para o plano B:
+fica vigiando o arquivo `pld.csv` na pasta e envia sempre que ele aparecer ou mudar. Você só precisa baixar o CSV:
 
 1. Abra <https://dadosabertos.ccee.org.br/dataset/pld_horario>, entre no recurso do ano atual e clique em **Baixar**.
 2. Salve o arquivo na pasta do coletor com o nome **`pld.csv`**.
-3. Dê duplo clique no `coletor-ccee.bat`: com o `pld.csv` na pasta, ele envia só as linhas mais recentes e termina
-   (para voltar a coletar sozinho, apague ou renomeie o `pld.csv`).
+3. Deixe o `coletor-ccee.bat` aberto: ele envia o `pld.csv` (só as linhas mais recentes) assim que detectar o arquivo
+   e de novo toda vez que você salvar um CSV novo por cima. É um download por dia, com 10 segundos de trabalho.
 
 Se o navegador também mostrar "Acesso bloqueado", anote o **código do erro** e o **IP** que aparecem na página e
 abra um chamado na CCEE (0800 591 4185) pedindo acesso programático ao PLD horário.

@@ -48,6 +48,7 @@ function deps(pld: SourceResult<SubPanel>): AssistantDeps {
       throw new Error("não usado");
     },
     latestAudit: async () => null,
+    trust: async () => ({ totalRevisions30d: 2, windowDays: 10, seals: [{ source: "ons_carga", name: "Carga", monitored: true, level: "média", revisions30d: 2, reasons: ["2 dia(s) republicado(s)"] }] }),
     dataMode: () => "live",
   };
 }
@@ -90,6 +91,14 @@ describe("ferramentas da Iara", () => {
     expect(cfg.actions?.[1]).toMatchObject({ type: "navigate", href: "/bess?sub=SE" });
     const out = await executeTool("configurar_ativo", { pow: 99999 }, ctx, deps(src(PLD)));
     expect(out.result).toEqual({ erro: "pow fora da faixa" });
+  });
+
+  it("confianca_dados repassa selos e revisões e lembra que o selo não diz qual versão é a certa", async () => {
+    const out = await executeTool("confianca_dados", {}, { now: NOW, asset: ASSET }, deps(src(PLD)));
+    const r = out.result as { revisoes_retroativas_30d: number; fontes: { fonte: string; selo: string }[]; nota: string };
+    expect(r.revisoes_retroativas_30d).toBe(2);
+    expect(r.fontes[0]).toMatchObject({ fonte: "Carga", selo: "média" });
+    expect(r.nota).toContain("não diz qual versão");
   });
 
   it("ferramenta desconhecida vira erro, não exceção", async () => {

@@ -2,6 +2,7 @@ import "server-only";
 import type { Firestore } from "firebase-admin/firestore";
 import { clearFirestoreError, firestore, firestoreHealthy, reportFirestoreError } from "./firebase";
 import type { AgentReport, AuditRun } from "./audit/types";
+import type { DayDigest, Revision, TrustSourceId } from "./audit/trust";
 import { memoryZoneStore, type ZoneSnapshot, type ZoneStore } from "./sources/europe";
 import { SUBS, type Sub } from "./sources/types";
 
@@ -24,10 +25,12 @@ export interface PldDay {
 }
 
 // persisted: data → fonte já gravada no Firestore (evita reler os mesmos dias a cada requisição)
-type Mem = { runs: AuditRun[]; reports: AgentReport[]; pld: Map<string, PldDay>; persisted: Map<string, string> };
+type Mem = { runs: AuditRun[]; reports: AgentReport[]; pld: Map<string, PldDay>; persisted: Map<string, string>; trust: Map<string, DayDigest>; revisions: Revision[] };
 const g = globalThis as typeof globalThis & { __sinMem?: Mem };
-g.__sinMem ??= { runs: [], reports: [], pld: new Map(), persisted: new Map() };
+g.__sinMem ??= { runs: [], reports: [], pld: new Map(), persisted: new Map(), trust: new Map(), revisions: [] };
 g.__sinMem.persisted ??= new Map();
+g.__sinMem.trust ??= new Map();
+g.__sinMem.revisions ??= [];
 const mem = g.__sinMem;
 
 async function withDb<T>(op: (db: Firestore) => Promise<T>, fallback: () => T): Promise<T> {
@@ -186,5 +189,63 @@ export async function takeDailyQuota(key: string, limit: number, now = Date.now(
         return { ok: true, used: used + 1 };
       }),
     local,
+  );
+}
+
+/**
+ * Camada de confiança (ver audit/trust.ts): impressão digital por fonte/dia fechado e o
+ * registro das revisões retroativas detectadas.
+ *   trust_days/{fonte}_{data}   última impressão digital vista (com os valores, ~100 números)
+ *   trust_revisions/{id}        cada vez que um dia fechado reapareceu diferente
+ */
+const trustId = (source: string, date: string) => `${source}_${date}`;
+
+export async function loadTrustDays(source: TrustSourceId, dates: string[]): Promise<Map<string, DayDigest>> {
+  const out = new Map<string, DayDigest>();
+  if (!dates.length) return out;
+  const local = () => {
+    for (const d of dates) {
+      const v = mem.trust.get(trustId(source, d));
+      if (v) out.set(d, v);
+    }
+    return out;
+  };
+  return withDb(async (db) => {
+    const snaps = await db.getAll(...dates.map((d) => db.collection("trust_days").doc(trustId(source, d))));
+    snaps.forEach((snap, i) => {
+      if (snap.exists) out.set(dates[i], snap.data() as DayDigest);
+    });
+    return out;
+  }, local);
+}
+
+export async function saveTrustDays(list: DayDigest[]): Promise<void> {
+  for (const d of list) mem.trust.set(trustId(d.source, d.date), d);
+  if (!list.length) return;
+  await withDb(async (db) => {
+    const batch = db.batch();
+    for (const d of list) batch.set(db.collection("trust_days").doc(trustId(d.source, d.date)), d);
+    await batch.commit();
+  }, () => undefined);
+}
+
+export async function saveRevisions(list: Revision[]): Promise<void> {
+  mem.revisions.unshift(...list);
+  mem.revisions.splice(500);
+  if (!list.length) return;
+  await withDb(async (db) => {
+    const batch = db.batch();
+    for (const r of list) batch.set(db.collection("trust_revisions").doc(`${r.source}_${r.date}_${r.detectedAt}`), r);
+    await batch.commit();
+  }, () => undefined);
+}
+
+export async function listRevisions(sinceMs: number, limit = 200): Promise<Revision[]> {
+  return withDb(
+    async (db) => {
+      const snap = await db.collection("trust_revisions").where("detectedAt", ">=", sinceMs).orderBy("detectedAt", "desc").limit(limit).get();
+      return snap.docs.map((d) => d.data() as Revision);
+    },
+    () => mem.revisions.filter((r) => r.detectedAt >= sinceMs).slice(0, limit),
   );
 }
