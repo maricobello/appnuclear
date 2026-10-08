@@ -6,6 +6,7 @@ import { fetchEia } from "../sources/eia";
 import { fetchEuPrices } from "../sources/europe";
 import { fetchFx, type FxData } from "../sources/fx";
 import { fetchCmoHourly, fetchEarDaily, fetchEnaDaily, fetchLoadHourly } from "../sources/ons";
+import { fetchBalance, fetchCurtailment } from "../sources/ons-renewables";
 import { SOURCES } from "../sources/registry";
 import type { SourceId, SourceResult, SubPanel } from "../sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "../sources/uk";
@@ -31,6 +32,8 @@ export async function probeAll(): Promise<Record<SourceId, SourceResult<unknown>
     fetchEarDaily(30),
     fetchEnaDaily(30),
     fetchLoadHourly(10),
+    fetchCurtailment(12), // 12 dias: a camada de confiança compara os últimos 10 fechados
+    fetchBalance(3),
     fetchEuPrices(3, { store: euZoneStore, probe: true }),
     fetchUkMid(2),
     fetchUkSystemPrices(),
@@ -52,6 +55,8 @@ export async function probeOne(id: SourceId): Promise<SourceResult<unknown>> {
     ons_ear: () => fetchEarDaily(30),
     ons_ena: () => fetchEnaDaily(30),
     ons_carga: () => fetchLoadHourly(10),
+    ons_curtailment: () => fetchCurtailment(12),
+    ons_balanco: () => fetchBalance(3),
     energy_charts: () => fetchEuPrices(3, { store: euZoneStore, probe: true }),
     elexon_mid: () => fetchUkMid(2),
     elexon_sysprice: () => fetchUkSystemPrices(),

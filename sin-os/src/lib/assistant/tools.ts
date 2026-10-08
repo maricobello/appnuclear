@@ -1,6 +1,7 @@
 import type { AuditRun } from "../audit/types";
 import { BESS_QUERY, toBessParams } from "../market/bess-params";
 import type { BessParams, BessStudy } from "../market/bess-study";
+import type { RenewablesReport } from "../market/renewables-report";
 import { latestBySub, PLD_LIMITS } from "../market/brazil";
 import { dayRow, dayStats } from "../market/pld-summary";
 import type { ForecastResult } from "../market/forecast";
@@ -19,6 +20,7 @@ import type { ToolDef } from "./groq";
 export const ROUTES = {
   "/": "Sala de Comando",
   "/sin": "SIN · Brasil",
+  "/renovaveis": "Renováveis & corte",
   "/previsao": "Previsão",
   "/arbitragem": "Arbitragem",
   "/bess": "BESS",
@@ -66,6 +68,7 @@ export interface AssistantDeps {
   bess: (p: BessParams) => Promise<{ study: BessStudy; pld: SourceResult<SubPanel> }>;
   latestAudit: () => Promise<AuditRun | null>;
   trust: () => Promise<{ totalRevisions30d: number; windowDays: number; seals: { source: string; name: string; monitored: boolean; level: string; revisions30d: number; reasons: string[] }[] }>;
+  renewables: (days: number) => Promise<RenewablesReport>;
   dataMode: () => string;
 }
 
@@ -157,6 +160,18 @@ export const TOOL_DEFS: ToolDef[] = [
       name: "confianca_dados",
       description: "Confiança nos dados abertos (ONS e CCEE): se alguma fonte republicou dias passados com valores diferentes nos últimos 30 dias (revisão retroativa), se há dias incompletos nos últimos 10 dias, e o selo (alta/média/baixa) de cada fonte. Use quando perguntarem se um dado é confiável, se foi revisado ou se a base mudou.",
       parameters: { type: "object", properties: {}, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "renovaveis_corte",
+      description: "Corte (curtailment / constrained-off) de eólica e solar pelo ONS nos últimos dias fechados: GWh cortados por fonte, submercado e razão (sobra de energia, rede, confiabilidade), % do potencial, faixa oficial × limitada à disponibilidade, horas com PLD no piso e valor a PLD, curva do pato (rampa da noite). Use para perguntas sobre curtailment, energia desperdiçada, carga líquida ou oportunidade de armazenamento.",
+      parameters: {
+        type: "object",
+        properties: { dias: { type: "integer", minimum: 3, maximum: 31, description: "janela de dias fechados (padrão 14)" } },
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -392,6 +407,30 @@ async function confiancaDados(_args: Record<string, unknown>, _ctx: ToolCtx, dep
   };
 }
 
+async function renovaveisCorte(args: Record<string, unknown>, _ctx: ToolCtx, deps: AssistantDeps): Promise<ToolOutcome> {
+  const n = Number(args.dias ?? 14);
+  const days = Number.isFinite(n) ? Math.min(31, Math.max(3, Math.round(n))) : 14;
+  const r = await deps.renewables(days);
+  const c = r.curtailment;
+  if (!c) return { result: { erro: `corte do ONS indisponível agora: ${r.meta.curtailment.error ?? "sem dados"}` } };
+  const g = (mwh: number) => Math.round(mwh / 100) / 10;
+  return {
+    result: {
+      janela: `${c.from} a ${c.to} (${c.days} dias fechados)`,
+      eolica_cortada_gwh: g(c.totals.eolicaMWh),
+      solar_cortada_gwh: g(c.totals.solarMWh),
+      percentual_do_potencial: c.curtailedSharePct,
+      faixa_gwh: { piso_limitado_a_disponibilidade: g(c.totals.cappedMWh), oficial_ons: g(c.totals.eolicaMWh + c.totals.solarMWh) },
+      por_razao_gwh: Object.fromEntries(Object.entries(c.totals.byReason).map(([k, v]) => [r.reasonLabel[k as keyof typeof r.reasonLabel], g(v)])),
+      por_submercado_gwh: Object.fromEntries(Object.entries(c.totals.bySub).map(([k, v]) => [k, g(v)])),
+      corte_x_pld: r.vsPld?.map((x) => ({ sub: x.sub, horas_com_corte: x.hours, pct_com_pld_no_piso: x.sharePct, pld_medio_no_corte: x.avgPld, valor_a_pld_reais: x.valueBRL })) ?? "PLD indisponível",
+      pld_oficial: r.pldOfficial,
+      carga_liquida: r.netLoad ? { rampa_noite_mw_3h: r.netLoad.eveningRampMW, hora_do_minimo: r.netLoad.minHour, participacao_eolica_solar_pct: r.netLoad.renewableSharePct } : "indisponível",
+      observacoes: r.notes,
+    },
+  };
+}
+
 function navegar(args: Record<string, unknown>): ToolOutcome {
   const rota = typeof args.rota === "string" && args.rota in ROUTES ? (args.rota as Route) : null;
   if (!rota) return { result: { erro: `rota desconhecida; use uma de ${Object.keys(ROUTES).join(", ")}` } };
@@ -437,6 +476,8 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return await saudeDados(args, ctx, deps);
       case "confianca_dados":
         return await confiancaDados(args, ctx, deps);
+      case "renovaveis_corte":
+        return await renovaveisCorte(args, ctx, deps);
       case "navegar":
         return navegar(args);
       case "configurar_ativo":

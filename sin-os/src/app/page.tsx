@@ -22,7 +22,7 @@ import {
 } from "@/components/home/panels";
 import { Appear } from "@/components/motion";
 import { Kpi, Panel, Segmented, SimBanner, SourceTag } from "@/components/ui";
-import type { ArbitragemResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp } from "@/lib/apiTypes";
+import type { ArbitragemResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
 import { assetQuery, useAsset } from "@/lib/asset";
 import { SUB_COLOR } from "@/lib/chart";
 import { brl } from "@/lib/fmt";
@@ -63,6 +63,7 @@ export default function Home() {
   const fcS = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=S" : null, 600_000);
   const fcNE = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=NE" : null, 600_000);
   const fcN = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=N" : null, 600_000);
+  const renov = useApi<RenovaveisResp>("/api/renovaveis?dias=14", 30 * 60_000);
   const d = br.data;
 
   const kpis = useMemo(() => buildKpis(d, clima.data, audit.data, now || undefined), [d, clima.data, audit.data, now]);
@@ -73,6 +74,13 @@ export default function Home() {
   const earOpt = useMemo(() => (d ? earOption(d) : null), [d]);
   const fanOpt = useMemo(() => (fcSE.data ? fanOption(fcSE.data) : null), [fcSE.data]);
 
+  const curtEvidence = useMemo(() => {
+    const c = renov.data?.curtailment;
+    if (!c || !c.days) return null;
+    return Object.fromEntries(
+      SUBS.map((s) => [s, { mwhPerDay: c.daily.reduce((a, x) => a + x.eolica[s] + x.solar[s], 0) / c.days, floorSharePct: renov.data!.vsPld?.find((v) => v.sub === s)?.sharePct ?? null, days: c.days }]),
+    ) as Record<Sub, { mwhPerDay: number; floorSharePct: number | null; days: number }>;
+  }, [renov.data]);
   const opps = useMemo(() => {
     if (!d?.pld || !now) return [];
     const day = pickDay(d.pld.ts, d.pld.values, brtDate(now), brtDate, brtHour);
@@ -85,8 +93,9 @@ export default function Home() {
       asset: { pow: asset.pow, cap: asset.cap, rte: asset.rte, lcos: asset.lcos },
       spreads: arb.data?.spreads,
       intl: eu && fx ? { name: eu.name, bzn: eu.bzn, eurPerMWDay: eu.bessEurPerMWDay, spreadEur: eu.max - eu.min, fx, date: eu.date } : null,
+      curtailment: curtEvidence,
     });
-  }, [d, arb.data, asset, now]);
+  }, [d, arb.data, asset, now, curtEvidence]);
   const oppDay = d?.pld && now ? pickDay(d.pld.ts, d.pld.values, brtDate(now), brtDate, brtHour) : null;
   const fcLoading = mode === "prev" && (fcS.isLoading || fcNE.isLoading || fcN.isLoading);
 

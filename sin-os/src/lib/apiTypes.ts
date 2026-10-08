@@ -100,3 +100,5 @@ export interface ConfiancaResp {
   }[];
   recentRevisions: { source: string; date: string; detectedAt: number; changedPoints: number; maxAbsDiff: number; maxRelDiff: number; meanShift: number }[];
 }
+
+export type { RenewablesReport as RenovaveisResp } from "./market/renewables-report";

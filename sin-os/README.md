@@ -227,6 +227,28 @@ dos últimos 10 dias. O selo (alta/média/baixa) aparece na tela do auditor e em
 Iara responde "essa base foi revisada?" pela ferramenta `confianca_dados`. O selo mostra que o dado
 mudou, **não** qual versão está certa. Fonte sem dado real na leitura aparece como "sem dado".
 
+## Renováveis: corte (curtailment) e carga líquida
+
+Tela `/renovaveis` e `GET /api/renovaveis?dias=14` (3–31). Lê do bucket público do ONS os parquets de
+restrição por constrained-off de eólicas e fotovoltaicas (meia hora, por conjunto) e o balanço de energia
+por subsistema (horário), e cruza com o PLD da mesma hora. Mostra quanto foi cortado, por quê (sobra de
+energia, rede, confiabilidade), em que hora, quanto vale a PLD, quantas horas de corte tiveram PLD no piso
+e a curva do pato (carga × carga líquida, rampa da noite). A Iara responde pela ferramenta
+`renovaveis_corte`, e a oportunidade "Curtailment → Storage" da Sala de Comando passa a citar o corte medido.
+
+Checagens feitas a cada leitura (e testadas com amostra real em `tests/fixtures/ons-renewables.json`):
+
+- **Método da apurada:** a "geração não realizada apurada" do ONS é exatamente
+  max(0, referência − geração) com a referência **bruta** (erro médio 0,00 MW).
+- **Referência acima da disponibilidade:** a referência bruta passa da disponibilidade do conjunto em
+  milhares de meias horas (≈ 5–11% do MWh oficial). O corte aparece como faixa: oficial (teto) e
+  limitado à disponibilidade (piso).
+- **Convenção de hora:** o instante marca o início da meia hora; validado contra o balanço (correlação
+  0,9999 sem defasagem, ≈ 0,95 deslocando 1 h). Se o ONS mudar a convenção, a tela acusa.
+- **Fuso:** o parquet grava o horário de Brasília como se fosse UTC; ler como UTC desloca 3 h.
+- **Identidade do balanço:** hidro + térmica + eólica + solar − intercâmbio = carga em todas as horas.
+- A flag de dado inválido do ONS não é usada (não é atualizada depois da contestação do agente).
+
 ## Agente auditor
 
 1. **Camada determinística** (sempre ativa): para cada API mede disponibilidade, latência, frescor vs SLA,
@@ -276,6 +298,15 @@ e rode o `.bat` (ou `node coletor-ccee.mjs --csv pld.csv`): ele envia só as lin
 
 **Exportação CSV** (`?format=csv`): `/api/previsao?sub=SE` (curva horária, banda e quantis),
 `/api/arbitragem?sub=SE` (despacho ótimo de 72 h) e `/api/pld-mensal` (PLD médio mês × submercado).
+
+## Radar semanal da comunidade
+
+`node scripts/radar-comunidade.mjs "WhatsApp Chat - Comunidade.zip"` lê a exportação do grupo (o .zip ou o
+`_chat.txt`) e grava em `docs/radar/AAAA-MM-DD.md` os temas da semana, os links compartilhados (marcando os
+novos em relação aos radares anteriores) e as perguntas em aberto. O resumo é anônimo: tira nomes, telefones,
+e-mails, menções, apresentações pessoais e links de redes sociais e reuniões. Roda só no seu computador; os
+radares e as exportações ficam fora do git porque o repositório é público. `--desde AAAA-MM-DD` muda a janela
+(padrão: 7 dias até a última mensagem).
 
 ## Deploy na Vercel
 
@@ -348,7 +379,7 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente Claude
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, confianca, brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, renovaveis, brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status, assistente (+voz)
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```

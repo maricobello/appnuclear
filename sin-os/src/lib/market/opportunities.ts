@@ -9,7 +9,8 @@ import { SUBS, type Sub } from "../sources/types";
  *  Peak capture: prêmio da ponta (18–21h) sobre a média do dia, 3 h por MW.
  *  Load shifting: ponta (18–21h) − madrugada (0–6h), 3 MWh deslocados por MW.
  *  Curtailment → storage: carregar nas horas no PISO regulatório (excedente) e vender nas k
- *    mais caras.
+ *    mais caras. Com o corte medido pelo ONS (eólica + solar), a linha traz a evidência física:
+ *    energia cortada por dia no submercado e % das horas de corte com PLD no piso.
  *  Spread entre submercados: indicador de risco (sem FTR no SIN) — sem margem monetizável.
  *  Internacional: bateria 1 MW/2 MWh no day-ahead europeu convertida pelo câmbio (referência).
  */
@@ -56,7 +57,14 @@ export interface OppInput {
   asset: { pow: number; cap: number; rte: number; lcos: number };
   spreads?: SpreadLike[];
   intl?: { name: string; bzn: string; eurPerMWDay: number; spreadEur: number; fx: number; date: string } | null;
+  /** Corte medido pelo ONS na janela recente, por submercado. */
+  curtailment?: Partial<Record<Sub, { mwhPerDay: number; floorSharePct: number | null; days: number }>> | null;
 }
+
+const curtEvidence = (c: { mwhPerDay: number; floorSharePct: number | null; days: number } | undefined) =>
+  c && c.mwhPerDay > 0
+    ? ` · ONS: ${(c.mwhPerDay / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} GWh/dia de eólica + solar cortados (${c.days} d)${c.floorSharePct !== null ? `, ${Math.round(c.floorSharePct)}% das horas de corte com PLD no piso` : ""}`
+    : "";
 
 const mean = (a: number[]) => a.reduce((s, v) => s + v, 0) / Math.max(1, a.length);
 
@@ -174,7 +182,7 @@ export function buildOpportunities(inp: OppInput): Opportunity[] {
         liquidity: "MCP · CCEE",
         confidence: conf,
         confidenceNote: confNote,
-        detail: `${floorHours.n} h no piso (R$ ${inp.floor.toFixed(2)}) — energia excedente para carregar · ${when}`,
+        detail: `${floorHours.n} h no piso (R$ ${inp.floor.toFixed(2)}) — energia excedente para carregar · ${when}${curtEvidence(inp.curtailment?.[floorHours.s])}`,
         action: { label: "Simular", href: `/bess?sub=${floorHours.s}` },
       });
     }

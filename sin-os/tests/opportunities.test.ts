@@ -45,5 +45,15 @@ describe("scanner de oportunidades", () => {
     expect(sp.strategy).toBe("Spread S → SE");
     expect(sp.confidence).toBeCloseTo(0.99, 6);
     expect(rows.find((r) => r.kind === "bess" && r.market === "N")!.margin!).toBeLessThan(0); // preço plano: só perdas
+    expect(floor?.detail).not.toContain("ONS");
+    // com o corte medido pelo ONS, a linha traz a evidência física (sem mudar a margem)
+    const withCurt = buildOpportunities({
+      day,
+      floor: 57.31,
+      asset: { pow: 100, cap: 400, rte: 88, lcos: 312.45 },
+      curtailment: { NE: { mwhPerDay: 111_841.6, floorSharePct: 74.6, days: 14 } },
+    }).find((r) => r.kind === "floor")!;
+    expect(withCurt.margin).toBeCloseTo(floor!.margin!, 9);
+    expect(withCurt.detail).toContain("ONS: 111,8 GWh/dia de eólica + solar cortados (14 d), 75% das horas de corte com PLD no piso");
   });
 });

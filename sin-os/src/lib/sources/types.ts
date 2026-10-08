@@ -5,6 +5,8 @@ export type SourceId =
   | "ons_ear"
   | "ons_ena"
   | "ons_carga"
+  | "ons_curtailment"
+  | "ons_balanco"
   | "energy_charts"
   | "elexon_mid"
   | "elexon_sysprice"

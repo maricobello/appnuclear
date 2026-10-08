@@ -6,6 +6,7 @@ import { runAssistant, systemPrompt } from "../src/lib/assistant/agent";
 import { GroqError, makeGroqChat, type ChatFn, type ChatRequest } from "../src/lib/assistant/groq";
 import { executeTool, SIM_REFUSAL, sourceLabel, type AssetCtx, type AssistantDeps } from "../src/lib/assistant/tools";
 import { speakable, splitSentences } from "../src/lib/assistant/speech";
+import type { RenewablesReport } from "../src/lib/market/renewables-report";
 import { brtToUtc } from "../src/lib/sources/time";
 import { SUBS, type SourceResult, type SubPanel } from "../src/lib/sources/types";
 
@@ -49,9 +50,31 @@ function deps(pld: SourceResult<SubPanel>): AssistantDeps {
     },
     latestAudit: async () => null,
     trust: async () => ({ totalRevisions30d: 2, windowDays: 10, seals: [{ source: "ons_carga", name: "Carga", monitored: true, level: "média", revisions30d: 2, reasons: ["2 dia(s) republicado(s)"] }] }),
+    renewables: async (days) => RENEW(days),
     dataMode: () => "live",
   };
 }
+
+const meta = (ok: boolean, error: string | null = null) => ({ id: "ons_curtailment", ok, simulated: false, fallback: null, note: null, error, latestTs: NOW, fetchedAt: NOW });
+let renewDays = 0;
+const RENEW = (days: number) => {
+  renewDays = days;
+  return {
+    meta: { curtailment: meta(true), balanco: meta(true), pld: meta(true) },
+    pldOfficial: false,
+    reasonLabel: { REL: "confiabilidade elétrica", CNF: "atendimento a requisitos da rede", ENE: "razão energética (sobra de energia)" },
+    curtailment: {
+      from: "2026-09-13",
+      to: "2026-09-26",
+      days: 14,
+      totals: { eolicaMWh: 1_353_764.4, solarMWh: 600_318, cappedMWh: 1_849_340.5, byReason: { REL: 144_381.3, CNF: 352_138.2, ENE: 1_457_562.8 }, bySub: { SE: 258_360.5, S: 121_181.9, NE: 1_565_782.6, N: 8_757.4 } },
+      curtailedSharePct: { eolica: 21.9, solar: 26.4 },
+    },
+    vsPld: [{ sub: "NE", hours: 200, atFloor: 150, sharePct: 75, mwhPriced: 1000, avgPld: 70, valueBRL: 70_000 }],
+    netLoad: { eveningRampMW: 28_452, minHour: 11, renewableSharePct: 35.3 },
+    notes: ["nota"],
+  } as unknown as RenewablesReport;
+};
 
 // hoje: 100 de madrugada, 400 às 19h no SE; amanhã publicado
 const PLD = panel(["2026-09-26", "2026-09-27", "2026-09-28"], (h, k) => (h === 19 ? 400 : 100) + k);
@@ -99,6 +122,16 @@ describe("ferramentas da Iara", () => {
     expect(r.revisoes_retroativas_30d).toBe(2);
     expect(r.fontes[0]).toMatchObject({ fonte: "Carga", selo: "média" });
     expect(r.nota).toContain("não diz qual versão");
+  });
+
+  it("renovaveis_corte: GWh, faixa oficial × piso, razões nomeadas e janela limitada", async () => {
+    const out = await executeTool("renovaveis_corte", { dias: 90 }, { now: NOW, asset: ASSET }, deps(src(PLD)));
+    expect(renewDays).toBe(31);
+    const r = out.result as Record<string, unknown>;
+    expect(r.eolica_cortada_gwh).toBe(1353.8);
+    expect(r.faixa_gwh).toEqual({ piso_limitado_a_disponibilidade: 1849.3, oficial_ons: 1954.1 });
+    expect(r.por_razao_gwh).toMatchObject({ "razão energética (sobra de energia)": 1457.6 });
+    expect(r.pld_oficial).toBe(false);
   });
 
   it("ferramenta desconhecida vira erro, não exceção", async () => {

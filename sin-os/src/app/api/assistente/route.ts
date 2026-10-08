@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { runAssistant } from "@/lib/assistant/agent";
 import { groqConfigured, groqStatus, GroqError, makeGroqChat } from "@/lib/assistant/groq";
+import { buildRenewablesReport } from "@/lib/market/renewables-report";
 import { buildTrustReport } from "@/lib/audit/trust-report";
 import { accessCodeRequired, dailyLimit, guard } from "@/lib/assistant/guard";
 import type { AssistantDeps } from "@/lib/assistant/tools";
@@ -27,6 +28,7 @@ const deps: AssistantDeps = {
   bess: (p) => getBessStudy(p),
   latestAudit: async () => (await listAuditRuns(1))[0] ?? null,
   trust: () => buildTrustReport(),
+  renewables: (days) => buildRenewablesReport(days),
   dataMode,
 };
 

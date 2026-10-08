@@ -16,7 +16,7 @@ jobs:
       - name: Rotas de API
         run: |
           fail=0
-          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
+          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
                       "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval"; do
             code=$(curl -s -o body.json -w '%{http_code}' --max-time 120 "$URL$path")
             echo "== $path → HTTP $code"
@@ -62,6 +62,15 @@ jobs:
                   print("  ", x.get("sub"), "agora:", x.get("agora"), "| hoje média:", (x.get("hoje") or {}).get("media"), "| amanhã média:", (x.get("amanha") or {}).get("media"))
           if path == "/api/pld/coletor":
               print("   coletor configurado:", d.get("configurado"), "| dias recentes:", ", ".join(f"{x['data']}{'' if x['oficial'] else ' (estimado)'}" for x in d.get("dias_recentes") or []))
+          if path == "/api/confianca":
+              print("   revisões 30d:", d.get("totalRevisions30d"))
+              for x in d.get("seals") or []:
+                  print("  ", x.get("source"), "| selo:", x.get("level"), "| completude:", x.get("completeness"), "| obs:", "; ".join(x.get("reasons") or []))
+          if path == "/api/renovaveis":
+              c = d.get("curtailment") or {}
+              t = c.get("totals") or {}
+              print("   corte:", c.get("from"), "a", c.get("to"), "| eólica GWh:", round((t.get("eolicaMWh") or 0) / 1000), "| solar GWh:", round((t.get("solarMWh") or 0) / 1000), "| qualidade:", c.get("quality"))
+              print("   convenção de hora:", (d.get("hourCheck") or {}).get("ok"), "| balanço:", (d.get("netLoad") or {}).get("quality"))
           if path == "/api/status":
               print("  ", json.dumps(d)[:400])
           PY

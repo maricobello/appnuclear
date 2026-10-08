@@ -52,3 +52,8 @@ scripts/chave.txt
 scripts/pld*.csv
 chave.txt
 pld*.csv
+
+# radar da comunidade: gerado localmente a partir do export do WhatsApp; não publicar (repo público)
+docs/radar/*.md
+*.zip
+_chat.txt

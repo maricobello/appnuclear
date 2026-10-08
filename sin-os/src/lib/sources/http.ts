@@ -128,6 +128,30 @@ export async function fetchText(url: string, opts: FetchOpts = {}): Promise<{ te
   }
 }
 
+/** Download binário (parquet do ONS) com as mesmas tentativas e telemetria do fetchText. */
+export async function fetchBuffer(url: string, opts: FetchOpts = {}): Promise<{ buf: ArrayBuffer; probes: Probe[] }> {
+  const { timeoutMs = 45_000, retries = 2, headers = {} } = opts;
+  const probes: Probe[] = [];
+  for (let attempt = 0; ; attempt++) {
+    const t0 = Date.now();
+    let buf: ArrayBuffer | null = null;
+    let probe: Probe;
+    try {
+      const res = await fetch(url, { headers: { "User-Agent": UA, Accept: "*/*", ...headers }, signal: AbortSignal.timeout(timeoutMs), cache: "no-store" });
+      buf = await res.arrayBuffer();
+      probe = { url: redact(url), ok: res.ok, status: res.status, latencyMs: Date.now() - t0, bytes: buf.byteLength, at: t0, error: res.ok ? undefined : `HTTP ${res.status}` };
+    } catch (e) {
+      probe = { url: redact(url), ok: false, status: null, latencyMs: Date.now() - t0, bytes: 0, at: t0, error: describeError(e) };
+    }
+    recordProbe(probe);
+    probes.push(probe);
+    if (probe.ok && buf) return { buf, probes };
+    const retryable = probe.status === null || probe.status === 429 || probe.status >= 500;
+    if (!retryable || attempt >= retries) throw new HttpError(probe.error ?? "falha HTTP", probes);
+    await new Promise((r) => setTimeout(r, 400 * 2 ** attempt));
+  }
+}
+
 export async function fetchJson<T = unknown>(url: string, opts: FetchOpts = {}): Promise<{ json: T; probes: Probe[] }> {
   const { text, probes } = await fetchText(url, opts);
   try {

@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
 import { useState, useSyncExternalStore, type ReactNode } from "react";
 import {
+  Wind,
   ArrowLeftRight,
   BatteryCharging,
   BookOpen,
@@ -32,6 +33,7 @@ const NAV: { group: string; items: { href: string; label: string; Icon: typeof G
     items: [
       { href: "/", label: "Sala de Comando", Icon: Gauge },
       { href: "/sin", label: "SIN · Brasil", Icon: Zap },
+      { href: "/renovaveis", label: "Renováveis & corte", Icon: Wind },
       { href: "/previsao", label: "Previsão", Icon: TrendingUp },
       { href: "/arbitragem", label: "Arbitragem", Icon: ArrowLeftRight },
     ],

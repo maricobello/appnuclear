@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { curtailmentDailyPanel, type CurtRow } from "../market/renewables";
 import { brtDate, brtHour } from "../sources/time";
 import { SUBS, type DailySubPanel, type SourceId, type Sub, type SubPanel } from "../sources/types";
 
@@ -13,8 +14,8 @@ import { SUBS, type DailySubPanel, type SourceId, type Sub, type SubPanel } from
  * reflete contestações e que bases "mudam" sem aviso; quem não guardou o histórico antigo
  * nunca percebeu.
  */
-export type TrustSourceId = Extract<SourceId, "ccee_pld" | "ons_cmo" | "ons_carga" | "ons_ear" | "ons_ena">;
-export const TRUST_SOURCES: TrustSourceId[] = ["ccee_pld", "ons_cmo", "ons_carga", "ons_ear", "ons_ena"];
+export type TrustSourceId = Extract<SourceId, "ccee_pld" | "ons_cmo" | "ons_carga" | "ons_ear" | "ons_ena" | "ons_curtailment">;
+export const TRUST_SOURCES: TrustSourceId[] = ["ccee_pld", "ons_cmo", "ons_carga", "ons_ear", "ons_ena", "ons_curtailment"];
 export const HOURLY: ReadonlySet<TrustSourceId> = new Set<TrustSourceId>(["ccee_pld", "ons_cmo", "ons_carga"]);
 
 /** Impressão digital de um dia fechado: valores arredondados (centavos), na ordem submercado × hora. */
@@ -83,6 +84,7 @@ export function digestDaily(source: TrustSourceId, panel: DailySubPanel, dates: 
 export function digestSource(source: TrustSourceId, data: unknown, now: number, windowDays = 10): DayDigest[] {
   if (!data) return [];
   const dates = closedDates(now, windowDays);
+  if (source === "ons_curtailment") return digestDaily(source, curtailmentDailyPanel(data as CurtRow[]), dates);
   return HOURLY.has(source) ? digestHourly(source, data as SubPanel, dates) : digestDaily(source, data as DailySubPanel, dates);
 }
 
