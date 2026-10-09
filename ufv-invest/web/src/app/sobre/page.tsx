@@ -17,7 +17,7 @@ export default function Sobre() {
     <Container className="pt-8">
       <div className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_440px]">
         <div>
-          <h1 className="text-[30px] font-bold tracking-tight text-navy">Sobre a Aferi Capital</h1>
+          <h1 className="text-[30px] font-bold tracking-tight text-ink">Sobre a Aferi Capital</h1>
           <p className="mt-1 text-[15px] font-medium text-good">Energia solar que gera valor.</p>
           <div className="mt-5 max-w-2xl space-y-4 text-[15px] leading-relaxed text-ink-2">
             <p>
@@ -34,20 +34,20 @@ export default function Sobre() {
             </p>
           </div>
         </div>
-        <div className="rounded-2xl bg-[linear-gradient(135deg,#0f2a44_0%,#123a5c_60%,#0f4a46_100%)] p-8 text-white">
+        <div className="rounded-2xl glass bg-[linear-gradient(135deg,rgba(61,220,132,0.10)_0%,rgba(96,165,250,0.06)_100%)] p-8 text-ink">
           <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-leaf">Aferi Capital</div>
           <p className="mt-3 text-[22px] font-bold leading-snug">Ativos reais de energia solar, analisados com dados abertos e acompanhados de perto.</p>
-          <p className="mt-4 text-[14px] text-white/75">Cada usina publicada passa por levantamento técnico, econômico e regulatório antes de chegar à plataforma.</p>
+          <p className="mt-4 text-[14px] text-ink-2">Cada usina publicada passa por levantamento técnico, econômico e regulatório antes de chegar à plataforma.</p>
         </div>
       </div>
 
       <section className="mt-14" aria-labelledby="valores">
-        <h2 id="valores" className="text-[22px] font-bold text-navy">
+        <h2 id="valores" className="text-[22px] font-bold text-ink">
           Nossos valores
         </h2>
         <ul className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           {values.map((v) => (
-            <li key={v.title} className="rounded-2xl border border-line bg-white p-5">
+            <li key={v.title} className="glass rounded-2xl p-5">
               <IconBubble>
                 <v.icon className="size-5" />
               </IconBubble>
@@ -58,9 +58,9 @@ export default function Sobre() {
         </ul>
       </section>
 
-      <section className="mt-12 rounded-2xl bg-gradient-to-r from-[#0e8441] to-[#22b573] p-8 text-center text-white sm:p-10">
+      <section className="mt-12 rounded-2xl bg-[radial-gradient(ellipse_at_top,rgba(61,220,132,0.25),transparent_70%)] border border-brand/25 p-8 text-center text-ink sm:p-10">
         <h2 className="text-[22px] font-bold">Junte-se a nós na transição energética.</h2>
-        <Link href="/usinas" className={cx(buttonClass.secondary, "mt-5 border-white bg-white text-good hover:bg-white/90")}>
+        <Link href="/usinas" className={cx(buttonClass.secondary, "mt-5")}>
           Explorar usinas <ArrowRight className="size-4" />
         </Link>
       </section>

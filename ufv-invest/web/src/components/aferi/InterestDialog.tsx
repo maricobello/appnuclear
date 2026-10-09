@@ -12,7 +12,7 @@ type Props = {
   cotas?: number;
 };
 
-const field = "mt-1 h-11 w-full rounded-lg border bg-white px-3 text-[14px] outline-none transition focus:border-brand";
+const field = "mt-1 h-11 w-full rounded-lg border bg-surface-2 px-3 text-ink text-[14px] outline-none transition focus:border-brand";
 
 /** Formulário de "Demonstrar interesse" / "Fale conosco" (sem compromisso de compra). */
 export function InterestDialog({ open, onClose, tipo = "interesse", usina, cotas }: Props) {
@@ -70,7 +70,7 @@ export function InterestDialog({ open, onClose, tipo = "interesse", usina, cotas
   const title = tipo === "suporte" ? "Fale conosco" : "Demonstrar interesse";
 
   return (
-    <dialog ref={ref} onClose={close} className="m-auto w-[min(480px,94vw)] rounded-2xl bg-white p-0 shadow-2xl backdrop:bg-navy/50" aria-labelledby="interesse-titulo">
+    <dialog ref={ref} onClose={close} className="m-auto w-[min(480px,94vw)] rounded-2xl border border-line-strong bg-surface p-0 text-ink shadow-2xl backdrop:bg-black/70 backdrop:backdrop-blur-sm" aria-labelledby="interesse-titulo">
       <div className="flex items-start justify-between border-b border-line px-6 py-4">
         <div>
           <h2 id="interesse-titulo" className="text-[17px] font-semibold text-ink">

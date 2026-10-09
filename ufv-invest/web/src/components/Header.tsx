@@ -56,7 +56,7 @@ export function Header() {
   const active = (href: string) => (href === "/" ? path === "/" : path?.startsWith(href));
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line/60 bg-white/70 backdrop-blur-xl backdrop-saturate-150">
+    <header className="sticky top-0 z-40 border-b border-line bg-page/70 backdrop-blur-xl backdrop-saturate-150">
       <Container className="flex h-16 items-center justify-between gap-4">
         <div className="flex shrink-0 items-center gap-2.5">
           <Link href="/">
@@ -74,7 +74,7 @@ export function Header() {
               key={n.href}
               href={n.href}
               aria-current={active(n.href) ? "page" : undefined}
-              className={cx("relative rounded-lg px-3 py-2 text-[14px] font-medium transition", active(n.href) ? "text-ink after:absolute after:inset-x-3 after:-bottom-[13px] after:h-0.5 after:rounded-full after:bg-leaf" : "text-ink-2 hover:text-ink")}
+              className={cx("rounded-full px-3.5 py-1.5 text-[14px] font-medium transition", active(n.href) ? "bg-white/[0.08] text-ink ring-1 ring-inset ring-white/10" : "text-muted hover:text-ink")}
             >
               {n.label}
             </Link>
@@ -91,14 +91,14 @@ export function Header() {
         </div>
       </Container>
       {search && (
-        <div className="border-t border-line bg-white">
+        <div className="border-t border-line bg-page/95">
           <Container className="py-3">
             <SearchBox onDone={() => setSearch(false)} />
           </Container>
         </div>
       )}
       {open && (
-        <nav className="border-t border-line bg-white lg:hidden" aria-label="Principal (móvel)">
+        <nav className="border-t border-line bg-page/95 lg:hidden" aria-label="Principal (móvel)">
           <Container className="flex flex-col py-2">
             {nav.map((n) => (
               <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className={cx("rounded-lg px-3 py-2.5 text-[15px] hover:bg-surface-2", active(n.href) ? "font-semibold text-ink" : "text-ink-2")}>

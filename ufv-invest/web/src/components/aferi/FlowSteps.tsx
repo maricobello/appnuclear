@@ -19,7 +19,7 @@ export function FlowSteps({ current = 0, compact = false }: { current?: number; 
           <span
             className={cx(
               "relative z-10 flex size-7 shrink-0 items-center justify-center rounded-full text-[12px] font-bold",
-              i < current ? "bg-leaf text-white" : i === current ? "bg-brand text-white ring-4 ring-brand-soft" : "bg-surface-2 text-ink-2 ring-1 ring-line-strong",
+              i < current ? "bg-leaf text-brand-ink" : i === current ? "bg-brand text-brand-ink ring-4 ring-brand-soft" : "bg-surface-2 text-ink-2 ring-1 ring-line-strong",
             )}
             aria-current={i === current ? "step" : undefined}
           >

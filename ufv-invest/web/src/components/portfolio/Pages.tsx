@@ -27,7 +27,7 @@ const KIND: Record<Tx["kind"], { label: string; sign: 1 | -1 | 0; tone: string }
 function Title({ title, sub }: { title: string; sub: string }) {
   return (
     <>
-      <h1 className="text-[22px] font-bold text-navy">{title}</h1>
+      <h1 className="text-[22px] font-bold text-ink">{title}</h1>
       <p className="mb-4 text-[13px] text-muted">{sub}</p>
     </>
   );
@@ -43,7 +43,7 @@ export function TransactionsPage() {
       <Card>
         <div className="flex flex-wrap gap-2 border-b border-line px-5 py-3">
           {(["todas", "aporte", "distribuicao", "resgate"] as const).map((k) => (
-            <button key={k} onClick={() => setFilter(k)} aria-pressed={filter === k} className={cx("rounded-full px-3 py-1 text-[12px] font-medium", filter === k ? "bg-brand text-white" : "border border-line-strong text-ink-2 hover:border-brand")}>
+            <button key={k} onClick={() => setFilter(k)} aria-pressed={filter === k} className={cx("rounded-full px-3 py-1 text-[12px] font-medium", filter === k ? "bg-brand text-brand-ink" : "border border-line-strong text-ink-2 hover:border-brand")}>
               {k === "todas" ? "Todas" : KIND[k].label}
             </button>
           ))}

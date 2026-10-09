@@ -29,7 +29,7 @@ export function RequireWallet({ children, allowDemo = true }: { children: ReactN
   if (!mounted) return <div className="h-64 animate-pulse rounded-xl bg-surface-2" />;
   if (isConnected || (allowDemo && demo)) return <>{children}</>;
   return (
-    <div className="mx-auto max-w-lg rounded-2xl border border-line bg-white p-8 text-center">
+    <div className="mx-auto max-w-lg glass rounded-2xl p-8 text-center">
       <Wallet className="mx-auto size-10 text-good" />
       <h1 className="mt-4 text-[20px] font-semibold text-ink">Entre com a sua carteira</h1>
       <p className="mt-2 text-[14px] text-ink-2">Suas cotas, distribuições e documentos ficam registrados na BNB Chain e aparecem aqui quando você conecta a carteira.</p>
@@ -67,9 +67,9 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
   return (
     <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 pt-6 sm:px-6 lg:grid-cols-[230px_minmax(0,1fr)] lg:px-8">
       <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-        <nav aria-label="Área do investidor" className="flex gap-1 overflow-x-auto rounded-2xl bg-navy p-2 text-white lg:min-h-[520px] lg:flex-col lg:p-3">
+        <nav aria-label="Área do investidor" className="flex gap-1 overflow-x-auto glass rounded-2xl p-2 text-ink lg:min-h-[520px] lg:flex-col lg:p-3">
           <div className="hidden items-center gap-2 px-2 pb-4 pt-1 lg:flex">
-            <LogoMark className="size-7" inverted />
+            <LogoMark className="size-7" />
             <span className="text-[13px] font-semibold text-white/80">Área do investidor</span>
           </div>
           {items.map((it) => {
@@ -95,7 +95,7 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
           <div />
           {mounted && (isConnected || demo) && (
             <div className="flex items-center gap-2.5">
-              <span className="flex size-9 items-center justify-center rounded-full bg-navy text-[12px] font-semibold text-white">{demo && !isConnected ? "DM" : profile.initials || "?"}</span>
+              <span className="flex size-9 items-center justify-center rounded-full bg-brand/15 text-[12px] font-semibold text-brand ring-1 ring-brand/30">{demo && !isConnected ? "DM" : profile.initials || "?"}</span>
               <span className="text-[14px] font-medium text-ink">{name}</span>
             </div>
           )}

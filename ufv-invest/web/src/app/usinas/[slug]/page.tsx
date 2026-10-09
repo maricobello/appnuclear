@@ -79,7 +79,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
       {docs.map((d) => (
         <li key={d.href}>
           <a href={d.href} className="group flex items-center gap-3 py-3" {...(d.href.endsWith("analise") ? { target: "_blank", rel: "noopener" } : {})}>
-            <span className="flex size-9 items-center justify-center rounded-lg bg-[#fdecec] text-critical">
+            <span className="flex size-9 items-center justify-center rounded-lg bg-critical/10 text-critical">
               <d.icon className="size-4" />
             </span>
             <span className="min-w-0 flex-1">
@@ -478,7 +478,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
   ];
 
   return (
-    <Container className="pt-5">
+    <Container className="page-in pt-5">
       <nav aria-label="Trilha" className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
         <Link href="/usinas" className="hover:text-ink">
           Usinas
@@ -498,7 +498,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
             {com?.ppaActive && <Badge tone="good">PPA ativo</Badge>}
             {plant.illustrative && <Badge tone="warning">Projeto ilustrativo</Badge>}
           </div>
-          <h1 className="mt-2 text-[32px] font-bold tracking-tight text-navy">{plant.name}</h1>
+          <h1 className="text-gradient mt-3 text-[36px] font-semibold leading-tight tracking-[-0.03em] sm:text-[44px]">{plant.name}</h1>
           <p className="mt-1 flex items-center gap-1.5 text-[15px] text-muted">
             <MapPin className="size-4" /> {plant.location.municipio}, {plant.location.uf}
           </p>
@@ -512,19 +512,19 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
                 [brl(plant.token.cotaPriceBRL, 0), "por cota", false],
               ] as const
             ).map(([v, l, hi]) => (
-              <div key={l} className="rounded-2xl bg-surface-2 p-4">
-                <div className={cx("text-[24px] font-bold leading-tight tnum", hi ? "text-good" : "text-ink")}>{v}</div>
+              <div key={l} className={cx("glass rounded-2xl p-4", hi && "border-brand/30 bg-[radial-gradient(ellipse_at_top_left,rgba(61,220,132,0.14),transparent_70%)]")}>
+                <div className={cx("text-[24px] font-bold leading-tight tnum", hi ? "text-brand" : "text-ink")}>{v}</div>
                 <div className="mt-0.5 text-[13px] text-ink-2">{l}</div>
               </div>
             ))}
           </div>
 
           <section className="mt-10" aria-labelledby="sobre">
-            <h2 id="sobre" className="text-[20px] font-bold text-navy">
+            <h2 id="sobre" className="text-[20px] font-bold text-ink">
               Sobre a usina
             </h2>
             <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{plant.about}</p>
-            <dl className="mt-5 divide-y divide-line rounded-2xl border border-line">
+            <dl className="glass mt-5 divide-y divide-line rounded-2xl">
               {facts.map(([k, v]) => (
                 <div key={k} className="flex flex-wrap justify-between gap-x-6 gap-y-1 px-5 py-3.5 text-[14px]">
                   <dt className="text-muted">{k}</dt>
@@ -534,18 +534,18 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
             </dl>
           </section>
 
-          <section className="mt-10 rounded-2xl border border-line p-5" aria-label="Geração de energia">
+          <section className="glass mt-10 rounded-2xl p-5" aria-label="Geração de energia">
             <GenerationOverview projection={g.monthly.map((m) => m.energyMWh)} history={history} historyNote={historyNote} />
           </section>
 
           <section className="mt-10" aria-labelledby="docs">
-            <h2 id="docs" className="text-[20px] font-bold text-navy">
+            <h2 id="docs" className="text-[20px] font-bold text-ink">
               Documentos
             </h2>
             <div className="mt-2">{documentsList}</div>
           </section>
 
-          <details className="group mt-10 rounded-2xl border border-line">
+          <details className="glass group mt-10 rounded-2xl">
             <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-[15px] font-semibold text-ink">
               Ver análise completa
               <ChevronRight className="size-4 text-muted transition group-open:rotate-90" />

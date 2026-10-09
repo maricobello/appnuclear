@@ -35,7 +35,7 @@ export default async function InvestirPage({ params }: PageProps<"/usinas/[slug]
         <span className="text-ink-2">Investir</span>
       </nav>
       <div className="mt-3 flex flex-wrap items-center gap-3">
-        <h1 className="text-[26px] font-bold tracking-tight text-navy">Investir na {plant.name}</h1>
+        <h1 className="text-[26px] font-bold tracking-tight text-ink">Investir na {plant.name}</h1>
         <StatusChip status={plant.status} />
       </div>
       <p className="mt-1 text-[14px] text-muted">

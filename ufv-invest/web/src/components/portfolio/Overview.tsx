@@ -13,11 +13,11 @@ import { buttonClass, Card, cx, StatusChip } from "@/components/ui";
 import { setDemo, usePortfolio } from "./data";
 import { RequireWallet } from "./Shell";
 
-const PIE = ["#2a78d6", "#22b573", "#0f2a44", "#f5a524", "#9cc3ef", "#8b5cf6", "#e34948"];
+const PIE = ["#60a5fa", "#3ddc84", "#f5b544", "#a78bfa", "#2dd4bf", "#f472b6", "#f87171"];
 
 function Kpi({ label, value, tone }: { label: string; value: string; tone?: "good" }) {
   return (
-    <div className="rounded-xl border border-line bg-white p-4">
+    <div className="glass rounded-xl p-4">
       <div className="text-[12px] text-muted">{label}</div>
       <div className={cx("mt-1 text-[22px] font-bold tnum", tone === "good" ? "text-good" : "text-ink")}>{value}</div>
     </div>
@@ -58,7 +58,7 @@ function Inner() {
 
   if (d.positions.length === 0) {
     return (
-      <div className="rounded-2xl border border-line bg-white p-8 text-center">
+      <div className="glass rounded-2xl p-8 text-center">
         <h2 className="text-[20px] font-semibold text-ink">Você ainda não tem cotas</h2>
         <p className="mx-auto mt-2 max-w-md text-[14px] text-ink-2">
           {d.loading ? "Lendo seus dados na blockchain…" : "Quando você investir em uma usina, suas cotas, distribuições e documentos aparecem aqui."}
@@ -181,7 +181,7 @@ function Inner() {
 export function PortfolioOverview() {
   return (
     <RequireWallet>
-      <h1 className="text-[22px] font-bold text-navy">Meu portfólio</h1>
+      <h1 className="text-[22px] font-bold text-ink">Meu portfólio</h1>
       <p className="mb-4 text-[13px] text-muted">Acompanhe seus investimentos e o desempenho da sua carteira.</p>
       <Inner />
     </RequireWallet>

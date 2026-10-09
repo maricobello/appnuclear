@@ -43,7 +43,7 @@ const UF_NAME: Record<string, string> = { MG: "Minas Gerais", BA: "Bahia", PE: "
 const norm = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 
 const selectCls =
-  "h-10 rounded-lg border border-line-strong bg-white pl-3 pr-8 text-[13px] text-ink-2 outline-none transition focus:border-brand appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%235b6b7c%22 stroke-width=%222%22><path d=%22m6 9 6 6 6-6%22/></svg>')] bg-[length:12px] bg-[right_10px_center] bg-no-repeat";
+  "h-10 rounded-lg border border-line-strong bg-surface-2 pl-3 pr-8 text-[13px] text-ink-2 outline-none transition focus:border-brand appearance-none bg-[url('data:image/svg+xml;utf8,<svg xmlns=%22http://www.w3.org/2000/svg%22 width=%2212%22 height=%2212%22 viewBox=%220 0 24 24%22 fill=%22none%22 stroke=%22%235b6b7c%22 stroke-width=%222%22><path d=%22m6 9 6 6 6-6%22/></svg>')] bg-[length:12px] bg-[right_10px_center] bg-no-repeat";
 
 export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards: Record<string, ReactNode> }) {
   const sp = useSearchParams();
@@ -136,14 +136,14 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
               sync({ q: e.target.value || null });
             }}
             placeholder="Buscar usina ou cidade"
-            className="h-11 w-full rounded-xl border border-line-strong bg-white pl-10 pr-3 text-[14px] outline-none transition focus:border-brand"
+            className="h-11 w-full rounded-xl border border-line-strong bg-surface-2 pl-10 pr-3 text-[14px] text-ink placeholder:text-muted outline-none transition focus:border-brand"
           />
         </div>
         <button
           type="button"
           onClick={() => setAdv((a) => !a)}
           aria-expanded={adv}
-          className={cx("inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-medium transition", adv || activeAdv ? "border-brand bg-brand-soft text-good" : "border-line-strong bg-white text-ink-2 hover:bg-surface-2")}
+          className={cx("inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-medium transition", adv || activeAdv ? "border-brand bg-brand-soft text-good" : "border-line-strong bg-surface-2 text-ink-2 hover:bg-surface-3")}
         >
           <SlidersHorizontal className="size-4" /> Filtros{activeAdv ? ` (${activeAdv})` : ""}
         </button>
@@ -168,7 +168,7 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
       </div>
 
       {adv && (
-        <div className="mt-3 rounded-xl border border-line bg-white p-4">
+        <div className="mt-3 glass rounded-xl p-4">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="text-[12px] font-medium text-ink-2">
               Contrato de energia (PPA)
@@ -316,7 +316,7 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
               setTab(t.id);
               sync({ status: t.id === "todas" ? null : t.id });
             }}
-            className={cx("rounded-full px-4 py-1.5 text-[13px] font-medium transition", tab === t.id ? "bg-navy text-white" : "text-ink-2 hover:bg-surface-2")}
+            className={cx("rounded-full px-4 py-1.5 text-[13px] font-medium transition", tab === t.id ? "bg-white text-[#06090e]" : "text-ink-2 hover:bg-surface-2")}
           >
             {t.label}
           </button>

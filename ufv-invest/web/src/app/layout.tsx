@@ -19,7 +19,7 @@ export const metadata: Metadata = {
   openGraph: { title: "Aferi Capital", description: "Invista no sol. Cotas de usinas solares com renda mensal.", type: "website", locale: "pt_BR", images: ["/images/lp/usina.jpg"] },
 };
 
-export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light" };
+export const viewport: Viewport = { themeColor: "#06090e", colorScheme: "dark" };
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   const initialState = cookieToInitialState(wagmiConfig, (await headers()).get("cookie"));
@@ -33,7 +33,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <HideOnLanding>
             <Header />
           </HideOnLanding>
-          <main id="conteudo" className="flex-1 bg-white">
+          <main id="conteudo" className="flex-1">
             {children}
           </main>
           <HideOnLanding>

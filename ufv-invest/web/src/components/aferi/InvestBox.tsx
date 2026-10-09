@@ -22,7 +22,7 @@ export function InvestBox(p: {
   const [n, setN] = useState(Math.max(p.minCotas, 10));
   if (p.status === "encerrada") {
     return (
-      <div className="rounded-2xl border border-line bg-white p-6">
+      <div className="glass rounded-2xl p-6">
         <div className="text-[17px] font-semibold text-ink">Oferta encerrada</div>
         <p className="mt-1 text-[14px] text-ink-2">Todas as cotas foram vendidas.</p>
         <Link href="/usinas" className={cx(buttonClass.primary, "mt-5 w-full")}>
@@ -32,7 +32,7 @@ export function InvestBox(p: {
     );
   }
   return (
-    <div className="rounded-2xl border border-line bg-white p-6 shadow-[0_16px_40px_-24px_rgba(15,42,68,0.35)]">
+    <div className="glass relative rounded-2xl p-6 shadow-[0_30px_80px_-30px_rgba(61,220,132,0.25)]">
       <Stepper id="ib-cotas" label="Quantas cotas?" value={n} onChange={setN} min={p.minCotas} max={p.totalCotas} />
       <dl className="mt-5 space-y-3">
         <div className="flex items-baseline justify-between">

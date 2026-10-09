@@ -52,7 +52,7 @@ export function AccountButton() {
     return (
       <>
         <button
-          className="inline-flex items-center gap-2 rounded-full bg-navy px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-navy-2"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-[#06090e] shadow-[0_0_24px_-6px_rgba(245,181,68,0.55)] transition hover:bg-white/85"
           onClick={() => {
             wantsLogin.current = true;
             setModal(true);
@@ -72,7 +72,7 @@ export function AccountButton() {
   return (
     <div className="relative" ref={ref}>
       <button className="flex items-center gap-2 rounded-full py-1 pl-1 pr-2 transition hover:bg-surface-2" onClick={() => setMenu((m) => !m)} aria-expanded={menu} aria-haspopup="menu">
-        <span className="flex size-8 items-center justify-center rounded-full bg-navy text-[12px] font-semibold text-white">{profile.initials || "?"}</span>
+        <span className="flex size-8 items-center justify-center rounded-full bg-brand/15 text-[12px] font-semibold text-brand ring-1 ring-brand/30">{profile.initials || "?"}</span>
         <span className="hidden max-w-[150px] truncate text-[13px] font-medium text-ink sm:block">{profile.label}</span>
         {wrongChain ? <AlertTriangle className="size-4 text-warning" aria-label="rede errada" /> : <ChevronDown className="size-4 text-muted" />}
       </button>

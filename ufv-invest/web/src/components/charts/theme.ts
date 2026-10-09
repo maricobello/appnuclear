@@ -1,18 +1,18 @@
 /**
- * Tema dos gráficos (canvas → hex). Paleta validada contra a superfície branca (skill dataviz):
- * série principal azul #2a78d6, secundária verde #15803d (marca Aferi), negativo #e34948.
+ * Tema dos gráficos (canvas → hex). Paleta para a superfície escura:
+ * série principal azul #60a5fa, secundária verde #3ddc84 (marca Aferi), negativo #f87171.
  */
 export const C = {
-  surface: "#ffffff",
-  grid: "#e6ebf1",
-  axis: "#cbd5e1",
-  ink: "#0f2a44",
-  ink2: "#3c5065",
-  muted: "#5b6b7c",
-  s1: "#2a78d6",
-  s2: "#15803d",
-  s1Light: "#9cc3ef",
-  neg: "#e34948",
+  surface: "#0c121a",
+  grid: "rgba(255,255,255,0.07)",
+  axis: "rgba(255,255,255,0.18)",
+  ink: "#f2f5f8",
+  ink2: "#b9c4d0",
+  muted: "#8794a3",
+  s1: "#60a5fa",
+  s2: "#3ddc84",
+  s1Light: "#2f5f99",
+  neg: "#f87171",
 };
 
 const nf0 = new Intl.NumberFormat("pt-BR", { maximumFractionDigits: 0 });

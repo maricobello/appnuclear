@@ -26,13 +26,13 @@ export default function ComoFunciona() {
     <Container className="pt-8">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div>
-          <h1 className="text-[30px] font-bold tracking-tight text-navy">Como funciona</h1>
+          <h1 className="text-[30px] font-bold tracking-tight text-ink">Como funciona</h1>
           <p className="mt-1 text-[15px] text-muted">Quatro passos.</p>
           <ol className="mt-8 space-y-0">
             {steps.map((s, i) => (
               <li key={s.title} className="relative flex gap-5 pb-8 last:pb-0">
                 {i < steps.length - 1 && <span className="absolute left-[19px] top-11 h-[calc(100%-36px)] w-px bg-line-strong" aria-hidden />}
-                <span className="relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full bg-leaf text-[16px] font-bold text-white shadow-[0_0_0_6px_var(--brand-soft)]">{i + 1}</span>
+                <span className="relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full bg-leaf text-[16px] font-bold text-brand-ink shadow-[0_0_0_6px_var(--brand-soft)]">{i + 1}</span>
                 <div className="pt-1.5">
                   <h2 className="text-[16px] font-semibold text-ink">
                     {s.title}
@@ -56,10 +56,10 @@ export default function ComoFunciona() {
       </div>
 
       <section className="mt-16" aria-labelledby="faq">
-        <h2 id="faq" className="text-[22px] font-bold text-navy">
+        <h2 id="faq" className="text-[22px] font-bold text-ink">
           Perguntas frequentes
         </h2>
-        <div className="mt-4 divide-y divide-line rounded-2xl border border-line bg-white">
+        <div className="mt-4 divide-y divide-line glass rounded-2xl">
           {faq.map(([q, a]) => (
             <details key={q} className="group px-5 py-4">
               <summary className="flex cursor-pointer list-none items-center justify-between gap-3 text-[15px] font-medium text-ink">

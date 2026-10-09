@@ -26,7 +26,7 @@ export function SoldBar(p: Props & { className?: string }) {
           aria-valuemax={100}
           aria-label={`${pct}% das cotas adquiridas`}
         >
-          <div className={cx("h-full rounded-full", p.status === "implantacao" ? "bg-series-1" : "bg-leaf")} style={{ width: `${Math.min(100, s.pct)}%` }} />
+          <div className={cx("h-full rounded-full", p.status === "implantacao" ? "bg-series-1" : "bg-gradient-to-r from-brand/70 to-brand")} style={{ width: `${Math.min(100, s.pct)}%` }} />
         </div>
         <span className="text-[12px] font-medium text-ink-2 tnum">{pct}% vendido</span>
       </div>

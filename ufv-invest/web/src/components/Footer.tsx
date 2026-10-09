@@ -25,21 +25,21 @@ const cols = [
 
 export function Footer() {
   return (
-    <footer className="mt-24 bg-navy text-white/80">
+    <footer className="mt-24 border-t border-line text-ink-2">
       <Container className="grid gap-10 py-12 md:grid-cols-[2fr_1fr_1fr]">
         <div>
-          <Logo inverted />
-          <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-white/70">
+          <Logo />
+          <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-muted">
             Renda mensal com usinas solares.
           </p>
         </div>
         {cols.map((c) => (
           <div key={c.title} className="text-[14px]">
-            <div className="font-semibold text-white">{c.title}</div>
+            <div className="font-semibold text-ink">{c.title}</div>
             <ul className="mt-2 space-y-0.5">
               {c.links.map(([href, label]) => (
                 <li key={href}>
-                  <Link href={href} className="inline-block py-1.5 hover:text-white">
+                  <Link href={href} className="inline-block py-1.5 hover:text-ink">
                     {label}
                   </Link>
                 </li>
@@ -48,11 +48,11 @@ export function Footer() {
           </div>
         ))}
       </Container>
-      <div className="border-t border-white/10">
-        <Container className="flex flex-wrap items-center justify-between gap-3 py-5 text-[12px] text-white/70">
+      <div className="border-t border-line">
+        <Container className="flex flex-wrap items-center justify-between gap-3 py-5 text-[12px] text-muted">
           <p>
             Demonstração. Rentabilidade é projeção, não garantia; há risco de perda.{" "}
-            <Link href="/seguranca" className="underline underline-offset-2 hover:text-white">
+            <Link href="/seguranca" className="underline underline-offset-2 hover:text-ink">
               Avisos e riscos
             </Link>
           </p>

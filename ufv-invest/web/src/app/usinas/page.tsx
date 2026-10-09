@@ -14,9 +14,15 @@ export default async function UsinasPage() {
   return (
     <Container className="page-in pt-6">
       <WalletBanner />
-      <h1 className="mt-8 text-[32px] font-bold tracking-tight text-navy">Usinas</h1>
-      <p className="mt-1 text-[15px] text-ink-2">Escolha onde investir.</p>
-      <div className="mt-6">
+      <div className="mt-10 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          <p className="text-[12px] font-semibold uppercase tracking-[0.2em] text-sun">Ofertas abertas</p>
+          <h1 className="text-gradient mt-2 text-[44px] font-semibold leading-none tracking-[-0.03em] sm:text-[56px]">Usinas</h1>
+          <p className="mt-3 text-[16px] text-ink-2">Escolha onde investir. Renda todo mês.</p>
+        </div>
+        <p className="text-[13px] text-muted tnum">{all.length} usinas · cotas a partir de R$ 1.000</p>
+      </div>
+      <div className="mt-8">
         <Suspense fallback={<div className="h-[640px]" />}>
           <UsinasExplorer items={all} cards={cards} />
         </Suspense>

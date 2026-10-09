@@ -29,7 +29,7 @@ export function GenerationOverview({ projection, history, historyNote }: Props) 
           name: mode === "historico" ? `Histórico ${history?.year ?? ""}` : "Projeção (P50)",
           type: "bar",
           barMaxWidth: 22,
-          data: data.map((v) => (v == null ? null : { value: +v.toFixed(1), itemStyle: { color: mode === "historico" ? C.s1 : C.s1Light, borderRadius: barRadius(1) } })),
+          data: data.map((v) => (v == null ? null : { value: +v.toFixed(1), itemStyle: { color: mode === "historico" ? C.s1 : C.s2, borderRadius: barRadius(1) } })),
         },
       ],
       tooltip: { ...base().tooltip, valueFormatter: (v: number) => (v == null ? "—" : `${fmt1(v)} MWh`) },
@@ -53,7 +53,7 @@ export function GenerationOverview({ projection, history, historyNote }: Props) 
               disabled={id === "historico" && !history}
               onClick={() => setMode(id)}
               aria-pressed={mode === id}
-              className={cx("rounded-full px-3 py-1 font-medium transition disabled:cursor-not-allowed disabled:opacity-40", mode === id ? "bg-white text-good shadow-sm" : "text-ink-2 hover:text-ink")}
+              className={cx("rounded-full px-3 py-1 font-medium transition disabled:cursor-not-allowed disabled:opacity-40", mode === id ? "bg-white/10 text-ink ring-1 ring-inset ring-white/15" : "text-ink-2 hover:text-ink")}
             >
               {mode === id && <span className="mr-1.5 inline-block size-1.5 rounded-full bg-leaf align-middle" aria-hidden />}
               {label}

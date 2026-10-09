@@ -70,7 +70,7 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
               <label htmlFor="sim-usina" className="text-[12px] font-medium text-muted">
                 Usina
               </label>
-              <select id="sim-usina" value={p.slug} onChange={(e) => choose(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-white px-3 text-[14px] font-medium text-ink outline-none focus:border-brand">
+              <select id="sim-usina" value={p.slug} onChange={(e) => choose(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-surface-2 px-3 text-ink text-[14px] font-medium text-ink outline-none focus:border-brand">
                 {open.map((i) => (
                   <option key={i.slug} value={i.slug}>
                     {i.name} — {i.municipio}/{i.uf}
@@ -139,7 +139,7 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
           </h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {p.scenarios.map((s) => (
-              <div key={s.name} className={cx("rounded-xl border p-4", s.name === "base" ? "border-brand bg-brand-soft/60" : "border-line bg-white")}>
+              <div key={s.name} className={cx("rounded-xl border p-4", s.name === "base" ? "border-brand bg-brand-soft/60" : "border-line bg-white/[0.02]")}>
                 <div className="text-[13px] font-semibold text-ink">{SC_LABEL[s.name]}</div>
                 <div className="text-[11px] text-muted">{SC_HINT[s.name]}</div>
                 <div className="mt-2 text-[18px] font-bold text-ink tnum">{Number.isFinite(s.irrNominalPct) ? `${pct(s.irrNominalPct)} a.a.` : "—"}</div>

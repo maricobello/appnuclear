@@ -6,7 +6,7 @@ export function PhotoPlaceholder({ className, label = "Fotos em breve", compact 
   return (
     <div
       className={cx(
-        "flex size-full flex-col items-center justify-center gap-1.5 bg-[linear-gradient(135deg,#eef6f1_0%,#f4f7f6_55%,#e9f1f8_100%)] text-muted",
+        "flex size-full flex-col items-center justify-center gap-1.5 bg-[linear-gradient(135deg,#0f1a24_0%,#0c121a_55%,#101c2a_100%)] text-muted",
         className,
       )}
       role="img"

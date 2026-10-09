@@ -10,7 +10,7 @@ export function Container({ children, className }: { children: ReactNode; classN
 }
 
 export function Card({ children, className, as: As = "div" }: { children: ReactNode; className?: string; as?: "div" | "section" | "article" }) {
-  return <As className={cx("rounded-[var(--radius)] border border-line bg-surface", className)}>{children}</As>;
+  return <As className={cx("glass rounded-[var(--radius)]", className)}>{children}</As>;
 }
 
 export function CardHeader({ title, subtitle, right, id }: { title: ReactNode; subtitle?: ReactNode; right?: ReactNode; id?: string }) {
@@ -41,7 +41,7 @@ export function Badge({ children, tone = "default", className }: { children: Rea
   const tones = {
     default: "border-line-strong text-ink-2",
     brand: "border-brand/40 bg-brand-soft text-brand",
-    good: "border-good/40 bg-good/10 text-[#0f6b34]",
+    good: "border-good/30 bg-good/10 text-good",
     warning: "border-warning/40 bg-warning/10 text-warning",
     critical: "border-critical/40 bg-critical/10 text-critical",
     info: "border-series-2/40 bg-series-2/10 text-info",
@@ -77,12 +77,12 @@ export function SectionTitle({ eyebrow, title, children, id, as: H = "h2" }: { e
 
 export const buttonClass = {
   primary:
-    "inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-[14px] font-semibold text-white shadow-sm transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg bg-brand px-4 py-2.5 text-[14px] font-semibold text-brand-ink shadow-[0_0_24px_-8px_rgba(61,220,132,0.7)] transition hover:bg-brand-hover disabled:cursor-not-allowed disabled:opacity-50",
   secondary:
-    "inline-flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-surface px-4 py-2.5 text-[14px] font-semibold text-ink shadow-sm transition hover:bg-surface-2 disabled:cursor-not-allowed disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg border border-line-strong bg-white/[0.04] px-4 py-2.5 text-[14px] font-semibold text-ink transition hover:bg-white/[0.08] disabled:cursor-not-allowed disabled:opacity-50",
   outline:
-    "inline-flex items-center justify-center gap-2 rounded-lg border border-brand/40 bg-surface px-4 py-2 text-[13px] font-semibold text-brand transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50",
-  dark: "inline-flex items-center justify-center gap-2 rounded-lg bg-navy px-4 py-2.5 text-[14px] font-semibold text-white shadow-sm transition hover:bg-navy-2 disabled:opacity-50",
+    "inline-flex items-center justify-center gap-2 rounded-lg border border-brand/40 bg-transparent px-4 py-2 text-[13px] font-semibold text-brand transition hover:bg-brand-soft disabled:cursor-not-allowed disabled:opacity-50",
+  dark: "inline-flex items-center justify-center gap-2 rounded-lg bg-white px-4 py-2.5 text-[14px] font-semibold text-[#06090e] shadow-sm transition hover:bg-white/85 disabled:opacity-50",
   ghost: "inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-2 transition hover:bg-surface-2 hover:text-ink disabled:opacity-50",
 };
 
@@ -90,7 +90,7 @@ export const buttonClass = {
 export function StatusChip({ status, className }: { status: "operacao" | "implantacao" | "encerrada"; className?: string }) {
   const map = {
     operacao: { label: "Em operação", c: "bg-brand-soft text-good ring-good/25", dot: "bg-leaf" },
-    implantacao: { label: "Em implantação", c: "bg-[#eaf2fd] text-info ring-info/25", dot: "bg-series-1" },
+    implantacao: { label: "Em implantação", c: "bg-info/10 text-info ring-info/25", dot: "bg-series-1" },
     encerrada: { label: "Oferta encerrada", c: "bg-surface-3 text-ink-2 ring-line-strong", dot: "bg-muted" },
   } as const;
   const m = map[status];

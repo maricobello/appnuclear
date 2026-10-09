@@ -40,7 +40,7 @@ export function Landing() {
 
   return (
     <div
-      className="fixed inset-0 overflow-hidden bg-[#06121f] text-white"
+      className="fixed inset-0 overflow-hidden bg-[#06090e] text-white"
       onPointerMove={(e) => {
         mx.set(e.clientX / window.innerWidth - 0.5);
         my.set(e.clientY / window.innerHeight - 0.5);
@@ -59,8 +59,8 @@ export function Landing() {
       </motion.div>
 
       {/* luz dourada/verde em movimento */}
-      {!reduce && (
-        <>
+      {/* sempre renderizado (evita divergência de hidratação); some com movimento reduzido */}
+      <div className="motion-reduce:hidden">
           <motion.div
             aria-hidden
             className="absolute -right-[20%] -top-[30%] size-[70vmax] rounded-full bg-[radial-gradient(circle,rgba(245,165,36,0.45),transparent_60%)] mix-blend-screen blur-3xl"
@@ -73,11 +73,10 @@ export function Landing() {
             animate={{ x: [0, 80, 0], y: [0, -30, 0] }}
             transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
           />
-        </>
-      )}
+      </div>
 
       {/* escurecimento para leitura + vinheta + grão */}
-      <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,18,31,0.55)_0%,rgba(6,18,31,0.15)_40%,rgba(6,18,31,0.85)_100%)]" />
+      <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,9,14,0.55)_0%,rgba(6,9,14,0.15)_40%,rgba(6,9,14,0.85)_100%)]" />
       <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_40%,rgba(0,0,0,0.55)_100%)]" />
       <div aria-hidden className="grain absolute inset-0 opacity-[0.12] mix-blend-overlay" />
 
@@ -89,7 +88,7 @@ export function Landing() {
         transition={{ delay: 0.6, duration: 0.8, ease }}
       >
         <span className="flex items-center gap-2">
-          <LogoMark className="size-8" inverted />
+          <LogoMark className="size-8" />
           <span className="text-[17px] font-semibold tracking-tight">
             Aferi <span className="font-normal text-white/70">Capital</span>
           </span>
@@ -129,10 +128,10 @@ export function Landing() {
           <button
             ref={btn}
             onClick={go}
-            className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-white px-8 py-4 text-[16px] font-semibold text-[#06121f] shadow-[0_0_60px_-10px_rgba(245,165,36,0.75)] transition hover:shadow-[0_0_80px_-6px_rgba(245,165,36,0.95)] focus-visible:outline-white"
+            className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-white px-8 py-4 text-[16px] font-semibold text-[#06090e] shadow-[0_0_60px_-10px_rgba(245,165,36,0.75)] transition hover:shadow-[0_0_80px_-6px_rgba(245,165,36,0.95)] focus-visible:outline-white"
           >
             <span className="relative z-10">Invest now</span>
-            <span className="relative z-10 flex size-8 items-center justify-center rounded-full bg-[#06121f] text-white transition group-hover:translate-x-1">
+            <span className="relative z-10 flex size-8 items-center justify-center rounded-full bg-[#06090e] text-white transition group-hover:translate-x-1">
               <ArrowRight className="size-4" />
             </span>
             <span aria-hidden className="absolute inset-0 -translate-x-full bg-[linear-gradient(110deg,transparent_30%,rgba(245,165,36,0.35)_50%,transparent_70%)] transition duration-700 group-hover:translate-x-full" />
@@ -157,7 +156,7 @@ export function Landing() {
         {leaving && (
           <motion.div
             aria-hidden
-            className="pointer-events-none fixed z-50 rounded-full bg-white"
+            className="pointer-events-none fixed z-50 rounded-full bg-[#06090e] shadow-[0_0_120px_40px_rgba(61,220,132,0.25)]"
             style={{ left: leaving.x, top: leaving.y, width: 40, height: 40, marginLeft: -20, marginTop: -20 }}
             initial={{ scale: 0 }}
             animate={{ scale: 120 }}

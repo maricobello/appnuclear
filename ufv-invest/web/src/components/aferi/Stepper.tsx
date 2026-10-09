@@ -10,7 +10,7 @@ export function Stepper({ value, onChange, min = 1, max, id, label }: { value: n
       <label htmlFor={id} className="text-[12px] font-medium text-muted">
         {label}
       </label>
-      <div className="mt-1 flex h-11 items-center rounded-lg border border-line-strong bg-white focus-within:border-brand">
+      <div className="mt-1 flex h-11 items-center rounded-lg border border-line-strong bg-surface-2 focus-within:border-brand">
         <button type="button" className="flex h-full w-10 items-center justify-center text-ink-2 hover:text-good disabled:opacity-30" onClick={() => onChange(clamp(value - 1))} disabled={value <= min} aria-label="Diminuir">
           <Minus className="size-4" />
         </button>

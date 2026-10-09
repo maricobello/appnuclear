@@ -6,36 +6,36 @@
  * (skill de dataviz) contra a superfície branca: âmbar #c07f00, azul #2a78d6, negativo #e34948.
  */
 :root {
-  color-scheme: light;
-  --page: #ffffff;
-  --surface: #ffffff;
-  --surface-2: #f4f7f6;
-  --surface-3: #e9efed;
-  --border: rgba(15, 42, 68, 0.09);
-  --border-strong: rgba(15, 42, 68, 0.18);
-  --ink: #0f2a44;
-  --ink-2: #3c5065;
-  --muted: #5b6b7c;
-  /* verde Aferi: botões (≥ 4,5:1 com texto branco), destaque claro decorativo e fundo suave */
-  --brand: #0e8441;
-  --brand-hover: #0b6f37;
-  --brand-ink: #ffffff;
-  --brand-soft: #e8f6ee;
-  --leaf: #22b573;
-  --sun: #f5a524;
-  --navy: #0f2a44;
-  --navy-2: #163a5c;
-  --series-1: #2a78d6;
-  --series-2: #22b573;
-  --series-neg: #e34948;
-  --grid: #e6ebf1;
-  --axis: #cbd5e1;
-  --good: #15803d;
-  --warning: #9a5b00;
-  --serious: #c2410c;
-  --critical: #c62828;
-  --info: #1d5fb8;
-  --radius: 12px;
+  color-scheme: dark;
+  --page: #06090e;
+  --surface: #0c121a;
+  --surface-2: #111924;
+  --surface-3: #18222f;
+  --border: rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --ink: #f2f5f8;
+  --ink-2: #b9c4d0;
+  --muted: #8794a3;
+  /* verde Aferi: botões com texto escuro (contraste ≥ 7:1), destaque e fundo suave */
+  --brand: #3ddc84;
+  --brand-hover: #6be8a3;
+  --brand-ink: #03140a;
+  --brand-soft: rgba(61, 220, 132, 0.12);
+  --leaf: #3ddc84;
+  --sun: #f5b544;
+  --navy: #101a27;
+  --navy-2: #182537;
+  --series-1: #60a5fa;
+  --series-2: #3ddc84;
+  --series-neg: #f87171;
+  --grid: rgba(255, 255, 255, 0.07);
+  --axis: rgba(255, 255, 255, 0.18);
+  --good: #4ade80;
+  --warning: #fbbf24;
+  --serious: #fb923c;
+  --critical: #f87171;
+  --info: #7cb8ff;
+  --radius: 16px;
 }
 
 @theme inline {
@@ -67,9 +67,12 @@
   --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, Menlo, monospace;
 }
 
-html,
-body {
+html {
   background: var(--page);
+  color: var(--ink);
+}
+body {
+  background: transparent;
   color: var(--ink);
 }
 
@@ -82,7 +85,33 @@ body {
 }
 
 ::selection {
-  background: rgba(34, 181, 115, 0.25);
+  background: rgba(61, 220, 132, 0.3);
+}
+
+body::before {
+  /* luz ambiente fixa: brilho solar no topo, verde discreto no canto */
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  pointer-events: none;
+  background:
+    radial-gradient(60rem 30rem at 85% -10%, rgba(245, 181, 68, 0.10), transparent 60%),
+    radial-gradient(50rem 30rem at -10% 10%, rgba(61, 220, 132, 0.06), transparent 60%);
+}
+
+/* card com borda em gradiente e brilho sutil (estilo shadcn/Linear) */
+.glass {
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.045), rgba(255, 255, 255, 0.015));
+  border: 1px solid var(--border);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.text-gradient {
+  background: linear-gradient(180deg, #ffffff 0%, rgba(255, 255, 255, 0.62) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
 }
 
 :focus-visible {
@@ -106,7 +135,7 @@ body {
 
 /* Dot pattern com máscara radial */
 .dot-pattern {
-  background-image: radial-gradient(rgba(15, 30, 50, 0.16) 1px, transparent 1px);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.08) 1px, transparent 1px);
   background-size: 22px 22px;
   mask-image: radial-gradient(ellipse 70% 60% at 50% 40%, black 30%, transparent 75%);
 }
