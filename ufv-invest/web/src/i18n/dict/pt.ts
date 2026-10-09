@@ -47,15 +47,12 @@ export const pt = {
     "risks": "Avisos e riscos"
   },
   "lp": {
-    "title": "Aferi Capital — Invista no sol",
+    "title": "Aferi Capital — O sol como ativo",
     "enter": "Entrar",
-    "pill": "Usinas solares",
-    "pillExtra": " · acesso exclusivo",
-    "h1": "Invista no sol.",
-    "sub": "Cotas de usinas fotovoltaicas. Renda todo mês.",
+    "eyebrow": "Infraestrutura solar · Brasil",
+    "h1": "O sol como ativo.",
     "cta": "Invest now",
-    "from": "A partir de R$ 1.000 · BNB Chain",
-    "disclaimer": "Rentabilidade é projeção, não garantia. Demonstração em rede de testes.",
+    "disclaimer": "Projeções não constituem garantia de rentabilidade. Ambiente de demonstração.",
     "desc": "Cotas de usinas solares com renda mensal."
   },
   "meta": {

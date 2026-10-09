@@ -49,15 +49,12 @@ export const zh: Dict = {
     "risks": "声明与风险"
   },
   "lp": {
-    "title": "Aferi Capital — 投资阳光",
+    "title": "Aferi Capital — 让阳光成为资产",
     "enter": "进入",
-    "pill": "太阳能电站",
-    "pillExtra": " · 专属通道",
-    "h1": "投资阳光。",
-    "sub": "光伏电站份额，每月获得收益。",
+    "eyebrow": "巴西 · 太阳能基础设施",
+    "h1": "让阳光成为资产。",
     "cta": "立即投资",
-    "from": "起投 R$ 1,000 · BNB Chain",
-    "disclaimer": "收益为预测而非保证。测试网络演示。",
+    "disclaimer": "预测不构成收益保证。演示环境。",
     "desc": "太阳能电站份额，按月收益。"
   },
   "meta": {

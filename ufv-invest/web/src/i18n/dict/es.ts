@@ -49,15 +49,12 @@ export const es: Dict = {
     "risks": "Avisos y riesgos"
   },
   "lp": {
-    "title": "Aferi Capital — Invierte en el sol",
+    "title": "Aferi Capital — El sol como activo",
     "enter": "Entrar",
-    "pill": "Plantas solares",
-    "pillExtra": " · acceso exclusivo",
-    "h1": "Invierte en el sol.",
-    "sub": "Participaciones en plantas fotovoltaicas. Ingresos cada mes.",
+    "eyebrow": "Infraestructura solar · Brasil",
+    "h1": "El sol como activo.",
     "cta": "Invertir ahora",
-    "from": "Desde R$ 1.000 · BNB Chain",
-    "disclaimer": "La rentabilidad es una proyección, no una garantía. Demostración en red de pruebas.",
+    "disclaimer": "Las proyecciones no constituyen garantía de rentabilidad. Entorno de demostración.",
     "desc": "Participaciones en plantas solares con ingresos mensuales."
   },
   "meta": {

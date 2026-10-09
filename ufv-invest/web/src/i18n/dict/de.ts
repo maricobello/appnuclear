@@ -49,15 +49,12 @@ export const de: Dict = {
     "risks": "Hinweise und Risiken"
   },
   "lp": {
-    "title": "Aferi Capital — In die Sonne investieren",
+    "title": "Aferi Capital — Die Sonne als Anlage",
     "enter": "Einloggen",
-    "pill": "Solarparks",
-    "pillExtra": " · exklusiver Zugang",
-    "h1": "In die Sonne investieren.",
-    "sub": "Anteile an Photovoltaikanlagen. Jeden Monat Einkommen.",
+    "eyebrow": "Solarinfrastruktur · Brasilien",
+    "h1": "Die Sonne als Anlage.",
     "cta": "Jetzt investieren",
-    "from": "Ab 1.000 R$ · BNB Chain",
-    "disclaimer": "Renditen sind Prognosen, keine Garantie. Demo in einem Testnetz.",
+    "disclaimer": "Prognosen sind keine Renditegarantie. Demo-Umgebung.",
     "desc": "Solarpark-Anteile mit monatlichem Einkommen."
   },
   "meta": {

@@ -49,15 +49,12 @@ export const en: Dict = {
     "risks": "Notices and risks"
   },
   "lp": {
-    "title": "Aferi Capital — Invest in the sun",
+    "title": "Aferi Capital — The sun, as an asset",
     "enter": "Sign in",
-    "pill": "Solar plants",
-    "pillExtra": " · exclusive access",
-    "h1": "Invest in the sun.",
-    "sub": "Shares in solar power plants. Income every month.",
+    "eyebrow": "Solar infrastructure · Brazil",
+    "h1": "The sun, as an asset.",
     "cta": "Invest now",
-    "from": "From R$ 1,000 · BNB Chain",
-    "disclaimer": "Returns are projections, not guarantees. Demo on a test network.",
+    "disclaimer": "Projections are not a guarantee of returns. Demo environment.",
     "desc": "Solar plant shares with monthly income."
   },
   "meta": {

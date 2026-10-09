@@ -49,15 +49,12 @@ export const fr: Dict = {
     "risks": "Avis et risques"
   },
   "lp": {
-    "title": "Aferi Capital — Investissez dans le soleil",
+    "title": "Aferi Capital — Le soleil, comme actif",
     "enter": "Entrer",
-    "pill": "Centrales solaires",
-    "pillExtra": " · accès exclusif",
-    "h1": "Investissez dans le soleil.",
-    "sub": "Des parts de centrales photovoltaïques. Un revenu chaque mois.",
+    "eyebrow": "Infrastructures solaires · Brésil",
+    "h1": "Le soleil, comme actif.",
     "cta": "Investir maintenant",
-    "from": "À partir de 1 000 R$ · BNB Chain",
-    "disclaimer": "Les rendements sont des projections, pas des garanties. Démo sur réseau de test.",
+    "disclaimer": "Les projections ne constituent pas une garantie de rendement. Environnement de démonstration.",
     "desc": "Parts de centrales solaires avec revenu mensuel."
   },
   "meta": {

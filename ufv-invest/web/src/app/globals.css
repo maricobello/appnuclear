@@ -215,6 +215,7 @@ body::before {
   *::before,
   *::after {
     animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
 }
@@ -231,4 +232,47 @@ body::before {
 }
 .page-in {
   animation: page-in 0.5s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+/* ─── Landing: movimento contínuo só em transform/opacity (roda no compositor, sem repintar) ─── */
+.lp-kenburns {
+  animation: lp-kenburns 42s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes lp-kenburns {
+  from { transform: scale(1.06) translate3d(0, 0, 0); }
+  to { transform: scale(1.16) translate3d(-1.5%, -1%, 0); }
+}
+.lp-glow {
+  animation: lp-glow 11s ease-in-out infinite alternate;
+  will-change: transform, opacity;
+}
+@keyframes lp-glow {
+  from { opacity: 0.6; transform: translate3d(0, 0, 0) scale(1); }
+  to { opacity: 1; transform: translate3d(-4%, 3%, 0) scale(1.06); }
+}
+/* reflexo do sol varrendo os painéis */
+.lp-sweep {
+  animation: lp-sweep 13s cubic-bezier(0.45, 0, 0.25, 1) infinite;
+  transform: translate3d(-110%, 0, 0) skewX(-18deg);
+  will-change: transform;
+}
+@keyframes lp-sweep {
+  0%, 18% { transform: translate3d(-110%, 0, 0) skewX(-18deg); opacity: 0; }
+  30% { opacity: 1; }
+  70% { opacity: 1; }
+  82%, 100% { transform: translate3d(300%, 0, 0) skewX(-18deg); opacity: 0; }
+}
+/* partículas de luz subindo devagar */
+.lp-mote {
+  opacity: 0;
+  animation: lp-mote 20s linear infinite;
+  box-shadow: 0 0 6px 1px rgba(255, 214, 150, 0.55);
+  will-change: transform, opacity;
+}
+@keyframes lp-mote {
+  0% { opacity: 0; transform: translate3d(0, 0, 0); }
+  15% { opacity: 0.7; }
+  80% { opacity: 0.4; }
+  100% { opacity: 0; transform: translate3d(14px, -38vh, 0); }
 }
