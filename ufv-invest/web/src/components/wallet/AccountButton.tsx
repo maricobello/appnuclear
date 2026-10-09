@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { useChainId, useConnection, useDisconnect, useSwitchChain } from "wagmi";
-import { AlertTriangle, ArrowLeftRight, ChevronDown, FileText, KeyRound, LayoutDashboard, LogOut, User } from "lucide-react";
+import { AlertTriangle, ArrowLeftRight, ChevronDown, FileText, KeyRound, LayoutDashboard, LogOut, User, Wallet } from "lucide-react";
 import { chainName, TARGET_CHAIN_ID } from "@/lib/web3/chains";
 import { useMounted } from "@/lib/useNow";
 import { cx } from "@/components/ui";
@@ -52,13 +52,14 @@ export function AccountButton() {
     return (
       <>
         <button
-          className="rounded-lg px-3 py-2 text-[14px] font-medium text-ink-2 transition hover:bg-surface-2 hover:text-ink"
+          className="inline-flex items-center gap-2 rounded-full bg-navy px-4 py-2 text-[14px] font-semibold text-white transition hover:bg-navy-2"
           onClick={() => {
             wantsLogin.current = true;
             setModal(true);
           }}
         >
-          Entrar
+          <Wallet className="size-4" /> <span className="hidden sm:inline">Conectar carteira</span>
+          <span className="sm:hidden">Conectar</span>
         </button>
         <WalletModal open={modal} onClose={() => setModal(false)} />
       </>

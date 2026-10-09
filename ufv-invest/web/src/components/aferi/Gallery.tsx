@@ -3,7 +3,6 @@
 import Image from "next/image";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Images, X } from "lucide-react";
-import { PhotoPlaceholder } from "./PhotoPlaceholder";
 
 /** Galeria da usina: foto principal + miniaturas, com visualização ampliada (teclado e toque). */
 export function Gallery({ images, name }: { images: string[]; name: string }) {
@@ -32,8 +31,10 @@ export function Gallery({ images, name }: { images: string[]; name: string }) {
   const thumbs = images.slice(1, 4);
   if (n === 0)
     return (
-      <div className="h-[220px] overflow-hidden rounded-xl sm:h-[300px]">
-        <PhotoPlaceholder label="Fotos da usina em breve" />
+      <div className="relative h-[220px] overflow-hidden rounded-2xl bg-navy sm:h-[300px]">
+        <Image src="/images/lp/usina.jpg" alt="" fill priority sizes="(min-width:1024px) 860px, 100vw" className="scale-110 object-cover" style={{ filter: "blur(3px)" }} />
+        <div className="absolute inset-0 bg-gradient-to-t from-navy/60 to-transparent" />
+        <span className="absolute bottom-3 left-4 rounded-full bg-black/30 px-3 py-1 text-[11px] text-white/80 backdrop-blur-md">Fotos da usina em breve</span>
       </div>
     );
   const alt = (i: number) => `${name} — foto ${i + 1} de ${n}`;

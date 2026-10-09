@@ -305,7 +305,8 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
       )}
 
       {/* abas de status */}
-      <div className="mt-4 flex flex-wrap items-center gap-2" role="tablist" aria-label="Status da usina">
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
+      <div className="flex flex-wrap items-center gap-2" role="tablist" aria-label="Status da usina">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -320,7 +321,8 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
             {t.label}
           </button>
         ))}
-        <span className="ml-auto text-[13px] text-muted" aria-live="polite">
+      </div>
+        <span className="text-[13px] text-muted" aria-live="polite">
           {shown.length} {shown.length === 1 ? "usina" : "usinas"}
         </span>
       </div>

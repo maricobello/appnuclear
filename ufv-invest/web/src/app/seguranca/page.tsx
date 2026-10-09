@@ -57,7 +57,7 @@ export default function SegurancaPage() {
   const deployed = plants.map((p) => ({ p, c: plantContracts(p.slug) }));
   return (
     <Container className="py-12">
-      <SectionTitle eyebrow="Segurança" title="Seus fundos, sua chave, regras no código">
+      <SectionTitle as="h1" eyebrow="Segurança" title="Seus fundos, sua chave, regras no código">
         A Aferi Capital é não-custodial: o dinheiro vai da sua carteira para contratos públicos e auditáveis na BNB Chain — nunca para uma conta da empresa durante a captação.
       </SectionTitle>
 

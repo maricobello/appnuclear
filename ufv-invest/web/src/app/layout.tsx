@@ -6,6 +6,7 @@ import { cookieToInitialState } from "wagmi";
 import { Providers } from "@/components/Providers";
 import { Header } from "@/components/Header";
 import { Footer } from "@/components/Footer";
+import { HideOnLanding } from "@/components/HideOnLanding";
 import { wagmiConfig } from "@/lib/web3/config";
 import { siteUrl } from "@/lib/web3/chains";
 import "./globals.css";
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
   title: { default: "Aferi Capital — invista em usinas solares", template: "%s · Aferi Capital" },
   description:
     "Invista em usinas solares de forma simples, segura e transparente: cotas digitais na BNB Chain, análise P50/P90 com dados abertos (NASA POWER, PVGIS), TIR e Monte Carlo, relatório de auditoria verificável e distribuição mensal da receita.",
-  openGraph: { title: "Aferi Capital", description: "Energia limpa, rendimentos reais. Cotas de usinas solares.", type: "website", locale: "pt_BR", images: ["/images/hero.jpg"] },
+  openGraph: { title: "Aferi Capital", description: "Invista no sol. Cotas de usinas solares com renda mensal.", type: "website", locale: "pt_BR", images: ["/images/lp/usina.jpg"] },
 };
 
 export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light" };
@@ -29,11 +30,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
           <a href="#conteudo" className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-lg focus:bg-brand focus:px-3 focus:py-2 focus:text-brand-ink">
             Pular para o conteúdo
           </a>
-          <Header />
+          <HideOnLanding>
+            <Header />
+          </HideOnLanding>
           <main id="conteudo" className="flex-1 bg-white">
             {children}
           </main>
-          <Footer />
+          <HideOnLanding>
+            <Footer />
+          </HideOnLanding>
         </Providers>
       </body>
     </html>

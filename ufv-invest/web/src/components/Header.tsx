@@ -3,17 +3,17 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
-import { ArrowRight, Menu, Search, X } from "lucide-react";
+import { Menu, Search, X } from "lucide-react";
 import { Logo } from "./Logo";
 import { AccountButton } from "./wallet/AccountButton";
 import { buttonClass, cx, Container } from "./ui";
 import { TARGET_CHAIN_ID } from "@/lib/web3/chains";
 
 const nav = [
-  { href: "/", label: "Início" },
   { href: "/usinas", label: "Usinas" },
+  { href: "/simulador", label: "Simulador" },
+  { href: "/portfolio", label: "Portfólio" },
   { href: "/como-funciona", label: "Como funciona" },
-  { href: "/sobre", label: "Sobre nós" },
 ];
 
 function SearchBox({ onDone }: { onDone: () => void }) {
@@ -56,16 +56,18 @@ export function Header() {
   const active = (href: string) => (href === "/" ? path === "/" : path?.startsWith(href));
 
   return (
-    <header className="sticky top-0 z-40 border-b border-line bg-white/90 backdrop-blur-md">
-      {TARGET_CHAIN_ID === 97 && (
-        <div className="bg-surface-2 py-1 text-center text-[11px] text-muted">
-          Demonstração na BNB Smart Chain <b className="font-semibold text-ink-2">Testnet</b> · projetos ilustrativos, tokens sem valor real
-        </div>
-      )}
+    <header className="sticky top-0 z-40 border-b border-line/60 bg-white/70 backdrop-blur-xl backdrop-saturate-150">
       <Container className="flex h-16 items-center justify-between gap-4">
-        <Link href="/" className="shrink-0">
-          <Logo />
-        </Link>
+        <div className="flex shrink-0 items-center gap-2.5">
+          <Link href="/">
+            <Logo />
+          </Link>
+          {TARGET_CHAIN_ID === 97 && (
+            <span title="Demonstração na BNB Smart Chain Testnet: projetos ilustrativos, tokens sem valor real" className="hidden rounded-full bg-warning/10 px-2 py-0.5 text-[10px] sm:inline font-semibold uppercase tracking-wide text-warning">
+              Testnet
+            </span>
+          )}
+        </div>
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Principal">
           {nav.map((n) => (
             <Link
@@ -83,9 +85,6 @@ export function Header() {
             {search ? <X className="size-5" /> : <Search className="size-5" />}
           </button>
           <AccountButton />
-          <Link href="/usinas" className={cx(buttonClass.primary.replace("inline-flex", "hidden sm:inline-flex"), "px-4")}>
-            Explorar usinas <ArrowRight className="size-4" />
-          </Link>
           <button className="rounded-lg p-2 text-ink-2 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menu" aria-expanded={open}>
             {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
@@ -106,11 +105,8 @@ export function Header() {
                 {n.label}
               </Link>
             ))}
-            <Link href="/portfolio" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[15px] text-ink-2 hover:bg-surface-2">
-              Meu portfólio
-            </Link>
-            <Link href="/usinas" onClick={() => setOpen(false)} className={cx(buttonClass.primary.replace("inline-flex", "flex sm:hidden"), "mt-2")}>
-              Explorar usinas <ArrowRight className="size-4" />
+            <Link href="/sobre" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[15px] text-ink-2 hover:bg-surface-2">
+              Sobre nós
             </Link>
           </Container>
         </nav>

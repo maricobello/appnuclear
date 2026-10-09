@@ -41,7 +41,7 @@ export function Badge({ children, tone = "default", className }: { children: Rea
   const tones = {
     default: "border-line-strong text-ink-2",
     brand: "border-brand/40 bg-brand-soft text-brand",
-    good: "border-good/40 bg-good/10 text-good",
+    good: "border-good/40 bg-good/10 text-[#0f6b34]",
     warning: "border-warning/40 bg-warning/10 text-warning",
     critical: "border-critical/40 bg-critical/10 text-critical",
     info: "border-series-2/40 bg-series-2/10 text-info",
@@ -63,13 +63,13 @@ export function Notice({ tone = "info", title, children }: { tone?: "info" | "wa
   );
 }
 
-export function SectionTitle({ eyebrow, title, children, id }: { eyebrow?: string; title: ReactNode; children?: ReactNode; id?: string }) {
+export function SectionTitle({ eyebrow, title, children, id, as: H = "h2" }: { eyebrow?: string; title: ReactNode; children?: ReactNode; id?: string; as?: "h1" | "h2" }) {
   return (
     <div className="max-w-3xl">
       {eyebrow && <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand">{eyebrow}</div>}
-      <h2 id={id} className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
+      <H id={id} className="mt-2 text-3xl font-semibold tracking-tight text-ink sm:text-4xl">
         {title}
-      </h2>
+      </H>
       {children && <p className="mt-3 text-[16px] text-ink-2">{children}</p>}
     </div>
   );

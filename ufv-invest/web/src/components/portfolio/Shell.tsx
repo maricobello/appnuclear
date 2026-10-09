@@ -31,7 +31,7 @@ export function RequireWallet({ children, allowDemo = true }: { children: ReactN
   return (
     <div className="mx-auto max-w-lg rounded-2xl border border-line bg-white p-8 text-center">
       <Wallet className="mx-auto size-10 text-good" />
-      <h2 className="mt-4 text-[20px] font-semibold text-ink">Entre com a sua carteira</h2>
+      <h1 className="mt-4 text-[20px] font-semibold text-ink">Entre com a sua carteira</h1>
       <p className="mt-2 text-[14px] text-ink-2">Suas cotas, distribuições e documentos ficam registrados na BNB Chain e aparecem aqui quando você conecta a carteira.</p>
       <div className="mt-6 flex flex-col items-center gap-3">
         <ConnectButton />
@@ -66,7 +66,7 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
 
   return (
     <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 pt-6 sm:px-6 lg:grid-cols-[230px_minmax(0,1fr)] lg:px-8">
-      <aside className="lg:sticky lg:top-24 lg:self-start">
+      <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
         <nav aria-label="Área do investidor" className="flex gap-1 overflow-x-auto rounded-2xl bg-navy p-2 text-white lg:min-h-[520px] lg:flex-col lg:p-3">
           <div className="hidden items-center gap-2 px-2 pb-4 pt-1 lg:flex">
             <LogoMark className="size-7" inverted />
