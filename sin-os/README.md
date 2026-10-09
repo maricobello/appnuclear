@@ -254,11 +254,12 @@ Checagens feitas a cada leitura (e testadas com amostra real em `tests/fixtures/
 1. **Camada determinística** (sempre ativa): para cada API mede disponibilidade, latência, frescor vs SLA,
    schema, completude (lacunas/duplicados), validade (faixas regulatórias) e outliers (Hampel). Checa a
    integridade cruzada **PLD (CCEE) = CMO (ONS) limitado** e a triangulação cambial. Score 0–100.
-2. **Camada IA** (com `ANTHROPIC_API_KEY`): o Claude recebe o resultado e investiga com ferramentas —
-   re-sonda endpoints, lê o histórico no Firestore, inspeciona amostras e checa integridade — e registra
-   um relatório com evidência, causa provável e ação. É acionado quando algo degrada, na execução diária
-   e manualmente (com `ADMIN_KEY`). Usa `claude-opus-5` com *server-side fallbacks* habilitados
-   (`ANTHROPIC_MODEL` troca o modelo).
+2. **Camada IA** (com `GROQ_API_KEY`, a mesma chave da Iara): um LLM da Groq recebe o resultado e
+   investiga com ferramentas — re-sonda endpoints, lê o histórico no Firestore, inspeciona amostras e
+   checa integridade — e registra um relatório com evidência, causa provável e ação. É acionado quando
+   algo degrada, na execução diária e manualmente, sempre com credencial (`CRON_SECRET` ou `ADMIN_KEY`);
+   sem nenhuma delas o agente não roda. Modelo: `GROQ_MODEL` (padrão `openai/gpt-oss-120b`, com
+   fallback para outros modelos da Groq se o configurado sair do catálogo).
 3. **Agendamento**: Vercel Cron diário (plano Hobby) + GitHub Actions a cada 15 min (`.github/workflows/audit.yml`).
 4. **Saúde e alertas**: `/api/health` responde 200/503 pela mesma regra do alerta (score, fontes fora do ar
    ou vencidas, persistência, idade do último run — `HEALTH_MAX_AGE_MIN`, padrão 1500). Com
@@ -313,8 +314,8 @@ radares e as exportações ficam fora do git porque o repositório é público. 
 1. Em [vercel.com/new](https://vercel.com/new), importe o repositório `maricobello/sinos`.
 2. Framework: Next.js (detectado). Root Directory, build e output ficam no padrão.
 3. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
-   `CRON_SECRET`, `ADMIN_KEY`, `ANTHROPIC_API_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`,
-   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara), `ASSISTANT_ACCESS_CODE`. `DATA_MODE=live` garante que
+   `CRON_SECRET`, `ADMIN_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`,
+   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara e agente auditor), `ASSISTANT_ACCESS_CODE`. `DATA_MODE=live` garante que
    nenhuma tela mostra dado simulado (fonte fora do ar aparece como erro).
    Dá para adicionar depois e fazer redeploy.
 4. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.

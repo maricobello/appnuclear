@@ -40,7 +40,7 @@ export default function AuditoriaPage() {
         body.throttled
           ? "Limite de 1 execução por minuto sem credencial — mostrando a última."
           : `Auditoria concluída em ${num(body.run.durationMs / 1000, 1)} s · score ${body.run.overallScore}/100.` +
-              (body.report ? " Agente IA gerou relatório." : body.agentError ? ` Agente IA falhou: ${body.agentError}` : body.agentEligible ? "" : " (agente IA não acionado: sem credencial ou sem ANTHROPIC_API_KEY)"),
+              (body.report ? " Agente IA gerou relatório." : body.agentError ? ` Agente IA falhou: ${body.agentError}` : body.agentEligible ? "" : " (agente IA não acionado: sem credencial ou sem GROQ_API_KEY)"),
       );
       await mutate();
     } catch (e) {
@@ -138,7 +138,7 @@ export default function AuditoriaPage() {
             </span>
             <span className="flex items-center gap-1.5">
               <Bot size={13} aria-hidden /> Agente IA:{" "}
-              {data ? data.agent.configured ? <Badge level="good">{data.agent.model}</Badge> : <Badge level="warning">defina ANTHROPIC_API_KEY</Badge> : "—"}
+              {data ? data.agent.configured ? <Badge level="good">{data.agent.model}</Badge> : <Badge level="warning">defina GROQ_API_KEY</Badge> : "—"}
             </span>
             <span className="flex items-center gap-1.5">
               <Bell size={13} aria-hidden /> Alertas:{" "}
@@ -312,7 +312,7 @@ export default function AuditoriaPage() {
             </div>
           ) : (
             <p className="text-xs leading-relaxed text-muted">
-              Nenhum relatório ainda. Configure <code className="text-ink-2">ANTHROPIC_API_KEY</code> e <code className="text-ink-2">ADMIN_KEY</code> na Vercel e rode a auditoria com a chave. O agente re-sonda as fontes com problema, consulta o histórico no Firestore, inspeciona amostras e checa PLD×CMO antes de concluir.
+              Nenhum relatório ainda. Configure <code className="text-ink-2">ADMIN_KEY</code> na Vercel (a <code className="text-ink-2">GROQ_API_KEY</code> da Iara já serve ao agente) e rode a auditoria com a chave. O agente re-sonda as fontes com problema, consulta o histórico no Firestore, inspeciona amostras e checa PLD×CMO antes de concluir.
             </p>
           )}
         </Panel>

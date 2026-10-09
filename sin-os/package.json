@@ -12,7 +12,6 @@
     "eval:real": "node scripts/fetch-ons.mjs && REAL=1 vitest run tests/real --reporter=verbose --silent=false"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.128.0",
     "echarts": "^6.1.0",
     "firebase-admin": "^14.5.0",
     "geist": "^1.7.2",

@@ -101,7 +101,7 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
   if (previous && previous.overallScore - overallScore >= 10) reasons.push(`score geral caiu ${previous.overallScore} → ${overallScore}`);
   if (cross.some((c) => c.status === "fail")) reasons.push("falha de integridade cruzada");
   if (trigger === "cron") reasons.push("execução agendada diária");
-  const shouldInvokeAgent = !!process.env.ANTHROPIC_API_KEY && (reasons.length > 0 || trigger === "manual");
+  const shouldInvokeAgent = !!process.env.GROQ_API_KEY && (reasons.length > 0 || trigger === "manual");
 
   const finishedAt = Date.now();
   const run: AuditRun = {

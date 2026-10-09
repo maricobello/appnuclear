@@ -49,7 +49,7 @@ export async function GET(req: Request) {
         telemetry,
         storage: storageKind(),
         firebase: firebaseStatus(),
-        agent: { configured: !!process.env.ANTHROPIC_API_KEY, model: AGENT_MODEL },
+        agent: { configured: !!process.env.GROQ_API_KEY, model: AGENT_MODEL },
         alerts: process.env.ALERT_WEBHOOK_URL ? { configured: true, destination: alertKind(process.env.ALERT_WEBHOOK_URL) } : { configured: false, destination: null },
         auth: { required: !!(process.env.CRON_SECRET || process.env.ADMIN_KEY) },
         dataMode: dataMode(),

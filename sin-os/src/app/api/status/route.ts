@@ -17,7 +17,7 @@ export function GET() {
       dataMode: dataMode(),
       storage: storageKind(),
       firebase: firebaseStatus(),
-      agent: { configured: !!process.env.ANTHROPIC_API_KEY, model: AGENT_MODEL },
+      agent: { configured: !!process.env.GROQ_API_KEY, model: AGENT_MODEL },
       assistant: { provider: "groq", configured: groqConfigured(), accessCodeRequired: accessCodeRequired() },
       optionalKeys: { EIA_API_KEY: !!process.env.EIA_API_KEY, CCEE_PLATAFORMA_INTEGRACAO: ccePiConfigured(), PLD_INGEST_KEY: !!process.env.PLD_INGEST_KEY },
       pldLimits: PLD_LIMITS,

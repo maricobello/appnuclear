@@ -1,7 +1,6 @@
 import "server-only";
-import Anthropic from "@anthropic-ai/sdk";
-import { betaZodTool } from "@anthropic-ai/sdk/helpers/beta/zod";
 import { z } from "zod";
+import { chatModels, groqConfigured, makeGroqChat, type ChatFn, type ChatMessage, type ToolDef } from "../assistant/groq";
 import { SOURCES } from "../sources/registry";
 import type { SourceId, SourceResult } from "../sources/types";
 import { listAuditRuns, saveAgentReport } from "../store";
@@ -10,15 +9,15 @@ import { probeOne, type AuditOutcome } from "./runner";
 import type { AgentFinding, AgentReport } from "./types";
 
 /**
- * Agente auditor (Claude + tool use). Recebe o resultado determinístico da auditoria e
+ * Agente auditor (LLM da Groq + tool calling, mesma chave GROQ_API_KEY da Iara). Recebe o resultado determinístico da auditoria e
  * investiga: re-sonda endpoints para separar falha transitória de persistente, lê o
  * histórico no Firestore, inspeciona amostras normalizadas (drift de schema) e
  * integridade cruzada (PLD × CMO), e entrega um relatório estruturado com causa
  * provável e ação recomendada.
  */
-export const AGENT_MODEL = process.env.ANTHROPIC_MODEL ?? "claude-opus-5";
-type Effort = "low" | "medium" | "high" | "xhigh" | "max";
-const EFFORT = (process.env.AGENT_EFFORT ?? "high") as Effort;
+export const AGENT_MODEL = chatModels()[0];
+export const agentConfigured = groqConfigured;
+const MAX_ITERATIONS = 12;
 
 const SOURCE_IDS = Object.keys(SOURCES) as [SourceId, ...SourceId[]];
 
@@ -83,68 +82,95 @@ function compact(r: SourceResult<unknown>) {
   };
 }
 
-export async function runAuditAgent(outcome: AuditOutcome): Promise<AgentReport> {
-  const client = new Anthropic();
+const fn = (name: string, description: string, properties: Record<string, unknown>, required: string[] = []): ToolDef => ({
+  type: "function",
+  function: { name, description, parameters: { type: "object", properties, required, additionalProperties: false } },
+});
+const SOURCE_PROP = { source_id: { type: "string", enum: SOURCE_IDS } };
+const FINDING_PROPS = {
+  sourceId: { type: "string", description: "id da fonte ou 'cross' para integridade cruzada" },
+  severity: { type: "string", enum: ["info", "warning", "critical"] },
+  title: { type: "string" },
+  evidence: { type: "string", description: "fatos observados (status HTTP, idade, contagens, métricas)" },
+  hypothesis: { type: "string", description: "causa provável" },
+  action: { type: "string", description: "ação recomendada e verificável" },
+};
+export const AGENT_TOOLS: ToolDef[] = [
+  fn("probe_source", "Re-executa ao vivo (sem cache) a chamada à API de uma fonte e retorna status HTTP, latência, erros, frescor e checagens. Use para distinguir falha transitória de persistente.", SOURCE_PROP, ["source_id"]),
+  fn("get_source_history", "Histórico de auditorias persistidas (Firestore) para uma fonte: status, score, latência, idade do dado e erro por execução, da mais recente para a mais antiga.", { ...SOURCE_PROP, limit: { type: "integer", minimum: 1, maximum: 50 } }, ["source_id"]),
+  fn("inspect_sample", "Mostra uma amostra dos dados normalizados da fonte nesta execução (arrays truncados aos últimos 24 itens), para detectar drift de schema, unidade ou valores implausíveis.", SOURCE_PROP, ["source_id"]),
+  fn("get_cross_checks", "Resultados das verificações de integridade entre fontes (PLD da CCEE vs CMO do ONS limitado; triangulação cambial do BCB).", {}),
+  fn(
+    "submit_report",
+    "Registra o relatório final da auditoria. Chame exatamente uma vez, ao final.",
+    {
+      summary: { type: "string" },
+      severity: { type: "string", enum: ["info", "warning", "critical"] },
+      findings: { type: "array", items: { type: "object", properties: FINDING_PROPS, required: Object.keys(FINDING_PROPS), additionalProperties: false } },
+    },
+    ["summary", "severity", "findings"],
+  ),
+];
+
+const SourceArg = z.object({ source_id: z.enum(SOURCE_IDS) });
+const HistoryArg = SourceArg.extend({ limit: z.number().int().min(1).max(50).default(12) });
+
+export interface AgentDeps {
+  chat: ChatFn;
+  probe: typeof probeOne;
+  history: typeof listAuditRuns;
+  save: typeof saveAgentReport;
+}
+const DEFAULT_DEPS = (): AgentDeps => ({ chat: makeGroqChat(), probe: probeOne, history: listAuditRuns, save: saveAgentReport });
+
+export async function runAuditAgent(outcome: AuditOutcome, deps: AgentDeps = DEFAULT_DEPS()): Promise<AgentReport> {
   let submitted: z.infer<typeof ReportSchema> | null = null;
   const toolCalls: AgentReport["toolCalls"] = [];
-  const timed = async <T,>(name: string, input: unknown, fn: () => Promise<T>): Promise<T> => {
-    const t0 = Date.now();
-    try {
-      return await fn();
-    } finally {
-      toolCalls.push({ name, input, ms: Date.now() - t0 });
-    }
-  };
 
-  const tools = [
-    betaZodTool({
-      name: "probe_source",
-      description: "Re-executa ao vivo (sem cache) a chamada à API de uma fonte e retorna status HTTP, latência, erros, frescor e checagens. Use para distinguir falha transitória de persistente.",
-      inputSchema: z.object({ source_id: z.enum(SOURCE_IDS) }),
-      run: ({ source_id }) => timed("probe_source", { source_id }, async () => JSON.stringify(compact(await probeOne(source_id)))),
-    }),
-    betaZodTool({
-      name: "get_source_history",
-      description: "Histórico de auditorias persistidas (Firestore) para uma fonte: status, score, latência, idade do dado e erro por execução, da mais recente para a mais antiga.",
-      inputSchema: z.object({ source_id: z.enum(SOURCE_IDS), limit: z.number().int().min(1).max(50).default(12) }),
-      run: ({ source_id, limit }) =>
-        timed("get_source_history", { source_id, limit }, async () => {
-          const runs = await listAuditRuns(limit);
+  /** Executa uma ferramenta; argumento inválido vira mensagem de erro para o modelo corrigir. */
+  const exec = async (name: string, rawArgs: string): Promise<string> => {
+    const t0 = Date.now();
+    let input: unknown = rawArgs;
+    try {
+      const args = JSON.parse(rawArgs || "{}") as unknown;
+      input = args;
+      switch (name) {
+        case "probe_source": {
+          const { source_id } = SourceArg.parse(args);
+          return JSON.stringify(compact(await deps.probe(source_id)));
+        }
+        case "get_source_history": {
+          const { source_id, limit } = HistoryArg.parse(args);
+          const runs = await deps.history(limit);
           return JSON.stringify(
             runs.map((r) => {
               const s = r.sources.find((x) => x.id === source_id);
               return { at: new Date(r.startedAt).toISOString(), status: s?.status, score: s?.score, latencyMs: s?.latencyMs, ageHours: s?.ageHours, error: s?.error };
             }),
           );
-        }),
-    }),
-    betaZodTool({
-      name: "inspect_sample",
-      description: "Mostra uma amostra dos dados normalizados da fonte nesta execução (arrays truncados aos últimos 24 itens), para detectar drift de schema, unidade ou valores implausíveis.",
-      inputSchema: z.object({ source_id: z.enum(SOURCE_IDS) }),
-      run: ({ source_id }) =>
-        timed("inspect_sample", { source_id }, async () => {
+        }
+        case "inspect_sample": {
+          const { source_id } = SourceArg.parse(args);
           const r = outcome.results[source_id];
           return r?.data ? preview(r.data) : `sem dados: ${r?.error ?? "fonte não executada"}`;
-        }),
-    }),
-    betaZodTool({
-      name: "get_cross_checks",
-      description: "Resultados das verificações de integridade entre fontes (PLD da CCEE vs CMO do ONS limitado; triangulação cambial do BCB).",
-      inputSchema: z.object({}),
-      run: () => timed("get_cross_checks", {}, async () => JSON.stringify(outcome.run.cross)),
-    }),
-    betaZodTool({
-      name: "submit_report",
-      description: "Registra o relatório final da auditoria. Chame exatamente uma vez, ao final.",
-      inputSchema: ReportSchema,
-      run: (report) =>
-        timed("submit_report", { findings: report.findings.length }, async () => {
-          submitted = report;
+        }
+        case "get_cross_checks":
+          return JSON.stringify(outcome.run.cross);
+        case "submit_report": {
+          const rep = ReportSchema.parse(args);
+          submitted = rep;
+          input = { findings: rep.findings.length };
           return "relatório registrado";
-        }),
-    }),
-  ];
+        }
+        default:
+          return `erro: ferramenta desconhecida ${name}`;
+      }
+    } catch (e) {
+      return `erro: ${e instanceof Error ? e.message.slice(0, 400) : String(e)}`;
+    } finally {
+      toolCalls.push({ name, input, ms: Date.now() - t0 });
+    }
+  };
 
   const snapshot = {
     runId: outcome.run.id,
@@ -167,38 +193,28 @@ export async function runAuditAgent(outcome: AuditOutcome): Promise<AgentReport>
     cross: outcome.run.cross.map((c) => `${c.id}:${c.status} — ${c.detail}`),
   };
 
-  const runner = client.beta.messages.toolRunner({
-    model: AGENT_MODEL,
-    max_tokens: 16000,
-    thinking: { type: "adaptive" },
-    output_config: { effort: EFFORT },
-    betas: ["server-side-fallback-2026-07-01"],
-    fallbacks: "default",
-    cache_control: { type: "ephemeral" },
-    system: SYSTEM,
-    tools,
-    max_iterations: 12,
-    messages: [
-      {
-        role: "user",
-        content: `Resultado da auditoria determinística (JSON):\n${JSON.stringify(snapshot)}\n\nInvestigue o que for necessário e registre o relatório.`,
-      },
-    ],
-  });
-
+  const messages: ChatMessage[] = [
+    { role: "system", content: SYSTEM },
+    { role: "user", content: `Resultado da auditoria determinística (JSON):\n${JSON.stringify(snapshot)}\n\nInvestigue o que for necessário e registre o relatório.` },
+  ];
   const usage = { inputTokens: 0, outputTokens: 0, cacheReadTokens: 0 };
-  let stopReason: string | null = null;
+  let stopReason: string | null = "max_iterations";
   let finalText = "";
   let servedModel = AGENT_MODEL;
-  for await (const message of runner) {
-    usage.inputTokens += message.usage.input_tokens + (message.usage.cache_creation_input_tokens ?? 0);
-    usage.outputTokens += message.usage.output_tokens;
-    usage.cacheReadTokens += message.usage.cache_read_input_tokens ?? 0;
-    stopReason = message.stop_reason;
-    servedModel = message.model;
-    const text = message.content.flatMap((b) => (b.type === "text" ? [b.text] : [])).join("\n");
-    if (text) finalText = text;
-    if (message.stop_reason === "refusal") break;
+  for (let i = 0; i < MAX_ITERATIONS && !submitted; i++) {
+    const res = await deps.chat({ messages, tools: AGENT_TOOLS, maxTokens: 2500, temperature: 0.2 });
+    servedModel = res.model;
+    usage.inputTokens += res.usage?.prompt_tokens ?? 0;
+    usage.outputTokens += res.usage?.completion_tokens ?? 0;
+    messages.push(res.message);
+    if (res.message.content) finalText = res.message.content;
+    const calls = res.message.tool_calls ?? [];
+    if (!calls.length) {
+      stopReason = "end_turn";
+      break;
+    }
+    for (const c of calls) messages.push({ role: "tool", tool_call_id: c.id, content: await exec(c.function.name, c.function.arguments) });
+    if (submitted) stopReason = "submitted";
   }
 
   const rep = submitted as z.infer<typeof ReportSchema> | null;
@@ -226,6 +242,6 @@ export async function runAuditAgent(outcome: AuditOutcome): Promise<AgentReport>
     usage,
     stopReason,
   };
-  await saveAgentReport(report);
+  await deps.save(report);
   return report;
 }
