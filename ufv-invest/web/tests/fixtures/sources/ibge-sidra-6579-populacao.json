@@ -1,0 +1,18 @@
+[
+  {
+    "id": "9324",
+    "variavel": "População residente estimada",
+    "unidade": "Pessoas",
+    "resultados": [
+      {
+        "classificacoes": [],
+        "series": [
+          {
+            "localidade": { "id": "3135100", "nivel": { "id": "N6", "nome": "Município" }, "nome": "Janaúba - MG" },
+            "serie": { "2018": "71419", "2019": "71648", "2020": "71869", "2021": "72077", "2024": "71530", "2025": "71794" }
+          }
+        ]
+      }
+    ]
+  }
+]

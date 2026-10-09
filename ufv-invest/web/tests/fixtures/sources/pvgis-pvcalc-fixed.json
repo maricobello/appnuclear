@@ -1,0 +1,40 @@
+{
+  "inputs": {
+    "location": { "latitude": -15.835, "longitude": -43.278, "elevation": 517.0 },
+    "meteo_data": { "radiation_db": "PVGIS-SARAH3", "meteo_db": "ERA5", "year_min": 2005, "year_max": 2023, "use_horizon": true, "horizon_db": "DEM-calculated" },
+    "mounting_system": { "fixed": { "slope": { "value": 15, "optimal": false }, "azimuth": { "value": 180, "optimal": false }, "type": "free-standing" } },
+    "pv_module": { "technology": "c-Si", "peak_power": 1.0, "system_loss": 9.62 },
+    "economic_data": { "system_cost": null, "interest": null, "lifetime": null }
+  },
+  "outputs": {
+    "monthly": {
+      "fixed": [
+        { "month": 1, "E_d": 4.71, "E_m": 146.01, "H(i)_d": 5.83, "H(i)_m": 180.73, "SD_m": 11.84 },
+        { "month": 2, "E_d": 4.93, "E_m": 138.04, "H(i)_d": 6.11, "H(i)_m": 171.08, "SD_m": 12.12 },
+        { "month": 3, "E_d": 4.62, "E_m": 143.22, "H(i)_d": 5.71, "H(i)_m": 177.01, "SD_m": 10.43 },
+        { "month": 4, "E_d": 4.69, "E_m": 140.7, "H(i)_d": 5.79, "H(i)_m": 173.7, "SD_m": 8.61 },
+        { "month": 5, "E_d": 4.58, "E_m": 141.98, "H(i)_d": 5.62, "H(i)_m": 174.22, "SD_m": 6.87 },
+        { "month": 6, "E_d": 4.55, "E_m": 136.5, "H(i)_d": 5.55, "H(i)_m": 166.5, "SD_m": 4.92 },
+        { "month": 7, "E_d": 4.76, "E_m": 147.56, "H(i)_d": 5.83, "H(i)_m": 180.73, "SD_m": 4.31 },
+        { "month": 8, "E_d": 5.13, "E_m": 159.03, "H(i)_d": 6.33, "H(i)_m": 196.23, "SD_m": 5.66 },
+        { "month": 9, "E_d": 5.11, "E_m": 153.3, "H(i)_d": 6.34, "H(i)_m": 190.2, "SD_m": 7.95 },
+        { "month": 10, "E_d": 4.82, "E_m": 149.42, "H(i)_d": 5.99, "H(i)_m": 185.69, "SD_m": 10.28 },
+        { "month": 11, "E_d": 4.34, "E_m": 130.2, "H(i)_d": 5.37, "H(i)_m": 161.1, "SD_m": 11.06 },
+        { "month": 12, "E_d": 4.39, "E_m": 136.09, "H(i)_d": 5.43, "H(i)_m": 168.33, "SD_m": 12.47 }
+      ]
+    },
+    "totals": {
+      "fixed": { "E_d": 4.72, "E_m": 143.5, "E_y": 1722.05, "H(i)_d": 5.83, "H(i)_m": 177.13, "H(i)_y": 2125.52, "SD_m": 8.88, "SD_y": 38.41, "l_aoi": -2.62, "l_spec": "0.71", "l_tg": -9.03, "l_total": -18.98 }
+    }
+  },
+  "meta": {
+    "inputs": {
+      "location": { "description": "Selected location", "variables": { "latitude": { "description": "Latitude", "units": "decimal degree" } } },
+      "meteo_data": { "description": "Sources of meteorological data" }
+    },
+    "outputs": {
+      "monthly": { "type": "time series", "timestamp": "monthly averages", "variables": { "E_m": { "description": "Average monthly energy production from the given system", "units": "kWh/mo" } } },
+      "totals": { "type": "time series", "timestamp": "yearly averages", "variables": { "E_y": { "description": "Average annual energy production from the given system", "units": "kWh/y" }, "SD_y": { "description": "Standard deviation of the annual energy production due to year-to-year variation", "units": "kWh" } } }
+    }
+  }
+}

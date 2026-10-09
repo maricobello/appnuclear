@@ -1,0 +1,18 @@
+[
+  {
+    "id": "37",
+    "variavel": "Produto Interno Bruto a preços correntes",
+    "unidade": "Mil Reais",
+    "resultados": [
+      {
+        "classificacoes": [],
+        "series": [
+          {
+            "localidade": { "id": "3135100", "nivel": { "id": "N6", "nome": "Município" }, "nome": "Janaúba - MG" },
+            "serie": { "2023": "1854321.512" }
+          }
+        ]
+      }
+    ]
+  }
+]
