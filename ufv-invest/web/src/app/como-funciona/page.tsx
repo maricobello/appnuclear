@@ -7,11 +7,10 @@ import { ContactButton } from "@/components/aferi/ContactButton";
 export const metadata: Metadata = { title: "Como funciona", description: "Um processo simples, seguro e transparente para investir em usinas solares." };
 
 const steps = [
-  { title: "Explore os ativos disponíveis", text: "Conheça as usinas, indicadores e documentos de cada oferta.", href: "/usinas", cta: "Ver usinas" },
-  { title: "Analise os dados", text: "Acesse dados técnicos, geração estimada com dados de satélite, riscos e o relatório de auditoria em PDF.", href: "/usinas", cta: "Ver uma usina" },
-  { title: "Confira as condições", text: "Entenda prazos, custos, valor da cota, meta mínima e as regras de desistência e reembolso.", href: "/simulador", cta: "Simular" },
-  { title: "Invista", text: "Entre com a sua carteira, envie seus dados (KYC) e confirme o aporte em USDT. O valor fica em custódia no contrato até o fim da oferta.", href: "/simulador", cta: "Começar" },
-  { title: "Acompanhe seu investimento", text: "Receba as distribuições mensais e acompanhe cotas, extrato e documentos no seu portfólio.", href: "/portfolio", cta: "Meu portfólio" },
+  { title: "Escolha uma usina", text: "Compare rentabilidade, valor da cota e prazo.", href: "/usinas", cta: "Ver usinas" },
+  { title: "Simule", text: "Veja quanto investe e quanto recebe por mês.", href: "/simulador", cta: "Simular" },
+  { title: "Invista", text: "Entre com sua carteira e confirme o aporte.", href: "/usinas", cta: "Começar" },
+  { title: "Receba todo mês", text: "Acompanhe tudo no seu portfólio.", href: "/portfolio", cta: "Meu portfólio" },
 ];
 
 const faq = [
@@ -28,7 +27,7 @@ export default function ComoFunciona() {
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div>
           <h1 className="text-[30px] font-bold tracking-tight text-navy">Como funciona</h1>
-          <p className="mt-1 text-[15px] text-muted">Um processo simples, seguro e transparente.</p>
+          <p className="mt-1 text-[15px] text-muted">Quatro passos.</p>
           <ol className="mt-8 space-y-0">
             {steps.map((s, i) => (
               <li key={s.title} className="relative flex gap-5 pb-8 last:pb-0">
@@ -36,7 +35,7 @@ export default function ComoFunciona() {
                 <span className="relative z-10 flex size-10 shrink-0 items-center justify-center rounded-full bg-leaf text-[16px] font-bold text-white shadow-[0_0_0_6px_var(--brand-soft)]">{i + 1}</span>
                 <div className="pt-1.5">
                   <h2 className="text-[16px] font-semibold text-ink">
-                    {i + 1}. {s.title}
+                    {s.title}
                   </h2>
                   <p className="mt-1 max-w-xl text-[14px] leading-relaxed text-ink-2">{s.text}</p>
                   <Link href={s.href} className="mt-2 inline-flex items-center gap-1 text-[13px] font-semibold text-good hover:underline">

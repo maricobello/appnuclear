@@ -1,20 +1,18 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ChevronRight, Download, ExternalLink, FileJson, FileText, MapPin, Receipt, ShieldCheck, Zap } from "lucide-react";
+import { ChevronRight, Download, FileJson, FileText, MapPin, ShieldCheck } from "lucide-react";
 import { plants } from "@/data/plants";
 import { getPlantAnalysis, plantScale } from "@/lib/analysis";
 import { brl, brlCompact, dateBR, MONTHS, num, pct, years } from "@/lib/fmt";
-import { Badge, buttonClass, Card, CardHeader, Container, cx, IconBubble, Notice, SourceDot, Stat, StatusChip } from "@/components/ui";
+import { Badge, Card, CardHeader, Container, cx, Notice, SourceDot, Stat, StatusChip } from "@/components/ui";
 import { BenchmarksChart, CashFlowChart, GenerationChart, IrradianceChart, MonteCarloChart, TornadoChart } from "@/components/plant/Charts";
 import { LivePanel } from "@/components/plant/LivePanel";
 import { OnChainPanel } from "@/components/plant/OnChainPanel";
 import { Gallery } from "@/components/aferi/Gallery";
 import { Tabs } from "@/components/aferi/Tabs";
 import { GenerationOverview } from "@/components/aferi/GenerationOverview";
-import { QuickSimulator } from "@/components/aferi/QuickSimulator";
-import { InterestButton } from "@/components/aferi/InterestDialog";
-import { SoldPanel } from "@/components/aferi/Sold";
+import { InvestBox } from "@/components/aferi/InvestBox";
 import { mwp } from "@/components/aferi/PlantCard";
 
 export function generateStaticParams() {
@@ -35,16 +33,6 @@ function dms(v: number, pos: string, neg: string) {
   return `${d}°${String(m).padStart(2, "0")}′${s.toFixed(1).replace(".", ",")}″ ${v >= 0 ? pos : neg}`;
 }
 
-function Indicator({ label, value, hint, tone }: { label: string; value: string; hint?: string; tone?: "good" }) {
-  return (
-    <div className="rounded-xl border border-line bg-white p-4">
-      <div className={cx("text-[20px] font-bold tnum", tone === "good" ? "text-good" : "text-ink")}>{value}</div>
-      <div className="mt-0.5 text-[12px] text-muted">{label}</div>
-      {hint && <div className="mt-1 text-[11px] text-muted">{hint}</div>}
-    </div>
-  );
-}
-
 export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">) {
   const { slug } = await params;
   const a = await getPlantAnalysis(slug);
@@ -52,7 +40,6 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
   const { plant, generation: g, finance: f, resource, location, market } = a;
   const t = plant.tech;
   const p90Ratio = g.annualP50MWh > 0 ? g.p90MWh / g.annualP50MWh : 0.9;
-  const fallbackCount = a.provenance.filter((p) => p.status === "fallback" || p.status === "error").length;
   const gallery = plant.gallery?.length ? plant.gallery : plant.cover ? [plant.cover] : [];
   const com = plant.commercial;
   const scale = plantScale(plant);
@@ -104,32 +91,6 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
         </li>
       ))}
     </ul>
-  );
-
-  const visaoGeral = (
-    <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_340px]">
-      <Card className="p-5">
-        <GenerationOverview projection={g.monthly.map((m) => m.energyMWh)} history={history} historyNote={historyNote} />
-      </Card>
-      <Card className="p-5">
-        <QuickSimulator slug={plant.slug} cotaPriceBRL={plant.token.cotaPriceBRL} monthlyPerCotaBRL={f.perCota.avgMonthlyIncomeBRL} maxCotas={plant.token.totalCotas} minCotas={plant.token.minCotas} />
-      </Card>
-      <Card className="p-5">
-        <h3 className="text-[15px] font-semibold text-ink">Documentos</h3>
-        <div className="mt-1">{documentsList}</div>
-      </Card>
-      <Card className="flex flex-col p-5">
-        <h3 className="text-[15px] font-semibold text-ink">Sobre o ativo</h3>
-        <p className="mt-2 text-[14px] leading-relaxed text-ink-2">{plant.about}</p>
-        <div className="mt-auto pt-5">
-          {plant.status === "encerrada" ? (
-            <p className="rounded-lg bg-surface-2 px-3 py-2 text-[13px] text-ink-2">Oferta encerrada: todas as cotas foram vendidas.</p>
-          ) : (
-            <InterestButton usina={{ slug: plant.slug, name: plant.name }} label="Tenho interesse →" className={cx(buttonClass.primary, "w-full")} />
-          )}
-        </div>
-      </Card>
-    </div>
   );
 
   const desempenho = (
@@ -507,13 +468,18 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
     </div>
   );
 
+  const facts: [string, string][] = [
+    ["Local", `${plant.location.municipio}, ${plant.location.uf}`],
+    ["Potência", `${mwp(t.dcKWp)} · ${scale}`],
+    ["Contrato de energia", com?.ppaActive ? `PPA ativo${com.ppaCounterparty ? ` · ${com.ppaCounterparty}` : ""}` : "Sem PPA ativo"],
+    ["Preço do ativo", brlCompact(com?.askingPriceBRL ?? f.investmentBRL)],
+    ["Equipamentos", `${num(t.module.count)} módulos ${t.module.wp} Wp · ${t.mounting === "fixed" ? "estrutura fixa" : "seguidor solar"}`],
+    ["Início da operação", dateBR(t.commissioning)],
+  ];
+
   return (
     <Container className="pt-5">
       <nav aria-label="Trilha" className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
-        <Link href="/" className="hover:text-ink">
-          Início
-        </Link>
-        <ChevronRight className="size-3.5" />
         <Link href="/usinas" className="hover:text-ink">
           Usinas
         </Link>
@@ -523,124 +489,92 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
         </span>
       </nav>
 
-      <div className="mt-3">
-        <Gallery images={gallery} name={plant.name} />
-      </div>
+      <div className="mt-3 grid gap-8 lg:grid-cols-[minmax(0,1fr)_340px]">
+        <div className="min-w-0">
+          <Gallery images={gallery} name={plant.name} />
 
-      <div className="mt-5 grid gap-5 lg:grid-cols-[minmax(0,1fr)_320px]">
-        <div>
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="mt-6 flex flex-wrap items-center gap-2">
             <StatusChip status={plant.status} />
+            {com?.ppaActive && <Badge tone="good">PPA ativo</Badge>}
             {plant.illustrative && <Badge tone="warning">Projeto ilustrativo</Badge>}
-            <Badge>{plant.token.symbol}</Badge>
           </div>
-          <h1 className="mt-2 text-[28px] font-bold tracking-tight text-navy sm:text-[32px]">{plant.name}</h1>
-          <p className="mt-1 flex items-center gap-1.5 text-[14px] text-muted">
-            <MapPin className="size-4" /> {plant.location.municipio} - {plant.location.uf} · {plant.location.distribuidora}
+          <h1 className="mt-2 text-[32px] font-bold tracking-tight text-navy">{plant.name}</h1>
+          <p className="mt-1 flex items-center gap-1.5 text-[15px] text-muted">
+            <MapPin className="size-4" /> {plant.location.municipio}, {plant.location.uf}
           </p>
-          <div className="mt-5 flex flex-wrap gap-8">
-            <div className="flex items-center gap-3">
-              <IconBubble>
-                <Zap className="size-5" />
-              </IconBubble>
-              <div>
-                <div className="text-[18px] font-bold text-ink tnum">{mwp(t.dcKWp)}</div>
-                <div className="text-[12px] text-muted">Potência instalada</div>
+
+          <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            {(
+              [
+                [`${pct(f.irrNominalPct)}`, "ao ano (estimado)", true],
+                [brl(f.perCota.avgMonthlyIncomeBRL), "por cota, por mês", false],
+                [f.paybackYears != null ? `${num(Math.ceil(f.paybackYears))} anos` : "—", "para recuperar o valor", false],
+                [brl(plant.token.cotaPriceBRL, 0), "por cota", false],
+              ] as const
+            ).map(([v, l, hi]) => (
+              <div key={l} className="rounded-2xl bg-surface-2 p-4">
+                <div className={cx("text-[24px] font-bold leading-tight tnum", hi ? "text-good" : "text-ink")}>{v}</div>
+                <div className="mt-0.5 text-[13px] text-ink-2">{l}</div>
               </div>
-            </div>
-            <div className="flex items-center gap-3">
-              <IconBubble>
-                <Receipt className="size-5" />
-              </IconBubble>
-              <div>
-                <div className="text-[18px] font-bold text-ink tnum">{brl(plant.token.cotaPriceBRL, 0)}</div>
-                <div className="text-[12px] text-muted">Valor da cota</div>
-              </div>
-            </div>
+            ))}
           </div>
-        </div>
-        <Card className="p-5">
-          <SoldPanel illustrative={plant.illustrative} slug={plant.slug} total={plant.token.totalCotas} demoSold={plant.token.demoSoldCotas ?? 0} status={plant.status} />
-          {plant.status !== "encerrada" ? (
-            <Link href={`/usinas/${plant.slug}/investir`} className={cx(buttonClass.primary, "mt-4 w-full")}>
-              Investir nesta usina
-            </Link>
-          ) : (
-            <div className="mt-4 rounded-lg bg-surface-2 px-3 py-2 text-center text-[13px] font-medium text-ink-2">Oferta encerrada</div>
-          )}
-        </Card>
-      </div>
 
-      <section className="mt-8" aria-labelledby="indicadores">
-        <h2 id="indicadores" className="text-[17px] font-semibold text-ink">
-          Indicadores financeiros
-        </h2>
-        <div className="mt-3 grid grid-cols-2 gap-3 md:grid-cols-4">
-          <Indicator label="Investimento mínimo" value={brl(plant.token.minCotas * plant.token.cotaPriceBRL, 0)} />
-          <Indicator label="Distribuição mensal (por cota)" value={brl(f.perCota.avgMonthlyIncomeBRL)} tone="good" hint="média no cenário P50" />
-          <Indicator label="Rentabilidade anual (estimada)" value={`${pct(f.irrNominalPct)} a.a.`} hint={`TIR nominal · Selic hoje ${pct(market.selicPct, 2)}`} />
-          <Indicator label={`ROI estimado (${plant.finance.horizonYears} anos)`} value={pct(f.roiTotalPct, 0)} tone="good" hint={f.paybackYears != null ? `capital de volta em ~${num(Math.ceil(f.paybackYears))} anos` : undefined} />
-          <Indicator label="Prazo contratual" value={`${plant.finance.horizonYears} anos`} />
-          <div className="col-span-1 rounded-xl border border-line bg-white p-4 md:col-span-3">
-            <div className="text-[13px] font-semibold text-ink">Atualizado em {dateBR(a.generatedAt, true)}</div>
-            <div className="mt-0.5 text-[12px] text-muted">
-              Data de referência dos indicadores · fontes {a.provenance.length - fallbackCount} ao vivo/cache, {fallbackCount} em modo referência ·{" "}
-              <a href={`/api/usinas/${plant.slug}/analise`} target="_blank" rel="noopener" className="inline-flex items-center gap-0.5 font-medium text-good hover:underline">
-                ver dados <ExternalLink className="size-3" />
-              </a>
-            </div>
-          </div>
-        </div>
-      </section>
+          <section className="mt-10" aria-labelledby="sobre">
+            <h2 id="sobre" className="text-[20px] font-bold text-navy">
+              Sobre a usina
+            </h2>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{plant.about}</p>
+            <dl className="mt-5 divide-y divide-line rounded-2xl border border-line">
+              {facts.map(([k, v]) => (
+                <div key={k} className="flex flex-wrap justify-between gap-x-6 gap-y-1 px-5 py-3.5 text-[14px]">
+                  <dt className="text-muted">{k}</dt>
+                  <dd className="text-right font-medium text-ink">{v}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
 
-      <section className="mt-8" aria-labelledby="comercial">
-        <h2 id="comercial" className="text-[17px] font-semibold text-ink">
-          Dados do ativo
-        </h2>
-        <div className="mt-3 grid gap-3 md:grid-cols-4">
-          <div className="rounded-xl border border-line bg-white p-4">
-            <div className="text-[12px] text-muted">Contrato de energia (PPA)</div>
-            <div className={cx("mt-1 text-[16px] font-bold", com?.ppaActive ? "text-good" : "text-ink-2")}>{com?.ppaActive ? "PPA ativo" : "Sem PPA ativo"}</div>
-            <div className="mt-1 text-[12px] text-muted">
-              {com?.ppaActive ? [com.ppaCounterparty, com.ppaEndDate && `vigente até ${dateBR(com.ppaEndDate)}`].filter(Boolean).join(" · ") : (com?.notes ?? "Energia sem contrato de longo prazo")}
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-white p-4">
-            <div className="text-[12px] text-muted">Preço de venda do ativo</div>
-            <div className="mt-1 text-[16px] font-bold text-ink tnum">{brlCompact(com?.askingPriceBRL ?? f.investmentBRL)}</div>
-            <div className="mt-1 text-[12px] text-muted tnum">
-              {brl((com?.askingPriceBRL ?? f.investmentBRL) / (t.dcKWp * 1000), 2)}/Wp · {num(plant.token.totalCotas)} cotas
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-white p-4">
-            <div className="text-[12px] text-muted">Escala e tamanho</div>
-            <div className="mt-1 text-[16px] font-bold text-ink">{scale}</div>
-            <div className="mt-1 text-[12px] text-muted tnum">
-              {num(t.dcKWp)} kWp CC · {num(t.acKW)} kW CA · {num(t.landAreaHa, 1)} ha
-            </div>
-          </div>
-          <div className="rounded-xl border border-line bg-white p-4">
-            <div className="text-[12px] text-muted">Equipamentos</div>
-            <div className="mt-1 text-[13px] font-semibold leading-snug text-ink">
-              {num(t.module.count)} × {t.module.wp} Wp
-            </div>
-            <div className="mt-1 text-[12px] leading-snug text-muted">
-              {t.module.model} · {t.inverter.count} × {t.inverter.model} · {t.mounting === "fixed" ? `estrutura fixa ${t.tiltDeg}°` : "seguidor solar"}
-            </div>
-          </div>
-        </div>
-      </section>
+          <section className="mt-10 rounded-2xl border border-line p-5" aria-label="Geração de energia">
+            <GenerationOverview projection={g.monthly.map((m) => m.energyMWh)} history={history} historyNote={historyNote} />
+          </section>
 
-      <div className="mt-8">
-        <Tabs
-          tabs={[
-            { id: "visao-geral", label: "Visão geral", content: visaoGeral },
-            { id: "desempenho", label: "Desempenho", content: desempenho },
-            { id: "dados-tecnicos", label: "Dados técnicos", content: tecnico },
-            { id: "documentos", label: "Documentos", content: documentos },
-            { id: "riscos", label: "Riscos e condições", content: riscos },
-          ]}
-        />
+          <section className="mt-10" aria-labelledby="docs">
+            <h2 id="docs" className="text-[20px] font-bold text-navy">
+              Documentos
+            </h2>
+            <div className="mt-2">{documentsList}</div>
+          </section>
+
+          <details className="group mt-10 rounded-2xl border border-line">
+            <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-[15px] font-semibold text-ink">
+              Ver análise completa
+              <ChevronRight className="size-4 text-muted transition group-open:rotate-90" />
+            </summary>
+            <div className="border-t border-line px-5 pb-5">
+              <Tabs
+                tabs={[
+                  { id: "desempenho", label: "Retorno e geração", content: desempenho },
+                  { id: "riscos", label: "Riscos e condições", content: riscos },
+                  { id: "dados-tecnicos", label: "Dados técnicos", content: tecnico },
+                  { id: "transparencia", label: "Transparência", content: documentos },
+                ]}
+              />
+            </div>
+          </details>
+        </div>
+
+        <aside className="lg:sticky lg:top-24 lg:self-start">
+          <InvestBox
+            slug={plant.slug}
+            name={plant.name}
+            status={plant.status}
+            cotaPriceBRL={plant.token.cotaPriceBRL}
+            monthlyPerCotaBRL={f.perCota.avgMonthlyIncomeBRL}
+            minCotas={plant.token.minCotas}
+            totalCotas={plant.token.totalCotas}
+            demoSold={plant.token.demoSoldCotas ?? 0}
+          />
+        </aside>
       </div>
     </Container>
   );

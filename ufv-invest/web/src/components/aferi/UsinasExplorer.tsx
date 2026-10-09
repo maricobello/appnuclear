@@ -56,7 +56,7 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
   const [sort, setSort] = useState(sp.get("ordem") ?? "relevantes");
   const [ppa, setPpa] = useState(sp.get("ppa") ?? "");
   const [roi, setRoi] = useState(sp.get("roi") ?? "");
-  const [adv, setAdv] = useState(Boolean(sp.get("rent") || sp.get("cotamax") || sp.get("fiob") || sp.get("seguidor")));
+  const [adv, setAdv] = useState(false);
   const [minIrr, setMinIrr] = useState(sp.get("rent") ?? "");
   const [maxCota, setMaxCota] = useState(sp.get("cotamax") ?? "");
   const [fioB, setFioB] = useState(sp.get("fiob") === "1");
@@ -73,7 +73,6 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
   };
 
   const ufs = useMemo(() => [...new Set(items.map((i) => i.uf))].sort(), [items]);
-  const counts = useMemo(() => Object.fromEntries(TABS.map((t) => [t.id, t.id === "todas" ? items.length : items.filter((i) => i.status === t.id).length])), [items]);
 
   const shown = useMemo(() => {
     const potTest = POT.find((p) => p.id === pot)?.test;
@@ -104,7 +103,7 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
     return [...list].sort(by[sort] ?? by.relevantes);
   }, [items, tab, uf, pot, ppa, roi, q, minIrr, maxCota, fioB, tracker, sort]);
 
-  const activeAdv = [minIrr, maxCota, fioB, tracker].filter(Boolean).length;
+  const activeAdv = [ppa, roi, uf, pot, minIrr, maxCota, fioB, tracker].filter(Boolean).length;
   const clearAll = () => {
     setQ("");
     setUf("");
@@ -121,133 +120,127 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
 
   return (
     <div>
-      {/* barra de filtros */}
-      <div className="rounded-xl border border-line bg-white p-3 shadow-sm">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[220px] flex-1">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
-            <label htmlFor="busca-usinas" className="sr-only">
-              Buscar por nome da usina ou cidade
-            </label>
-            <input
-              id="busca-usinas"
-              type="search"
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                sync({ q: e.target.value || null });
-              }}
-              placeholder="Buscar por nome da usina..."
-              className="h-10 w-full rounded-lg border border-line-strong bg-white pl-9 pr-3 text-[13px] outline-none transition focus:border-brand"
-            />
-          </div>
-          <label className="sr-only" htmlFor="f-uf">
-            Estado
+      {/* busca, filtros e ordenação */}
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[220px] flex-1">
+          <Search className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-muted" aria-hidden />
+          <label htmlFor="busca-usinas" className="sr-only">
+            Buscar usina ou cidade
           </label>
-          <select
-            id="f-uf"
-            className={selectCls}
-            value={uf}
+          <input
+            id="busca-usinas"
+            type="search"
+            value={q}
             onChange={(e) => {
-              setUf(e.target.value);
-              sync({ uf: e.target.value || null });
+              setQ(e.target.value);
+              sync({ q: e.target.value || null });
             }}
-          >
-            <option value="">Estado</option>
-            {ufs.map((u) => (
-              <option key={u} value={u}>
-                {UF_NAME[u] ?? u}
-              </option>
-            ))}
-          </select>
-          <label className="sr-only" htmlFor="f-status">
-            Status
-          </label>
-          <select
-            id="f-status"
-            className={selectCls}
-            value={tab === "todas" ? "" : tab}
-            onChange={(e) => {
-              const v = (e.target.value || "todas") as Status;
-              setTab(v);
-              sync({ status: v === "todas" ? null : v });
-            }}
-          >
-            <option value="">Status</option>
-            {TABS.slice(1).map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.label}
-              </option>
-            ))}
-          </select>
-          <label className="sr-only" htmlFor="f-pot">
-            Potência
-          </label>
-          <select
-            id="f-pot"
-            className={selectCls}
-            value={pot}
-            onChange={(e) => {
-              setPot(e.target.value);
-              sync({ pot: e.target.value || null });
-            }}
-          >
-            {POT.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <label className="sr-only" htmlFor="f-ppa">
-            Situação do PPA
-          </label>
-          <select
-            id="f-ppa"
-            className={selectCls}
-            value={ppa}
-            onChange={(e) => {
-              setPpa(e.target.value);
-              sync({ ppa: e.target.value || null });
-            }}
-          >
-            {PPA.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.label}
-              </option>
-            ))}
-          </select>
-          <label className="sr-only" htmlFor="f-roi">
-            Prazo de retorno (ROI)
-          </label>
-          <select
-            id="f-roi"
-            className={selectCls}
-            value={roi}
-            onChange={(e) => {
-              setRoi(e.target.value);
-              sync({ roi: e.target.value || null });
-            }}
-          >
-            {ROI.map((r) => (
-              <option key={r.id} value={r.id}>
-                {r.label}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            onClick={() => setAdv((a) => !a)}
-            aria-expanded={adv}
-            className={cx("inline-flex h-10 items-center gap-2 rounded-lg border px-3 text-[13px] font-medium transition", adv || activeAdv ? "border-brand bg-brand-soft text-good" : "border-line-strong text-ink-2 hover:bg-surface-2")}
-          >
-            <SlidersHorizontal className="size-4" /> Filtros{activeAdv ? ` (${activeAdv})` : ""}
-          </button>
+            placeholder="Buscar usina ou cidade"
+            className="h-11 w-full rounded-xl border border-line-strong bg-white pl-10 pr-3 text-[14px] outline-none transition focus:border-brand"
+          />
         </div>
+        <button
+          type="button"
+          onClick={() => setAdv((a) => !a)}
+          aria-expanded={adv}
+          className={cx("inline-flex h-11 items-center gap-2 rounded-xl border px-4 text-[14px] font-medium transition", adv || activeAdv ? "border-brand bg-brand-soft text-good" : "border-line-strong bg-white text-ink-2 hover:bg-surface-2")}
+        >
+          <SlidersHorizontal className="size-4" /> Filtros{activeAdv ? ` (${activeAdv})` : ""}
+        </button>
+        <label className="sr-only" htmlFor="f-ordem">
+          Ordenar por
+        </label>
+        <select
+          id="f-ordem"
+          className={cx(selectCls, "h-11 rounded-xl text-[14px]")}
+          value={sort}
+          onChange={(e) => {
+            setSort(e.target.value);
+            sync({ ordem: e.target.value === "relevantes" ? null : e.target.value });
+          }}
+        >
+          {SORTS.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.label}
+            </option>
+          ))}
+        </select>
+      </div>
 
-        {adv && (
-          <div className="mt-3 grid gap-3 border-t border-line pt-3 sm:grid-cols-2 lg:grid-cols-4">
+      {adv && (
+        <div className="mt-3 rounded-xl border border-line bg-white p-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <label className="text-[12px] font-medium text-ink-2">
-              Rentabilidade mínima (% a.a.)
+              Contrato de energia (PPA)
+              <select
+                className={cx(selectCls, "mt-1 w-full")}
+                value={ppa}
+                onChange={(e) => {
+                  setPpa(e.target.value);
+                  sync({ ppa: e.target.value || null });
+                }}
+              >
+                {PPA.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id ? p.label : "Todos"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[12px] font-medium text-ink-2">
+              Retorno do investimento (ROI)
+              <select
+                className={cx(selectCls, "mt-1 w-full")}
+                value={roi}
+                onChange={(e) => {
+                  setRoi(e.target.value);
+                  sync({ roi: e.target.value || null });
+                }}
+              >
+                {ROI.map((r) => (
+                  <option key={r.id} value={r.id}>
+                    {r.id ? r.label : "Qualquer prazo"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[12px] font-medium text-ink-2">
+              Estado
+              <select
+                className={cx(selectCls, "mt-1 w-full")}
+                value={uf}
+                onChange={(e) => {
+                  setUf(e.target.value);
+                  sync({ uf: e.target.value || null });
+                }}
+              >
+                <option value="">Todos</option>
+                {ufs.map((u) => (
+                  <option key={u} value={u}>
+                    {UF_NAME[u] ?? u}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[12px] font-medium text-ink-2">
+              Tamanho
+              <select
+                className={cx(selectCls, "mt-1 w-full")}
+                value={pot}
+                onChange={(e) => {
+                  setPot(e.target.value);
+                  sync({ pot: e.target.value || null });
+                }}
+              >
+                {POT.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.id ? p.label : "Qualquer"}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="text-[12px] font-medium text-ink-2">
+              Rentabilidade mínima (% ao ano)
               <input
                 type="number"
                 min={0}
@@ -263,7 +256,7 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
               />
             </label>
             <label className="text-[12px] font-medium text-ink-2">
-              Valor máximo da cota (R$)
+              Cota de até (R$)
               <input
                 type="number"
                 min={0}
@@ -288,7 +281,7 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
                 }}
                 className="size-4 accent-[var(--brand)]"
               />
-              Isenta do Fio B até 2045
+              Isenta do Fio B
             </label>
             <label className="flex items-center gap-2 self-end rounded-lg border border-line-strong px-3 py-2.5 text-[13px] text-ink-2">
               <input
@@ -303,11 +296,16 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
               Com seguidor solar
             </label>
           </div>
-        )}
-      </div>
+          {activeAdv > 0 && (
+            <button onClick={clearAll} className="mt-3 inline-flex items-center gap-1 text-[13px] font-semibold text-good hover:underline">
+              <X className="size-4" /> Limpar filtros
+            </button>
+          )}
+        </div>
+      )}
 
       {/* abas de status */}
-      <div className="mt-5 flex flex-wrap gap-2" role="tablist" aria-label="Status da usina">
+      <div className="mt-4 flex flex-wrap items-center gap-2" role="tablist" aria-label="Status da usina">
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -317,41 +315,19 @@ export function UsinasExplorer({ items, cards }: { items: PlantSummary[]; cards:
               setTab(t.id);
               sync({ status: t.id === "todas" ? null : t.id });
             }}
-            className={cx(
-              "rounded-full px-4 py-1.5 text-[13px] font-medium transition",
-              tab === t.id ? "bg-brand text-white shadow-sm" : "border border-line-strong bg-white text-ink-2 hover:border-brand hover:text-good",
-            )}
+            className={cx("rounded-full px-4 py-1.5 text-[13px] font-medium transition", tab === t.id ? "bg-navy text-white" : "text-ink-2 hover:bg-surface-2")}
           >
-            {t.label} <span className={cx("ml-1 text-[11px]", tab === t.id ? "text-white/80" : "text-muted")}>{counts[t.id]}</span>
+            {t.label}
           </button>
         ))}
+        <span className="ml-auto text-[13px] text-muted" aria-live="polite">
+          {shown.length} {shown.length === 1 ? "usina" : "usinas"}
+        </span>
       </div>
 
-      <div className="mt-5 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-[13px] text-muted" aria-live="polite">
-          {shown.length} {shown.length === 1 ? "resultado encontrado" : "resultados encontrados"}
-        </p>
-        <label className="flex items-center gap-2 text-[13px] text-muted">
-          <span className="sr-only">Ordenar por</span>
-          <select
-            className={selectCls}
-            value={sort}
-            onChange={(e) => {
-              setSort(e.target.value);
-              sync({ ordem: e.target.value === "relevantes" ? null : e.target.value });
-            }}
-          >
-            {SORTS.map((s) => (
-              <option key={s.id} value={s.id}>
-                {s.label}
-              </option>
-            ))}
-          </select>
-        </label>
-      </div>
-
+      <h2 className="sr-only">Resultados</h2>
       {shown.length > 0 ? (
-        <div className="mt-4 grid gap-5 sm:grid-cols-2 xl:grid-cols-3">{shown.map((s) => cards[s.slug])}</div>
+        <div className="mt-5 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">{shown.map((s) => cards[s.slug])}</div>
       ) : (
         <div className="mt-6 rounded-xl border border-dashed border-line-strong p-10 text-center">
           <p className="text-[15px] font-semibold text-ink">Nenhuma usina com esses filtros.</p>

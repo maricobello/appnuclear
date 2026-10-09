@@ -25,13 +25,12 @@ const cols = [
 
 export function Footer() {
   return (
-    <footer className="mt-20 bg-navy text-white/80">
-      <Container className="grid gap-10 py-12 md:grid-cols-[1.5fr_1fr_1fr_1.2fr]">
+    <footer className="mt-24 bg-navy text-white/80">
+      <Container className="grid gap-10 py-12 md:grid-cols-[2fr_1fr_1fr]">
         <div>
           <Logo inverted />
           <p className="mt-4 max-w-sm text-[13px] leading-relaxed text-white/70">
-            Energia solar que gera valor. Cotas digitais de usinas fotovoltaicas com dados abertos, relatório de auditoria verificável e
-            distribuição mensal da receita.
+            Renda mensal com usinas solares.
           </p>
         </div>
         {cols.map((c) => (
@@ -48,25 +47,16 @@ export function Footer() {
             </ul>
           </div>
         ))}
-        <div className="text-[14px]">
-          <div className="font-semibold text-white">Dados abertos usados</div>
-          <ul className="mt-3 space-y-2 text-white/70">
-            <li>NASA POWER · PVGIS (JRC/UE)</li>
-            <li>Open-Meteo · IBGE</li>
-            <li>Banco Central (SGS e Focus)</li>
-            <li>BNB Smart Chain (BscScan)</li>
-          </ul>
-        </div>
       </Container>
       <div className="border-t border-white/10">
-        <Container className="py-6 text-[12px] leading-relaxed text-white/60">
+        <Container className="flex flex-wrap items-center justify-between gap-3 py-5 text-[12px] text-white/70">
           <p>
-            <b className="text-white/80">Aviso importante.</b> Este site é uma demonstração tecnológica. As usinas exibidas são projetos ilustrativos
-            e nada aqui é oferta, recomendação ou consultoria de investimento. Rentabilidades são projeções de modelos e
-            não garantem resultados futuros. No Brasil, ofertas públicas de valores mobiliários (incluindo cotas tokenizadas) exigem registro ou dispensa
-            na CVM — por exemplo, via plataforma de investimento participativo autorizada nos termos da Resolução CVM 88. Há risco de perda do capital.
+            Demonstração. Rentabilidade é projeção, não garantia; há risco de perda.{" "}
+            <Link href="/seguranca" className="underline underline-offset-2 hover:text-white">
+              Avisos e riscos
+            </Link>
           </p>
-          <p className="mt-2">© {new Date().getFullYear()} Aferi Capital</p>
+          <p>© {new Date().getFullYear()} Aferi Capital</p>
         </Container>
       </div>
     </footer>

@@ -28,7 +28,7 @@ export function SoldBar(p: Props & { className?: string }) {
         >
           <div className={cx("h-full rounded-full", p.status === "implantacao" ? "bg-series-1" : "bg-leaf")} style={{ width: `${Math.min(100, s.pct)}%` }} />
         </div>
-        <span className="text-[12px] font-semibold text-ink-2 tnum">{pct}%</span>
+        <span className="text-[12px] font-medium text-ink-2 tnum">{pct}% vendido</span>
       </div>
     </div>
   );

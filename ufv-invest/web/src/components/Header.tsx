@@ -63,7 +63,7 @@ export function Header() {
         </div>
       )}
       <Container className="flex h-16 items-center justify-between gap-4">
-        <Link href="/" aria-label="Aferi Capital — início" className="shrink-0">
+        <Link href="/" className="shrink-0">
           <Logo />
         </Link>
         <nav className="hidden items-center gap-1 lg:flex" aria-label="Principal">

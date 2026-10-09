@@ -14,8 +14,10 @@ export function Logo({ inverted = false }: { inverted?: boolean }) {
     <span className="inline-flex items-center gap-2">
       <LogoMark inverted={inverted} />
       <span className="flex flex-col leading-none">
-        <span className={`text-[21px] font-bold tracking-tight ${inverted ? "text-white" : "text-navy"}`}>Aferi</span>
-        <span className="mt-0.5 text-[11px] font-semibold tracking-wide text-leaf">Capital</span>
+        <span className={`text-[21px] font-bold tracking-tight ${inverted ? "text-white" : "text-navy"}`}>
+          Aferi<span className="sr-only"> </span>
+        </span>
+        <span className={`mt-0.5 text-[11px] font-semibold tracking-wide ${inverted ? "text-leaf" : "text-good"}`}>Capital</span>
       </span>
     </span>
   );
