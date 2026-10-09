@@ -57,7 +57,7 @@ export function shortAddr(a?: string | null, n = 4): string {
 export const MONTHS = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
 
 export const statusLabel: Record<string, string> = {
-  captacao: "Em captação",
-  construcao: "Em construção",
   operacao: "Em operação",
+  implantacao: "Em implantação",
+  encerrada: "Oferta encerrada",
 };

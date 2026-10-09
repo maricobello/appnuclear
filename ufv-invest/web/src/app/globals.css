@@ -7,27 +7,30 @@
  */
 :root {
   color-scheme: light;
-  --page: #f6f8fa;
+  --page: #ffffff;
   --surface: #ffffff;
-  --surface-2: #f2f5f8;
-  --surface-3: #e7ecf2;
-  --border: rgba(15, 30, 50, 0.08);
-  --border-strong: rgba(15, 30, 50, 0.16);
-  --ink: #0b1b2b;
-  --ink-2: #33475b;
-  --muted: #64748b;
-  /* âmbar/bronze para texto e preenchimentos com contraste ≥ 4,5:1 sobre o branco */
-  --brand: #a35d00;
+  --surface-2: #f4f7f6;
+  --surface-3: #e9efed;
+  --border: rgba(15, 42, 68, 0.09);
+  --border-strong: rgba(15, 42, 68, 0.18);
+  --ink: #0f2a44;
+  --ink-2: #3c5065;
+  --muted: #5b6b7c;
+  /* verde Aferi: botões (≥ 4,5:1 com texto branco), destaque claro decorativo e fundo suave */
+  --brand: #0e8441;
+  --brand-hover: #0b6f37;
   --brand-ink: #ffffff;
-  --brand-soft: #fff5e3;
-  /* sol: só decorativo (barras, brilhos, ícones) */
+  --brand-soft: #e8f6ee;
+  --leaf: #22b573;
   --sun: #f5a524;
-  --series-1: #c07f00;
-  --series-2: #2a78d6;
+  --navy: #0f2a44;
+  --navy-2: #163a5c;
+  --series-1: #2a78d6;
+  --series-2: #22b573;
   --series-neg: #e34948;
   --grid: #e6ebf1;
   --axis: #cbd5e1;
-  --good: #11804f;
+  --good: #15803d;
   --warning: #9a5b00;
   --serious: #c2410c;
   --critical: #c62828;
@@ -48,6 +51,10 @@
   --color-brand: var(--brand);
   --color-brand-ink: var(--brand-ink);
   --color-brand-soft: var(--brand-soft);
+  --color-brand-hover: var(--brand-hover);
+  --color-leaf: var(--leaf);
+  --color-navy: var(--navy);
+  --color-navy-2: var(--navy-2);
   --color-series-1: var(--series-1);
   --color-series-2: var(--series-2);
   --color-good: var(--good);
@@ -75,7 +82,7 @@ body {
 }
 
 ::selection {
-  background: rgba(245, 165, 36, 0.3);
+  background: rgba(34, 181, 115, 0.25);
 }
 
 :focus-visible {

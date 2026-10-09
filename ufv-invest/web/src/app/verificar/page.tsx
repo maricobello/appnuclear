@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import { Container, SectionTitle } from "@/components/ui";
 import { VerifyReport } from "@/components/VerifyReport";
 
-export const metadata: Metadata = { title: "Verificar relatório", description: "Confira a autenticidade de um relatório de auditoria da UFV Invest." };
+export const metadata: Metadata = { title: "Verificar relatório", description: "Confira a autenticidade de um relatório de auditoria da Aferi Capital." };
 
 export default function VerificarPage() {
   return (

@@ -27,7 +27,7 @@ function siwe(account: PrivateKeyAccount, nonce: string, domain = HOST) {
   return createSiweMessage({
     domain,
     address: account.address,
-    statement: "Entrar na UFV Invest.",
+    statement: "Entrar na Aferi Capital.",
     uri: `http://${domain}`,
     version: "1",
     chainId: TARGET_CHAIN_ID,

@@ -19,9 +19,9 @@ export interface ReportContext {
 }
 
 export const STATUS_LABEL: Record<string, string> = {
-  captacao: "Em captação",
-  construcao: "Em construção",
   operacao: "Em operação",
+  implantacao: "Em implantação",
+  encerrada: "Oferta encerrada",
 };
 
 export const MODALIDADE_LABEL: Record<string, string> = {

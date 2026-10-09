@@ -55,7 +55,7 @@ export function SiweProvider({ children }: { children: ReactNode }) {
       const message = createSiweMessage({
         domain: window.location.host,
         address,
-        statement: "Entrar na UFV Invest. Esta assinatura não autoriza nenhuma transação nem movimenta fundos.",
+        statement: "Entrar na Aferi Capital. Esta assinatura não autoriza nenhuma transação nem movimenta fundos.",
         uri: window.location.origin,
         version: "1",
         chainId: TARGET_CHAIN_ID,

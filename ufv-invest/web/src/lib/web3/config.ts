@@ -34,7 +34,7 @@ export const wagmiConfig = createConfig({
             projectId: wcProjectId,
             showQrModal: true,
             metadata: {
-              name: "UFV Invest",
+              name: "Aferi Capital",
               description: "Cotas tokenizadas de usinas solares na BNB Chain",
               url: siteUrl,
               icons: [`${siteUrl}/icon.svg`],

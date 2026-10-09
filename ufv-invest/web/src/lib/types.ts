@@ -1,5 +1,5 @@
 /**
- * Tipos do domínio UFV Invest — o contrato entre as fontes de dados (lib/sources), os modelos
+ * Tipos do domínio Aferi Capital — o contrato entre as fontes de dados (lib/sources), os modelos
  * (lib/solar, lib/finance), o relatório PDF (lib/report) e a interface.
  *
  * Convenções:
@@ -40,7 +40,8 @@ export interface Sourced<T> {
 
 // ─── Catálogo de usinas ─────────────────────────────────────────────────────────────────────
 
-export type PlantStatus = "captacao" | "construcao" | "operacao";
+/** operacao = usina gerando, com cotas à venda · implantacao = em obra, captação financia o CAPEX · encerrada = oferta concluída (todas as cotas vendidas) */
+export type PlantStatus = "operacao" | "implantacao" | "encerrada";
 export type Submercado = "SE/CO" | "S" | "NE" | "N";
 
 export interface PlantLocation {
@@ -144,6 +145,27 @@ export interface PlantToken {
   offeringAddress?: Address;
   offeringStart?: ISODate;
   offeringEnd?: ISODate;
+  /**
+   * Cotas já subscritas usadas SOMENTE em projetos ilustrativos enquanto os contratos não estão
+   * implantados na rede (a tela marca "projeto ilustrativo"); com contrato, vale o valor on-chain.
+   */
+  demoSoldCotas?: number;
+}
+
+/** Dados comerciais do ativo (vêm da planilha de usinas mapeadas) */
+export interface PlantCommercial {
+  /** contrato de venda da energia (PPA / locação / assinatura) vigente */
+  ppaActive: boolean;
+  /** comprador da energia (contraparte do PPA) */
+  ppaCounterparty?: string;
+  /** fim do contrato */
+  ppaEndDate?: ISODate;
+  /** preço de venda pedido pelo ativo, R$ */
+  askingPriceBRL?: number;
+  /** escala declarada (ex.: "Minigeração", "Microgeração", "Grande porte"); se ausente, derivada da potência CA */
+  scale?: string;
+  /** equipamentos / observações livres da planilha */
+  notes?: string;
 }
 
 export interface Plant {
@@ -161,8 +183,13 @@ export interface Plant {
   token: PlantToken;
   /** climatologia de referência embarcada, usada quando as APIs não respondem */
   fallbackClimate: MonthlyClimate & { source: string; interannualCvPct: number };
-  /** imagem de capa em /public (ex.: "/images/ufv-janauba-1.jpg"); sem ela, a vitrine usa a ilustração vetorial */
+  /** imagem de capa em /public (ex.: "/images/usinas/ufv-janauba-1-1.jpg"); sem ela, a vitrine usa a ilustração vetorial */
   cover?: string;
+  commercial?: PlantCommercial;
+  /** galeria (a capa é a primeira) */
+  gallery?: string[];
+  /** texto "Sobre o ativo" */
+  about?: string;
   /** histórico de geração medida (usinas em operação), MWh por mês */
   measured?: { month: string; energyMWh: number }[];
 }
@@ -187,6 +214,8 @@ export interface SolarResource {
   /** coeficiente de variação interanual da irradiação anual, % */
   interannualCvPct: number;
   annualSeries?: { year: number; ghiKWhM2: number }[];
+  /** irradiação medida por satélite no último ano completo (kWh/m²/dia por mês) */
+  lastYear?: { year: number; ghiKWhM2Day: number[] };
   provenance: Provenance[];
 }
 
@@ -316,6 +345,8 @@ export interface SensitivityRow {
 }
 
 export interface FinancialResult {
+  /** cenários de geração (P90 / P50 / otimista) com TIR e renda mensal média por cota */
+  scenarios?: { name: "conservador" | "base" | "otimista"; energyMult: number; irrNominalPct: number; avgMonthlyPerCotaBRL: number }[];
   /** captação total (= cotas × preço) */
   investmentBRL: number;
   /** CAPEX da usina (captação − estruturação) */

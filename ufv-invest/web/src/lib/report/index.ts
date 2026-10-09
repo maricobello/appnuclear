@@ -116,12 +116,12 @@ export async function renderAuditReport(
       : `${REPORT_TITLE} da ${plant.name} (${plant.location.municipio}/${plant.location.uf}): recurso solar, geração P50/P90, análise econômica, riscos e tokenização.`) +
       (plant.illustrative ? " Projeto ilustrativo." : ""),
   );
-  pdf.setAuthor("UFV Invest");
-  pdf.setCreator("UFV Invest — gerador de relatórios de auditoria");
-  pdf.setProducer("UFV Invest (pdf-lib)");
+  pdf.setAuthor("Aferi Capital");
+  pdf.setCreator("Aferi Capital — gerador de relatórios de auditoria");
+  pdf.setProducer("Aferi Capital (pdf-lib)");
   pdf.setLanguage("pt-BR");
   pdf.setKeywords([
-    "UFV Invest",
+    "Aferi Capital",
     "auditoria",
     "energia solar",
     "tokenização",
@@ -232,20 +232,14 @@ function drawChrome(ctx: ReportContext): void {
   });
 }
 
-/** Marca "UFV Invest" com um sol estilizado */
+/** Marca "Aferi Capital" com um sol estilizado */
 function drawLogo(l: Layout, x: number, cy: number): void {
-  const r = 4.2;
-  const cx = x + r + 1;
-  for (let k = 0; k < 8; k++) {
-    const ang = (k * Math.PI) / 4;
-    l.line(cx + Math.cos(ang) * (r + 1.6), cy + Math.sin(ang) * (r + 1.6), cx + Math.cos(ang) * (r + 3.4), cy + Math.sin(ang) * (r + 3.4), {
-      color: C.amber,
-      width: 1,
-      round: true,
-    });
-  }
-  l.circle(cx, cy, r, { fill: C.amber });
-  l.text("UFV", x + 14, cy + 3.4, { font: "bold", size: 9.6, color: C.white });
-  const w = l.textWidth("UFV", "bold", 9.6);
-  l.text(" Invest", x + 14 + w, cy + 3.4, { font: "semibold", size: 9.6, color: C.amber });
+  // marca Aferi Capital: "A" geométrico (traços) com folha verde
+  const h = 10;
+  l.line(x + 1, cy + h / 2, x + 5.5, cy - h / 2, { color: C.white, width: 2.2, round: true });
+  l.line(x + 5.5, cy - h / 2, x + 10, cy + h / 2, { color: C.white, width: 2.2, round: true });
+  l.circle(x + 9.5, cy + 1.2, 2.6, { fill: C.green });
+  l.text("Aferi", x + 15, cy + 3.4, { font: "bold", size: 9.6, color: C.white });
+  const w = l.textWidth("Aferi", "bold", 9.6);
+  l.text(" Capital", x + 15 + w, cy + 3.4, { font: "semibold", size: 9.6, color: C.green });
 }

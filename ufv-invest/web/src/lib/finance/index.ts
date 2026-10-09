@@ -1,5 +1,5 @@
 /**
- * Modelo econômico-financeiro da UFV Invest (perspectiva do cotista).
+ * Modelo econômico-financeiro da Aferi Capital (perspectiva do cotista).
  *
  * API pública:
  *  - analyzeFinance(plant, generation, market, { monteCarloRuns?, seed? }) → FinancialResult

@@ -106,6 +106,13 @@ export async function getAllAnalyses(): Promise<PlantAnalysis[]> {
   return all.filter((a): a is PlantAnalysis => a !== null);
 }
 
+/** Escala do ativo: a declarada na planilha ou a faixa da Lei 14.300 pela potência CA */
+export function plantScale(plant: Plant): string {
+  if (plant.commercial?.scale) return plant.commercial.scale;
+  const kw = plant.tech.acKW;
+  return kw <= 75 ? "Microgeração" : kw <= 5000 ? "Minigeração" : "Grande porte";
+}
+
 /** Resumo enxuto para listagens (cards da vitrine) */
 export function summarize(a: PlantAnalysis) {
   const { plant, generation: g, finance: f } = a;
@@ -146,7 +153,21 @@ export function summarize(a: PlantAnalysis) {
     symbol: plant.token.symbol,
     tags,
     cover: plant.cover ?? null,
+    gallery: plant.gallery ?? [],
+    demoSoldCotas: plant.token.demoSoldCotas ?? 0,
+    acKW: plant.tech.acKW,
+    commissioning: plant.tech.commissioning,
+    scenarios: f.scenarios ?? [],
+    ppaActive: plant.commercial?.ppaActive ?? false,
+    ppaCounterparty: plant.commercial?.ppaCounterparty ?? null,
+    ppaEndDate: plant.commercial?.ppaEndDate ?? null,
+    askingPriceBRL: plant.commercial?.askingPriceBRL ?? plant.token.totalCotas * plant.token.cotaPriceBRL,
+    scale: plantScale(plant),
+    roiTotalPct: f.roiTotalPct,
+    /** renda líquida por cota em cada ano do horizonte (cenário P50) */
+    incomePerCotaByYear: f.cashFlows.filter((c) => c.year >= 1).map((c) => ({ year: c.calendarYear, value: c.netCashFlowBRL / plant.token.totalCotas })),
     selicPct: a.market.selicPct,
+    usdtBrl: a.market.usdtBrl,
     cdiPct: a.market.cdiPct,
     /** previsão de geração de amanhã (Open-Meteo + modelo), quando disponível */
     forecastNextMWh: a.live?.forecast?.[1]?.energyMWh ?? null,

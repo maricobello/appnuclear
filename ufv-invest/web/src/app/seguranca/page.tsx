@@ -5,7 +5,7 @@ import { chainName, explorerUrl, TARGET_CHAIN_ID } from "@/lib/web3/chains";
 import { networkDeployment, plantContracts } from "@/lib/web3/deployments";
 import { Card, CardHeader, Container, Notice, SectionTitle } from "@/components/ui";
 
-export const metadata: Metadata = { title: "Segurança", description: "Como a UFV Invest protege sua carteira, seus fundos e os dados das usinas." };
+export const metadata: Metadata = { title: "Segurança", description: "Como a Aferi Capital protege sua carteira, seus fundos e os dados das usinas." };
 
 const walletTiers = [
   {
@@ -58,7 +58,7 @@ export default function SegurancaPage() {
   return (
     <Container className="py-12">
       <SectionTitle eyebrow="Segurança" title="Seus fundos, sua chave, regras no código">
-        A UFV Invest é não-custodial: o dinheiro vai da sua carteira para contratos públicos e auditáveis na BNB Chain — nunca para uma conta da empresa durante a captação.
+        A Aferi Capital é não-custodial: o dinheiro vai da sua carteira para contratos públicos e auditáveis na BNB Chain — nunca para uma conta da empresa durante a captação.
       </SectionTitle>
 
       <div className="mt-10 grid gap-6 lg:grid-cols-3">
@@ -78,7 +78,7 @@ export default function SegurancaPage() {
 
       <div className="mt-6">
         <Notice tone="warning" title="Regras de ouro">
-          Ninguém da UFV Invest vai pedir sua frase de recuperação (seed) ou chave privada — nunca. Confira se o endereço do site está correto antes de conectar,
+          Ninguém da Aferi Capital vai pedir sua frase de recuperação (seed) ou chave privada — nunca. Confira se o endereço do site está correto antes de conectar,
           confira o endereço do contrato no BscScan antes de assinar e revise aprovações antigas periodicamente (ex.: revoke.cash).
         </Notice>
       </div>

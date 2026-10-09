@@ -1,5 +1,5 @@
 /**
- * Modelo de geração fotovoltaica da UFV Invest.
+ * Modelo de geração fotovoltaica da Aferi Capital.
  *
  * API pública:
  *  - simulateGeneration(plant, resource, pvgis?) → GenerationResult (P50/P75/P90/P99, PR, cascata de perdas…)

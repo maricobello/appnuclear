@@ -1,16 +1,17 @@
 /**
  * Tema dos gráficos (canvas → hex). Paleta validada contra a superfície branca (skill dataviz):
- * série principal âmbar #c07f00, secundária azul #2a78d6, negativo #e34948.
+ * série principal azul #2a78d6, secundária verde #15803d (marca Aferi), negativo #e34948.
  */
 export const C = {
   surface: "#ffffff",
   grid: "#e6ebf1",
   axis: "#cbd5e1",
-  ink: "#0b1b2b",
-  ink2: "#33475b",
-  muted: "#64748b",
-  s1: "#c07f00",
-  s2: "#2a78d6",
+  ink: "#0f2a44",
+  ink2: "#3c5065",
+  muted: "#5b6b7c",
+  s1: "#2a78d6",
+  s2: "#15803d",
+  s1Light: "#9cc3ef",
   neg: "#e34948",
 };
 

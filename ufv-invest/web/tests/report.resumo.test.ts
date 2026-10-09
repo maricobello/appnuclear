@@ -34,8 +34,8 @@ describe("renderAuditReport — resumo (padrão)", () => {
     const { bytes, doc } = await renderResumo(analysisFixture, onChainFixture);
     expect(doc.getPageCount()).toBeGreaterThanOrEqual(3);
     expect(doc.getPageCount()).toBeLessThanOrEqual(4);
-    expect(doc.getTitle()).toBe("Relatório de Auditoria — UFV Janaúba I");
-    expect(doc.getAuthor()).toBe("UFV Invest");
+    expect(doc.getTitle()).toBe("Relatório de Auditoria — Usina Janaúba I");
+    expect(doc.getAuthor()).toBe("Aferi Capital");
     expect(doc.getSubject()).toContain("resumo para o investidor");
     expect(doc.getKeywords()).toContain(analysisFixture.dataHash);
     expect(doc.getKeywords()).toContain("versao:resumo");
@@ -99,17 +99,19 @@ describe("simulação do investidor (resumo)", () => {
   it.each(plants.map((p) => p.slug))("valores finais batem com finance.benchmarks × 10 (%s)", (slug) => {
     const a = analysisFixturesBySlug[slug];
     const c = buildInvestmentComparison(a, 10_000);
-    expect(c.investedBRL).toBe(10_000);
-    expect(c.cotas).toBe(10_000 / a.plant.token.cotaPriceBRL);
+    const price = a.plant.token.cotaPriceBRL;
+    expect(c.cotas).toBe(Math.floor(10_000 / price));
+    expect(c.investedBRL).toBe(c.cotas * price);
+    const k = c.investedBRL / 1000;
     expect(c.years).toBe(a.plant.finance.horizonYears);
     for (const s of c.series) {
       expect(s.values).toHaveLength(c.years + 1);
       expect(s.benchmarkFinalBRL).not.toBeNull();
       const b = findBenchmark(a.finance.benchmarks, s.key)!;
-      expect(Math.abs(s.finalBRL - b.finalValueOf1000BRL * 10) / (b.finalValueOf1000BRL * 10)).toBeLessThan(0.01);
+      expect(Math.abs(s.finalBRL - b.finalValueOf1000BRL * k) / (b.finalValueOf1000BRL * k)).toBeLessThan(0.01);
     }
     expect(c.series.find((s) => s.key === "usina")!.values[0]).toBe(0);
-    expect(c.series.find((s) => s.key === "cdi")!.values[0]).toBe(10_000);
+    expect(c.series.find((s) => s.key === "cdi")!.values[0]).toBe(c.investedBRL);
   });
 
   it("renda e payback proporcionais ao fluxo P50", () => {
@@ -127,9 +129,10 @@ describe("simulação do investidor (resumo)", () => {
   });
 
   it("aporte que não divide o preço da cota usa cotas inteiras", () => {
-    const c = buildInvestmentComparison(analysisFixture, 10_050);
-    expect(c.cotas).toBe(100);
-    expect(c.investedBRL).toBe(10_000);
+    const price = analysisFixture.plant.token.cotaPriceBRL;
+    const c = buildInvestmentComparison(analysisFixture, 10 * price + price / 2);
+    expect(c.cotas).toBe(10);
+    expect(c.investedBRL).toBe(10 * price);
   });
 
   it("manchete contra a Selic e o CDI líquido", () => {

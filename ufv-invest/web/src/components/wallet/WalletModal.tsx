@@ -128,7 +128,7 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
         <div className="mt-5 flex gap-3 rounded-xl border border-good/25 bg-good/5 p-3 text-[12px] text-ink-2">
           <ShieldCheck className="mt-0.5 size-4 shrink-0 text-good" />
           <div>
-            <b className="text-ink">Segurança:</b> a UFV Invest nunca pede sua frase de recuperação (seed) nem chave privada. Para valores altos, use
+            <b className="text-ink">Segurança:</b> a Aferi Capital nunca pede sua frase de recuperação (seed) nem chave privada. Para valores altos, use
             uma carteira de hardware (Ledger/Trezor) conectada à Rabby ou MetaMask. Confira sempre o endereço do contrato antes de assinar.
           </div>
         </div>

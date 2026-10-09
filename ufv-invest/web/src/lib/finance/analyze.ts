@@ -99,7 +99,22 @@ export function analyzeFinance(plant: Plant, generation: GenerationResult, marke
     seed,
   });
 
+  // cenários de geração para o investidor: conservador (P90), base (P50) e otimista (simétrico ao P90)
+  const p90Ratio = generation.annualP50MWh > 0 ? generation.p90MWh / generation.annualP50MWh : 0.9;
+  const scenarios = (
+    [
+      ["conservador", p90Ratio],
+      ["base", 1],
+      ["otimista", 2 - p90Ratio],
+    ] as const
+  ).map(([name, mult]) => {
+    const sf = buildCashFlows(plant, { ...base, energyMWh: energy.map((e) => e * mult) }).flows;
+    const dist = sf.slice(1).reduce((a, x) => a + x, 0);
+    return { name, energyMult: mult, irrNominalPct: irr(sf) ?? NaN, avgMonthlyPerCotaBRL: dist / N / 12 / totalCotas };
+  });
+
   return {
+    scenarios,
     investmentBRL: investment,
     capexBRL: cf.capexBRL,
     discountRatePct,

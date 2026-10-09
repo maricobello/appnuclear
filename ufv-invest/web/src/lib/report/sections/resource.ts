@@ -110,7 +110,7 @@ export function renderResource(ctx: ReportContext): void {
       barChart(l, { x, y: l.y, w: colW, h: chartH }, {
         categories: MONTHS_SHORT.map((m) => m.slice(0, 1).toUpperCase()),
         series: [
-          { name: "Modelo UFV Invest", values: model, color: C.amber },
+          { name: "Modelo Aferi Capital", values: model, color: C.amber },
           { name: "PVGIS", values: pv.monthlyKWhPerKWp, color: C.navy2 },
         ],
         yFormat: (v) => fmtNum(v, 0),

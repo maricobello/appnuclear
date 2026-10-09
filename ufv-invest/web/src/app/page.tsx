@@ -1,427 +1,188 @@
+import Image from "next/image";
 import Link from "next/link";
-import { ArrowRight, Banknote, CloudSun, Database, FileCheck2, Fingerprint, Landmark, LineChart, Lock, MapPin, ShieldCheck, Sun, Undo2, Wallet } from "lucide-react";
+import { ArrowRight, Leaf, MapPin, Percent, Receipt, Sun, Users, Zap } from "lucide-react";
 import { getAllAnalyses, summarize } from "@/lib/analysis";
-import { brl, brlCompact, num, pct } from "@/lib/fmt";
-import { buttonClass, Container, cx } from "@/components/ui";
-import { PlantArt } from "@/components/landing/PlantArt";
-import { Showcase } from "@/components/showcase/Showcase";
-import { ShowcaseCard } from "@/components/showcase/ShowcaseCard";
-import { OfferProgress } from "@/components/showcase/OfferProgress";
-import { BentoCard, BentoGrid, BorderBeam, DotPattern, Marquee, ShinyText } from "@/components/magicui";
-import { NumberTicker } from "@/components/magicui/NumberTicker";
+import { brl, num, pct } from "@/lib/fmt";
+import { buttonClass, Container, cx, IconBubble, StatusChip } from "@/components/ui";
+import { PlantCard, mwp } from "@/components/aferi/PlantCard";
+import { SoldGauge } from "@/components/aferi/Sold";
+import { PhotoPlaceholder } from "@/components/aferi/PhotoPlaceholder";
 
 const steps = [
-  { icon: Wallet, title: "Conecte a carteira", text: "Binance Wallet, MetaMask, Rabby ou WalletConnect. A custódia é sua; nunca pedimos a frase de recuperação." },
-  { icon: Fingerprint, title: "Valide a identidade", text: "KYC uma única vez. Sua carteira entra no registro de investidores habilitados do contrato." },
-  { icon: Banknote, title: "Reserve cotas em USDT", text: "O valor fica em custódia no contrato. Cada aporte pode ser desistido em até 5 dias." },
-  { icon: Sun, title: "Receba a renda", text: "A receita líquida da usina é distribuída em USDT, na proporção das suas cotas." },
-];
-
-const sources = ["NASA POWER", "PVGIS · Comissão Europeia", "Banco Central do Brasil", "Relatório Focus", "IBGE", "Open-Meteo", "BNB Smart Chain", "OpenZeppelin"];
-
-const faq = [
-  {
-    q: "O que eu compro ao investir?",
-    a: "Uma cota digital (token BEP-20, sem casas decimais) que representa participação econômica na SPE dona da usina. Ela só circula entre carteiras com KYC aprovado.",
-  },
-  {
-    q: "De onde vem o rendimento?",
-    a: "A usina gera créditos de energia na distribuidora (geração compartilhada, Lei 14.300/2022), cedidos a assinantes com desconto na conta de luz. A receita, menos O&M, seguro, arrendamento, gestão e impostos, é distribuída aos cotistas.",
-  },
-  {
-    q: "Como a rentabilidade se compara à Selic?",
-    a: "Cada usina mostra a TIR projetada (cenário P50) ao lado da Selic do dia, lida no Banco Central. O relatório em PDF traz a simulação de R$ 10.000 contra Selic/CDI, Tesouro IPCA+ e Poupança no mesmo prazo.",
-  },
-  {
-    q: "Os números são reais?",
-    a: "Recurso solar, clima, município e taxas vêm de APIs públicas, com a fonte de cada valor indicada. As usinas desta demonstração são projetos ilustrativos: engenharia e CAPEX são hipóteses de mercado.",
-  },
-  {
-    q: "Posso desistir depois de investir?",
-    a: "Sim: cada aporte pode ser desistido em até 5 dias, com devolução integral pelo contrato. Se a oferta não atingir a meta mínima, todo o valor é devolvido.",
-  },
-  {
-    q: "Isso é regulado?",
-    a: "No Brasil, ofertas públicas de valores mobiliários exigem registro ou dispensa na CVM. Para investidores reais, a oferta deve passar por plataforma autorizada (Resolução CVM 88). Esta versão roda na testnet.",
-  },
+  { n: 1, title: "Explore os ativos", text: "Compare usinas por local, potência e rentabilidade." },
+  { n: 2, title: "Analise os dados", text: "Geração, riscos e relatório de auditoria abertos." },
+  { n: 3, title: "Confira as condições", text: "Valor da cota, prazos e regras da oferta." },
+  { n: 4, title: "Invista e acompanhe", text: "Receba a renda e acompanhe no seu portfólio." },
 ];
 
 export default async function Home() {
-  const analyses = await getAllAnalyses();
-  const all = analyses.map(summarize);
-  const featured = [...all].sort((a, b) => Number(b.status === "captacao") - Number(a.status === "captacao") || b.irrNominalPct - a.irrNominalPct)[0];
-  const fa = analyses.find((a) => a.plant.slug === featured?.slug);
-
-  const totalKWp = all.reduce((s, x) => s + x.dcKWp, 0);
-  const totalMWh = all.reduce((s, x) => s + x.p50MWh, 0);
-  const totalCo2 = all.reduce((s, x) => s + x.co2, 0);
-  const totalRaise = all.reduce((s, x) => s + x.investmentBRL, 0);
-  const minTicket = Math.min(...all.map((x) => x.minInvestmentBRL));
-  const selic = fa?.market.selicPct ?? featured?.selicPct ?? 0;
-
-  const cards = Object.fromEntries(all.map((s, i) => [s.slug, <ShowcaseCard key={s.slug} s={s} priority={i === 0} />]));
-
-  // taxas anuais para a comparação com a Selic (usina = TIR nominal P50)
-  const cdiNet = fa?.finance.benchmarks.find((b) => b.name.startsWith("CDI"));
-  const tesouro = fa?.finance.benchmarks.find((b) => b.name.startsWith("Tesouro"));
-  const poup = fa?.finance.benchmarks.find((b) => b.name.startsWith("Poupan"));
-  const rates = fa
-    ? [
-        { label: fa.plant.name, sub: "TIR nominal P50 projetada", v: fa.finance.irrNominalPct, plant: true },
-        { label: "Selic (meta)", sub: "Banco Central, hoje", v: selic },
-        ...(cdiNet ? [{ label: "CDI médio no prazo", sub: "convergindo ao juro neutro", v: cdiNet.annualPct }] : []),
-        ...(tesouro ? [{ label: "Tesouro IPCA+", sub: "juro real + IPCA de longo prazo", v: tesouro.annualPct }] : []),
-        ...(poup ? [{ label: "Poupança", sub: "regra da Lei 12.703", v: poup.annualPct }] : []),
-      ]
-    : [];
-  const rateMax = Math.max(1, ...rates.map((r) => r.v));
-  const reinvested = fa?.finance.benchmarks.find((b) => /reinvest/i.test(b.name));
-  const cdiFinal = cdiNet?.finalValueOf1000BRL;
+  const all = (await getAllAnalyses()).map(summarize);
+  const featured = all.find((s) => s.status === "operacao") ?? all[0];
+  const highlights = all.filter((s) => s.status !== "encerrada").slice(0, 4);
+  const totalMWp = all.reduce((s, x) => s + x.dcKWp, 0) / 1000;
+  const totalCotas = all.reduce((s, x) => s + x.totalCotas, 0);
+  const totalGWh = all.reduce((s, x) => s + x.p50MWh, 0) / 1000;
 
   return (
     <>
-      {/* HERO */}
-      <section className="relative overflow-hidden border-b border-line bg-surface">
-        <div className="hero-glow absolute inset-0" aria-hidden />
-        <DotPattern />
-        <Container className="relative grid items-center gap-14 py-16 sm:py-20 lg:grid-cols-[1.05fr_1fr] lg:py-24">
-          <div>
-            {featured && (
-              <Link
-                href={`/usinas/${featured.slug}`}
-                className="inline-flex items-center gap-2 rounded-full border border-line-strong bg-surface px-3 py-1 text-[13px] font-medium shadow-sm transition hover:border-sun"
-              >
-                <span className="relative flex size-2">
-                  <span className="absolute inline-flex size-full animate-ping rounded-full bg-sun opacity-60" />
-                  <span className="relative inline-flex size-2 rounded-full bg-sun" />
-                </span>
-                <ShinyText>Captação aberta · {featured.name}</ShinyText>
-                <ArrowRight className="size-3.5 text-muted" />
-              </Link>
-            )}
-            <h1 className="mt-6 text-[40px] font-semibold leading-[1.05] tracking-[-0.03em] text-ink [text-wrap:balance] sm:text-[56px] lg:text-[64px]">
-              Invista em usinas solares. <span className="text-muted">Receba a renda da energia.</span>
+      {/* ─── Herói ─── */}
+      <section className="relative overflow-hidden">
+        <div className="absolute inset-0">
+          <div className="absolute inset-0 bg-[radial-gradient(60rem_30rem_at_85%_10%,rgba(34,181,115,0.14),transparent_60%),radial-gradient(50rem_26rem_at_0%_100%,rgba(42,120,214,0.08),transparent_60%)]" />
+          <div className="dot-pattern absolute inset-0 opacity-60" />
+        </div>
+        <Container className="relative grid items-center gap-10 pb-24 pt-14 sm:pt-20 lg:grid-cols-[1.1fr_0.9fr] lg:pb-32 lg:pt-24">
+          <div className="max-w-xl">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.16em] text-good">Investimentos em energia solar</p>
+            <h1 className="mt-4 text-[40px] font-bold leading-[1.05] tracking-tight text-navy sm:text-[56px]">
+              Energia limpa,
+              <br />
+              <span className="text-[#16a34a]">rendimentos reais.</span>
             </h1>
-            <p className="mt-6 max-w-xl text-[17px] leading-relaxed text-ink-2">
-              Cotas a partir de <b className="font-semibold text-ink">{brl(minTicket, 0)}</b> em usinas fotovoltaicas no Brasil, com contratos na BNB Chain, custódia até o fim da captação e relatório
-              de auditoria verificável.
+            <p className="mt-5 max-w-md text-[17px] leading-relaxed text-ink-2">
+              Invista em usinas solares de forma simples, segura e transparente. Acompanhe seus ativos e faça parte da transição energética.
             </p>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link href="#vitrine" className={cx(buttonClass.primary, "shimmer-btn px-5 py-3 text-[15px]")}>
-                Ver oportunidades <ArrowRight className="size-4" />
+              <Link href="/usinas" className={cx(buttonClass.primary, "px-5 py-3 text-[15px]")}>
+                Explorar usinas <ArrowRight className="size-4" />
               </Link>
-              {featured && (
-                <Link href={`/usinas/${featured.slug}#investir`} className={cx(buttonClass.secondary, "px-5 py-3 text-[15px]")}>
-                  Simular investimento
-                </Link>
-              )}
+              <Link href="/como-funciona" className={cx(buttonClass.secondary, "px-5 py-3 text-[15px]")}>
+                Como funciona
+              </Link>
             </div>
-            {featured && (
-              <dl className="mt-10 grid max-w-lg grid-cols-3 gap-6 border-t border-line pt-6">
-                <div>
-                  <dt className="text-[12px] text-muted">TIR alvo</dt>
-                  <dd className="mt-1 text-[24px] font-semibold tracking-tight tnum">
-                    <NumberTicker value={featured.irrNominalPct} decimals={1} suffix="%" />
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[12px] text-muted">Selic hoje</dt>
-                  <dd className="mt-1 text-[24px] font-semibold tracking-tight text-muted tnum">
-                    <NumberTicker value={selic} decimals={2} suffix="%" />
-                  </dd>
-                </div>
-                <div>
-                  <dt className="text-[12px] text-muted">Investimento mínimo</dt>
-                  <dd className="mt-1 text-[24px] font-semibold tracking-tight tnum">{brl(minTicket, 0)}</dd>
-                </div>
-              </dl>
-            )}
           </div>
 
           {featured && (
-            <div className="relative mx-auto w-full max-w-[520px]">
-              <div className="relative rounded-3xl border border-line bg-surface p-3 shadow-[0_30px_80px_-30px_rgba(15,30,50,0.35)]">
-                <BorderBeam />
-                <Link href={`/usinas/${featured.slug}`} className="group block overflow-hidden rounded-2xl">
-                  {featured.cover ? (
-                    // eslint-disable-next-line @next/next/no-img-element -- capa estática em /public
-                    <img src={featured.cover} alt={`${featured.illustrative ? "Ilustração" : "Vista"} da ${featured.name}`} className="aspect-[16/9] w-full object-cover" />
-                  ) : (
-                    <PlantArt slug={featured.slug} mounting={featured.mounting} title={`Ilustração da ${featured.name}`} className="aspect-[16/9] w-full transition duration-700 group-hover:scale-[1.03]" />
-                  )}
-                </Link>
-                <div className="px-3 pb-3 pt-5">
-                  <div className="flex items-start justify-between gap-3">
-                    <div>
-                      <div className="text-[19px] font-semibold tracking-tight">{featured.name}</div>
-                      <div className="mt-0.5 flex items-center gap-1 text-[13px] text-muted">
-                        <MapPin className="size-3.5" /> {featured.municipio}/{featured.uf} · {num(featured.dcKWp / 1000, 2)} MWp
-                      </div>
+            <Link
+              href={`/usinas/${featured.slug}`}
+              className="group mx-auto block w-full max-w-sm rounded-2xl bg-white p-3 shadow-[0_24px_60px_-20px_rgba(15,42,68,0.45)] ring-1 ring-black/5 transition hover:-translate-y-1 lg:ml-auto lg:mr-4"
+            >
+              <div className="relative aspect-[16/9] overflow-hidden rounded-xl bg-surface-3">
+                {featured.cover ? <Image src={featured.cover} alt={`Foto da ${featured.name}`} fill sizes="380px" className="object-cover" priority /> : <PhotoPlaceholder />}
+              </div>
+              <div className="px-2 pb-2 pt-3">
+                <div className="flex items-start justify-between gap-2">
+                  <div>
+                    <div className="text-[16px] font-semibold text-ink group-hover:text-brand">{featured.name}</div>
+                    <div className="mt-0.5 flex items-center gap-1 text-[12px] text-muted">
+                      <MapPin className="size-3.5" /> {featured.municipio} - {featured.uf}
                     </div>
-                    <span className="rounded-full bg-sun px-2.5 py-1 text-[11px] font-semibold text-ink">Em captação</span>
                   </div>
-
-                  <div className="mt-5 space-y-2.5">
-                    {[
-                      { k: "Usina (TIR P50)", v: featured.irrNominalPct, c: "bg-gradient-to-r from-[#f5a524] to-[#e08600]" },
-                      { k: "Selic", v: selic, c: "bg-[#94a3b8]" },
-                    ].map((r) => (
-                      <div key={r.k} className="grid grid-cols-[96px_1fr_56px] items-center gap-3 text-[13px]">
-                        <span className="text-ink-2">{r.k}</span>
-                        <div className="h-2 rounded-full bg-surface-3">
-                          <div className={cx("h-full rounded-full", r.c)} style={{ width: `${(r.v / Math.max(featured.irrNominalPct, selic)) * 100}%` }} />
-                        </div>
-                        <span className="text-right font-semibold tnum">{pct(r.v, 1)}</span>
-                      </div>
-                    ))}
+                  <StatusChip status={featured.status} />
+                </div>
+                <div className="mt-4 grid grid-cols-2 gap-x-4 gap-y-4">
+                  <div className="flex items-start gap-2.5">
+                    <IconBubble className="size-8">
+                      <Zap className="size-4" />
+                    </IconBubble>
+                    <div className="flex flex-col-reverse">
+                      <p className="text-[11px] text-muted">Potência instalada</p>
+                      <p className="text-[15px] font-semibold text-ink tnum">{mwp(featured.dcKWp)}</p>
+                    </div>
                   </div>
-
-                  <dl className="mt-5 grid grid-cols-3 gap-3 rounded-xl bg-surface-2 p-3 text-[13px]">
-                    <div>
-                      <dt className="text-[11px] text-muted">Renda/cota/mês</dt>
-                      <dd className="font-semibold tnum">{brl(featured.monthlyPerCotaBRL)}</dd>
+                  <div className="flex items-start gap-2.5">
+                    <IconBubble className="size-8">
+                      <Receipt className="size-4" />
+                    </IconBubble>
+                    <div className="flex flex-col-reverse">
+                      <p className="text-[11px] text-muted">Valor da cota</p>
+                      <p className="text-[15px] font-semibold text-ink tnum">{brl(featured.cotaPriceBRL, 0)}</p>
                     </div>
-                    <div>
-                      <dt className="text-[11px] text-muted">Payback</dt>
-                      <dd className="font-semibold tnum">{featured.paybackYears != null ? `${num(featured.paybackYears, 1)} anos` : "—"}</dd>
-                    </div>
-                    <div>
-                      <dt className="text-[11px] text-muted">Geração P50</dt>
-                      <dd className="font-semibold tnum">{num(featured.p50MWh / 1000, 1)} GWh</dd>
-                    </div>
-                  </dl>
-                  <div className="mt-4">
-                    <OfferProgress slug={featured.slug} status={featured.status} totalCotas={featured.totalCotas} softCapCotas={featured.softCapCotas} offeringStart={featured.offeringStart} offeringEnd={featured.offeringEnd} />
                   </div>
+                  <div className="flex items-start gap-2.5">
+                    <IconBubble className="size-8">
+                      <Percent className="size-4" />
+                    </IconBubble>
+                    <div className="flex flex-col-reverse">
+                      <p className="text-[11px] text-muted">Rentabilidade estimada</p>
+                      <p className="text-[15px] font-semibold text-ink tnum">{pct(featured.irrNominalPct)} a.a.</p>
+                    </div>
+                  </div>
+                  <SoldGauge slug={featured.slug} total={featured.totalCotas} demoSold={featured.demoSoldCotas} status={featured.status} size={48} />
                 </div>
               </div>
-
-              {featured.forecastNextMWh != null && featured.forecastNextMWh > 0 && (
-                <div className="absolute -bottom-6 -left-6 hidden items-center gap-3 rounded-2xl border border-line bg-surface/95 px-4 py-3 shadow-xl backdrop-blur sm:flex">
-                  <span className="flex size-9 items-center justify-center rounded-xl bg-brand-soft text-brand">
-                    <CloudSun className="size-5" />
-                  </span>
-                  <div>
-                    <div className="text-[11px] text-muted">Previsão de geração amanhã</div>
-                    <div className="text-[16px] font-semibold tnum">{num(featured.forecastNextMWh, 1)} MWh</div>
-                  </div>
-                </div>
-              )}
-            </div>
+            </Link>
           )}
         </Container>
       </section>
 
-      {/* FONTES DE DADOS (marquee) */}
-      <section className="border-b border-line bg-surface py-6">
-        <Container className="flex flex-col items-center gap-4 sm:flex-row">
-          <span className="shrink-0 text-[12px] font-medium uppercase tracking-[0.14em] text-muted">Dados e infraestrutura</span>
-          <Marquee className="w-full">
-            {sources.map((s) => (
-              <span key={s} className="flex items-center gap-2 whitespace-nowrap text-[15px] font-semibold text-ink-2/70">
-                <Database className="size-4 text-muted" /> {s}
-              </span>
-            ))}
-          </Marquee>
-        </Container>
-      </section>
-
-      {/* NÚMEROS */}
-      <section className="bg-page">
-        <Container className="grid grid-cols-2 gap-8 py-14 lg:grid-cols-4">
+      {/* ─── Números ─── */}
+      <Container className="relative z-10 -mt-14">
+        <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl bg-line shadow-[0_12px_40px_-16px_rgba(15,42,68,0.25)] ring-1 ring-line lg:grid-cols-4">
           {[
-            { k: "Potência na vitrine", node: <NumberTicker value={totalKWp / 1000} decimals={1} suffix=" MWp" /> },
-            { k: "Geração anual (P50)", node: <NumberTicker value={totalMWh / 1000} decimals={1} suffix=" GWh" /> },
-            { k: "Volume de captação", node: <NumberTicker value={totalRaise / 1e6} decimals={1} prefix="R$ " suffix=" mi" /> },
-            { k: "CO₂ evitado por ano", node: <NumberTicker value={totalCo2} suffix=" t" /> },
-          ].map((m) => (
-            <div key={m.k} className="border-l border-line-strong pl-5">
-              <div className="text-[30px] font-semibold tracking-tight tnum sm:text-[34px]">{m.node}</div>
-              <div className="mt-1 text-[13px] text-muted">{m.k}</div>
+            { icon: <Sun className="size-5" />, value: num(all.length), label: "Usinas cadastradas" },
+            { icon: <Zap className="size-5" />, value: `${num(totalMWp, 1)} MWp`, label: "Capacidade instalada" },
+            { icon: <Users className="size-5" />, value: num(totalCotas), label: "Cotas disponibilizadas" },
+            { icon: <Leaf className="size-5" />, value: `${num(totalGWh, 1)} GWh`, label: "Energia limpa por ano (P50)" },
+          ].map((s) => (
+            <div key={s.label} className="flex items-center gap-4 bg-white px-5 py-5 sm:px-6">
+              <IconBubble>{s.icon}</IconBubble>
+              <div className="flex min-w-0 flex-col-reverse">
+                <p className="text-[12px] text-muted">{s.label}</p>
+                <p className="text-[22px] font-bold text-ink tnum sm:text-[24px]">{s.value}</p>
+              </div>
             </div>
           ))}
-        </Container>
-      </section>
+        </div>
+      </Container>
 
-      {/* SELIC × USINA */}
-      {fa && rates.length > 0 && (
-        <section className="border-y border-line bg-surface py-20">
-          <Container className="grid items-center gap-12 lg:grid-cols-[1fr_1.1fr]">
+      {/* ─── Oportunidades ─── */}
+      <Container className="mt-16">
+        <div className="flex items-end justify-between gap-4">
+          <h2 className="text-[24px] font-bold tracking-tight text-navy">Oportunidades em destaque</h2>
+          <Link href="/usinas" className="inline-flex shrink-0 items-center gap-1 text-[14px] font-semibold text-good hover:underline">
+            Ver todas as usinas <ArrowRight className="size-4" />
+          </Link>
+        </div>
+        <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
+          {highlights.map((s) => (
+            <PlantCard key={s.slug} s={s} />
+          ))}
+        </div>
+      </Container>
+
+      {/* ─── Como funciona ─── */}
+      <Container className="mt-16">
+        <section className="relative overflow-hidden rounded-2xl text-white">
+          <div className="absolute inset-0 bg-[linear-gradient(120deg,#0f2a44_0%,#123a5c_60%,#0f4a46_100%)]" />
+          <div className="relative grid gap-8 p-8 sm:p-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
             <div>
-              <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand">Energia solar × Selic</div>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight [text-wrap:balance] sm:text-[42px] sm:leading-[1.1]">
-                {pct(fa.finance.irrNominalPct - selic, 1)} acima da Selic, com lastro em um ativo real.
-              </h2>
-              <p className="mt-4 text-[16px] leading-relaxed text-ink-2">
-                A Selic de hoje ({pct(selic, 2)} a.a., Banco Central) ao lado da TIR projetada da {fa.plant.name}. No prazo de {fa.plant.finance.horizonYears} anos, R$ 10.000 com a renda reinvestida
-                no CDI chegariam a <b className="text-ink">{reinvested ? brl(reinvested.finalValueOf1000BRL * 10, 0) : "—"}</b>, contra{" "}
-                <b className="text-ink">{cdiFinal ? brl(cdiFinal * 10, 0) : "—"}</b> aplicando tudo direto no CDI.
+              <h2 className="text-[26px] font-bold tracking-tight">Como funciona?</h2>
+              <p className="mt-3 max-w-sm text-[15px] leading-relaxed text-white/80">
+                Em poucos passos você pode investir em usinas solares e receber distribuições mensais.
               </p>
-              <div className="mt-7 flex flex-wrap gap-3">
-                <a href={`/api/usinas/${fa.plant.slug}/relatorio`} className={buttonClass.primary}>
-                  <FileCheck2 className="size-4" /> Baixar o relatório (PDF)
-                </a>
-                <Link href={`/usinas/${fa.plant.slug}#economia`} className={buttonClass.secondary}>
-                  Ver a análise completa
-                </Link>
-              </div>
+              <Link href="/como-funciona" className={cx(buttonClass.primary, "mt-6")}>
+                Entenda o processo <ArrowRight className="size-4" />
+              </Link>
             </div>
-            <div className="rounded-2xl border border-line bg-surface p-6 shadow-sm sm:p-8">
-              <div className="flex items-baseline justify-between text-[13px] text-muted">
-                <span>Rentabilidade anual</span>
-                <span>% a.a.</span>
-              </div>
-              <ul className="mt-5 space-y-5">
-                {rates.map((r) => (
-                  <li key={r.label}>
-                    <div className="flex items-baseline justify-between gap-3">
-                      <div>
-                        <div className={cx("text-[15px]", r.plant ? "font-semibold text-ink" : "text-ink-2")}>{r.label}</div>
-                        <div className="text-[12px] text-muted">{r.sub}</div>
-                      </div>
-                      <div className={cx("text-[18px] font-semibold tnum", r.plant ? "text-brand" : "text-ink-2")}>{pct(r.v, r.v < 10 ? 2 : 1)}</div>
-                    </div>
-                    <div className="mt-2 h-2.5 rounded-full bg-surface-3">
-                      <div className={cx("h-full rounded-full", r.plant ? "bg-gradient-to-r from-[#f5a524] to-[#e08600]" : "bg-[#2a78d6]/70")} style={{ width: `${(r.v / rateMax) * 100}%` }} />
-                    </div>
-                  </li>
-                ))}
-              </ul>
-              <p className="mt-6 border-t border-line pt-4 text-[12px] text-muted">
-                Projeção do cenário P50, antes de impostos do investidor; não é garantia. Selic e CDI lidos no Banco Central (SGS); CDI e Tesouro como média do prazo.
-              </p>
-            </div>
-          </Container>
+            <ol className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              {steps.map((s) => (
+                <li key={s.n} className="rounded-xl bg-white/10 p-4 text-center ring-1 ring-white/15 backdrop-blur-sm">
+                  <span className="mx-auto flex size-9 items-center justify-center rounded-full bg-leaf text-[14px] font-bold text-navy">{s.n}</span>
+                  <div className="mt-3 text-[14px] font-semibold leading-snug">{s.title}</div>
+                  <p className="mt-1 text-[12px] leading-snug text-white/70">{s.text}</p>
+                </li>
+              ))}
+            </ol>
+          </div>
         </section>
-      )}
+      </Container>
 
-      {/* VITRINE */}
-      <section id="vitrine" className="scroll-mt-24 bg-page py-20">
-        <Container>
-          <div className="flex flex-wrap items-end justify-between gap-6">
-            <div className="max-w-2xl">
-              <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand">Oportunidades</div>
-              <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[42px] sm:leading-[1.1]">Usinas disponíveis</h2>
-              <p className="mt-3 text-[16px] text-ink-2">Cada usina abre com geração mês a mês, cenários de risco, fluxo de caixa e o relatório de auditoria em PDF.</p>
+      {/* ─── Chamada final ─── */}
+      <Container className="mt-6">
+        <section className="relative overflow-hidden rounded-2xl text-white">
+          <div className="absolute inset-0 bg-[linear-gradient(110deg,#0b5a35_0%,#0e8441_55%,#22b573_100%)]" />
+          <div className="relative flex flex-wrap items-center justify-between gap-6 p-8 sm:p-10">
+            <div>
+              <h2 className="text-[26px] font-bold tracking-tight">Faça parte da transição energética.</h2>
+              <p className="mt-2 text-[15px] text-white/80">Investimentos em energia solar com propósito, tecnologia e transparência.</p>
             </div>
-            <Link href="/usinas" className={buttonClass.ghost}>
-              Todas as usinas <ArrowRight className="size-4" />
+            <Link href="/usinas" className={cx(buttonClass.primary, "px-5 py-3")}>
+              Explorar usinas <ArrowRight className="size-4" />
             </Link>
           </div>
-          <div className="mt-10">
-            <Showcase items={all} cards={cards} />
-          </div>
-          <p className="mt-6 text-[12px] text-muted">Projeções P50 de projetos ilustrativos, antes de impostos do investidor. Rentabilidade alvo não é garantia de resultado.</p>
-        </Container>
-      </section>
-
-      {/* COMO FUNCIONA */}
-      <section id="como-funciona" className="scroll-mt-24 border-y border-line bg-surface py-20">
-        <Container>
-          <div className="max-w-2xl">
-            <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand">Como funciona</div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[42px] sm:leading-[1.1]">Do sol à sua carteira, em quatro passos</h2>
-          </div>
-          <ol className="relative mt-12 grid gap-8 md:grid-cols-2 lg:grid-cols-4">
-            <div className="absolute left-0 right-0 top-6 hidden h-px bg-line-strong lg:block" aria-hidden />
-            {steps.map((s, i) => (
-              <li key={s.title} className="relative">
-                <span className="relative z-10 flex size-12 items-center justify-center rounded-2xl border border-line-strong bg-surface text-ink shadow-sm">
-                  <s.icon className="size-5" />
-                </span>
-                <div className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-muted">Passo {i + 1}</div>
-                <h3 className="mt-1 text-[18px] font-semibold tracking-tight">{s.title}</h3>
-                <p className="mt-2 text-[14px] leading-relaxed text-ink-2">{s.text}</p>
-              </li>
-            ))}
-          </ol>
-        </Container>
-      </section>
-
-      {/* CONFIANÇA — bento */}
-      <section className="bg-page py-20">
-        <Container>
-          <div className="max-w-2xl">
-            <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand">Confiança</div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[42px] sm:leading-[1.1]">Feito para ser verificado</h2>
-          </div>
-          <BentoGrid className="mt-10">
-            <BentoCard
-              className="md:col-span-2"
-              icon={<LineChart className="size-5" />}
-              title="Modelo de engenharia aberto"
-              text="Geração hora a hora com satélite da NASA, validação cruzada com o PVGIS (Comissão Europeia), cenários P50/P90 e Monte Carlo com 2.000 simulações."
-            >
-              <div className="dot-pattern absolute -right-10 -top-10 size-64 opacity-60" />
-            </BentoCard>
-            <BentoCard icon={<Undo2 className="size-5" />} title="Custódia com devolução" text="Na captação o dinheiro fica no contrato. Meta não atingida, devolução integral para cada investidor." />
-            <BentoCard icon={<FileCheck2 className="size-5" />} title="Relatório verificável" text="PDF com os dados anexados; o hash SHA-256 fica registrado no contrato e qualquer pessoa confere em /verificar." />
-            <BentoCard icon={<Landmark className="size-5" />} title="Comparado à Selic" text="Selic, CDI e IPCA lidos no Banco Central a cada análise; o retorno é sempre mostrado contra a renda fixa." />
-            <BentoCard icon={<ShieldCheck className="size-5" />} title="Contratos testados e imutáveis" text="OpenZeppelin v5, sem proxy de atualização, 137 testes e auditoria interna com provas de ataque." />
-            <BentoCard
-              className="md:col-span-3"
-              icon={<Lock className="size-5" />}
-              title="Conexão segura e não-custodial"
-              text="Descoberta de carteiras EIP-6963, login por assinatura (SIWE), aprovação no valor exato e simulação de cada transação antes de assinar. Toda reserva, distribuição e resgate é pública no BscScan."
-            />
-          </BentoGrid>
-        </Container>
-      </section>
-
-      {/* FAQ */}
-      <section className="border-t border-line bg-surface py-20">
-        <Container className="grid gap-10 lg:grid-cols-[1fr_1.4fr]">
-          <div>
-            <div className="text-[13px] font-semibold uppercase tracking-[0.14em] text-brand">Perguntas frequentes</div>
-            <h2 className="mt-3 text-3xl font-semibold tracking-tight sm:text-[42px] sm:leading-[1.1]">Antes de investir</h2>
-            <p className="mt-3 text-[15px] text-ink-2">
-              Veja também a página de{" "}
-              <Link href="/seguranca" className="font-medium text-ink underline underline-offset-4">
-                segurança
-              </Link>{" "}
-              e os riscos no relatório de cada usina.
-            </p>
-          </div>
-          <div className="divide-y divide-line rounded-2xl border border-line">
-            {faq.map((f) => (
-              <details key={f.q} className="group px-5 py-4">
-                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-[15px] font-medium">
-                  {f.q}
-                  <span className="text-[20px] leading-none text-muted transition group-open:rotate-45" aria-hidden>
-                    +
-                  </span>
-                </summary>
-                <p className="mt-3 text-[14px] leading-relaxed text-ink-2">{f.a}</p>
-              </details>
-            ))}
-          </div>
-        </Container>
-      </section>
-
-      {/* CTA FINAL */}
-      <section className="bg-surface pb-8">
-        <Container>
-          <div className="relative overflow-hidden rounded-3xl bg-ink px-6 py-16 text-center sm:px-12">
-            <BorderBeam />
-            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(40rem_20rem_at_50%_-10%,rgba(245,165,36,0.25),transparent_60%)]" aria-hidden />
-            <div className="relative">
-              <h2 className="mx-auto max-w-2xl text-3xl font-semibold tracking-tight text-white [text-wrap:balance] sm:text-[42px] sm:leading-[1.1]">
-                Comece com {brl(minTicket, 0)} e acompanhe cada kWh.
-              </h2>
-              <p className="mx-auto mt-4 max-w-xl text-[16px] text-white/70">Conecte a carteira, valide a identidade e reserve suas cotas em minutos.</p>
-              <div className="mt-8 flex flex-wrap justify-center gap-3">
-                <Link href="#vitrine" className="shimmer-btn inline-flex items-center gap-2 rounded-lg bg-white px-6 py-3 text-[15px] font-semibold text-ink transition hover:bg-white/90">
-                  Explorar usinas <ArrowRight className="size-4" />
-                </Link>
-                <Link href="/seguranca" className="inline-flex items-center gap-2 rounded-lg border border-white/20 px-6 py-3 text-[15px] font-semibold text-white transition hover:bg-white/10">
-                  Como protegemos você
-                </Link>
-              </div>
-              <p className="mx-auto mt-8 max-w-xl text-[12px] text-white/50">{brlCompact(totalRaise)} em captação na vitrine · contratos na BNB Smart Chain Testnet</p>
-            </div>
-          </div>
-        </Container>
-      </section>
+        </section>
+      </Container>
     </>
   );
 }

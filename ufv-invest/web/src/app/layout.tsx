@@ -12,10 +12,10 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: new URL(siteUrl),
-  title: { default: "UFV Invest — cotas tokenizadas de usinas solares", template: "%s · UFV Invest" },
+  title: { default: "Aferi Capital — invista em usinas solares", template: "%s · Aferi Capital" },
   description:
-    "Invista em usinas fotovoltaicas com cotas digitais na BNB Chain: análise P50/P90 com dados abertos (NASA POWER, PVGIS), TIR, VPL e Monte Carlo, relatório de auditoria em PDF verificável on-chain e receita distribuída em USDT.",
-  openGraph: { title: "UFV Invest", description: "Cotas tokenizadas de usinas solares na BNB Chain", type: "website", locale: "pt_BR" },
+    "Invista em usinas solares de forma simples, segura e transparente: cotas digitais na BNB Chain, análise P50/P90 com dados abertos (NASA POWER, PVGIS), TIR e Monte Carlo, relatório de auditoria verificável e distribuição mensal da receita.",
+  openGraph: { title: "Aferi Capital", description: "Energia limpa, rendimentos reais. Cotas de usinas solares.", type: "website", locale: "pt_BR", images: ["/images/hero.jpg"] },
 };
 
 export const viewport: Viewport = { themeColor: "#ffffff", colorScheme: "light" };
@@ -30,7 +30,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
             Pular para o conteúdo
           </a>
           <Header />
-          <main id="conteudo" className="flex-1">
+          <main id="conteudo" className="flex-1 bg-white">
             {children}
           </main>
           <Footer />

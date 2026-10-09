@@ -1,5 +1,5 @@
 /**
- * Fontes de dados públicos da UFV Invest — API pública do módulo.
+ * Fontes de dados públicos da Aferi Capital — API pública do módulo.
  *
  * Todas as funções rodam no servidor, nunca lançam exceção e devolvem procedência
  * (fonte, URL, horário, live/cache/fallback/error) para cada valor:

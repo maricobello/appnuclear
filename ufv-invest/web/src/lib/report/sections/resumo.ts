@@ -326,7 +326,14 @@ export function renderResumoPlant(ctx: ReportContext): void {
       { label: "Inversores", value: `${fmtNum(t.inverter.count, 0)} × ${t.inverter.model}` },
       { label: "Comissionamento", value: `${fmtDate(t.commissioning)} · ${STATUS_LABEL[p.status] ?? p.status}` },
       { label: "Fio B (Lei 14.300/2022)", value: fioBShortText(a) },
-      { label: "Área", value: `${fmtNum(t.landAreaHa, 1)} ha de terreno` },
+      { label: "Escala e área", value: `${p.commercial?.scale ?? (t.acKW <= 75 ? "Microgeração" : t.acKW <= 5000 ? "Minigeração" : "Grande porte")} · ${fmtNum(t.landAreaHa, 1)} ha` },
+      {
+        label: "Contrato de energia (PPA)",
+        value: p.commercial?.ppaActive
+          ? `Ativo${p.commercial.ppaCounterparty ? ` · ${p.commercial.ppaCounterparty}` : ""}${p.commercial.ppaEndDate ? ` · até ${fmtDate(p.commercial.ppaEndDate)}` : ""}`
+          : `Sem PPA ativo${p.commercial?.notes ? ` · ${p.commercial.notes}` : ""}`,
+      },
+      { label: "Preço de venda do ativo", value: `${fmtBRL(p.commercial?.askingPriceBRL ?? a.finance.investmentBRL, 0)} (${fmtBRL((p.commercial?.askingPriceBRL ?? a.finance.investmentBRL) / (t.dcKWp * 1000), 2)}/Wp)` },
     ],
     { cols: 2, after: 20, valueSize: 9 },
   );

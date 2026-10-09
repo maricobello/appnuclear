@@ -248,7 +248,7 @@ describe("analyzeFinance — caso-base das usinas de exemplo", () => {
     const get = (l: string) => f.assumptions.find((a) => a.label === l)?.value;
     expect(get("Tarifa B1 (com impostos)")).toBe("R$ 0,95/kWh");
     expect(get("Taxa de desconto nominal")).toMatch(/^14,80 % a\.a\./);
-    expect(get("Captação (cotas × preço)")).toBe("130.000 cotas × R$ 100,00 = R$ 13.000.000");
+    expect(get("Captação (cotas × preço)")).toBe("13.000 cotas × R$ 1.000,00 = R$ 13.000.000");
     expect(get("Fio B a partir de 2029")).toMatch(/100 %/);
     expect(f.assumptions.length).toBeGreaterThan(25);
   });

@@ -195,6 +195,25 @@ export function parseMonthlySeries(json: PowerResponse): { year: number; ghiKWhM
   return out;
 }
 
+/** Irradiação mês a mês (kWh/m²/dia) do último ano completo da série — base do "histórico" estimado */
+export function lastFullYearMonthly(json: PowerResponse): { year: number; ghiKWhM2Day: number[] } | undefined {
+  const values = json.properties.parameter.ALLSKY_SFC_SW_DWN;
+  if (!values) return undefined;
+  const fill = fillValue(json);
+  const factor = dailyIrradiationFactorToKWh(unitsOf(json, "ALLSKY_SFC_SW_DWN"));
+  const years = new Map<number, (number | undefined)[]>();
+  for (const [key, raw] of Object.entries(values)) {
+    const m = /^(\d{4})(\d{2})$/.exec(key);
+    if (!m || Number(m[2]) < 1 || Number(m[2]) > 12) continue;
+    const arr = years.get(Number(m[1])) ?? new Array<number | undefined>(12).fill(undefined);
+    const v = cleanFill(raw, fill);
+    arr[Number(m[2]) - 1] = v === undefined ? undefined : round(v * factor, 3);
+    years.set(Number(m[1]), arr);
+  }
+  const full = [...years.entries()].filter(([, a]) => a.every((v) => v !== undefined && v > 0)).sort((a, b) => b[0] - a[0]);
+  return full.length ? { year: full[0][0], ghiKWhM2Day: full[0][1] as number[] } : undefined;
+}
+
 /** CV interanual (%) da irradiação anual; exige ≥ 5 anos */
 export function interannualCvPct(series: { ghiKWhM2: number }[]): number {
   if (series.length < MIN_YEARS_FOR_CV) {
@@ -224,7 +243,7 @@ async function loadSeries(
   plant: Plant,
   endYear: number,
   opts: SourceOptions,
-): Promise<{ series: { year: number; ghiKWhM2: number }[]; cvPct: number; prov: Provenance }> {
+): Promise<{ series: { year: number; ghiKWhM2: number }[]; cvPct: number; prov: Provenance; lastYear?: { year: number; ghiKWhM2Day: number[] } }> {
   const { lat, lon } = plant.location;
   let url = nasaMonthlyUrl(lat, lon, NASA_SERIES_START_YEAR, endYear);
   let res: FetchJsonResult<PowerResponse>;
@@ -247,7 +266,7 @@ async function loadSeries(
     res,
     `${series.length} anos; média ${avg} kWh/m²/ano; CV ${cvPct.toFixed(2)} %`,
   );
-  return { series, cvPct, prov };
+  return { series, cvPct, prov, lastYear: lastFullYearMonthly(res.data) };
 }
 
 export async function getSolarResource(plant: Plant, opts: SourceOptions = {}): Promise<SolarResource> {
@@ -299,10 +318,12 @@ export async function getSolarResource(plant: Plant, opts: SourceOptions = {}): 
 
   let interannual: number;
   let annualSeries: SolarResource["annualSeries"];
+  let lastYear: SolarResource["lastYear"];
   let seriesProv: Provenance;
   if (seriesR.status === "fulfilled") {
     interannual = seriesR.value.cvPct;
     annualSeries = seriesR.value.series;
+    lastYear = seriesR.value.lastYear;
     seriesProv = seriesR.value.prov;
   } else {
     const reason = describeError(seriesR.reason);
@@ -323,6 +344,7 @@ export async function getSolarResource(plant: Plant, opts: SourceOptions = {}): 
     annualGhiKWhM2: annualFromMonthly(monthly.ghiKWhM2Day),
     interannualCvPct: interannual,
     ...(annualSeries ? { annualSeries } : {}),
+    ...(lastYear ? { lastYear } : {}),
     provenance: [climProv, seriesProv],
   };
 }

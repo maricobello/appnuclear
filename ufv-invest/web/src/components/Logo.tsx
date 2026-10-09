@@ -1,22 +1,21 @@
-export function LogoMark({ className = "size-7" }: { className?: string }) {
+/** Marca Aferi Capital: "A" geométrico com folha (energia limpa) */
+export function LogoMark({ className = "size-8", inverted = false }: { className?: string; inverted?: boolean }) {
   return (
-    <svg viewBox="0 0 32 32" className={className} aria-hidden>
-      <circle cx="16" cy="12" r="6" fill="#f5a524" />
-      <g stroke="#f5a524" strokeWidth="2" strokeLinecap="round">
-        <path d="M16 1.5v2.5M5.5 12H3M29 12h-2.5M8.6 4.6l1.7 1.7M23.4 4.6l-1.7 1.7" />
-      </g>
-      <path d="M4 22.5h24l-2.5 7h-19z" fill="#3987e5" />
-      <path d="M10.5 22.5l-1 7M16 22.5v7M21.5 22.5l1 7M5.2 26h21.6" stroke="#0c1219" strokeWidth="1.2" />
+    <svg viewBox="0 0 40 40" className={className} aria-hidden>
+      <path d="M20 3 4.5 36h7.2L20 17.6 28.3 36h7.2z" fill={inverted ? "#ffffff" : "#0f2a44"} />
+      <path d="M21.5 25.5c3.8-7.6 10.2-11 17-11.5-1.2 7.4-6.3 13.6-14.4 14.4-.9.1-1.8 0-2.6-.2z" fill="#22b573" />
+      <path d="M21.4 28c3.6-3.8 7.6-6.6 12.4-8.6" stroke="#ffffff" strokeWidth="1.2" strokeLinecap="round" fill="none" />
     </svg>
   );
 }
 
-export function Logo() {
+export function Logo({ inverted = false }: { inverted?: boolean }) {
   return (
     <span className="inline-flex items-center gap-2">
-      <LogoMark />
-      <span className="text-[17px] font-semibold tracking-tight text-ink">
-        UFV <span className="text-brand">Invest</span>
+      <LogoMark inverted={inverted} />
+      <span className="flex flex-col leading-none">
+        <span className={`text-[21px] font-bold tracking-tight ${inverted ? "text-white" : "text-navy"}`}>Aferi</span>
+        <span className="mt-0.5 text-[11px] font-semibold tracking-wide text-leaf">Capital</span>
       </span>
     </span>
   );

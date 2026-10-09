@@ -147,9 +147,9 @@ describe("renderAuditReport — versão completa", () => {
       expect(Math.round(p.getWidth())).toBe(595);
       expect(Math.round(p.getHeight())).toBe(842);
     }
-    expect(doc.getTitle()).toBe("Relatório de Auditoria — UFV Janaúba I");
-    expect(doc.getAuthor()).toBe("UFV Invest");
-    expect(doc.getSubject()).toContain("UFV Janaúba I");
+    expect(doc.getTitle()).toBe("Relatório de Auditoria — Usina Janaúba I");
+    expect(doc.getAuthor()).toBe("Aferi Capital");
+    expect(doc.getSubject()).toContain("Usina Janaúba I");
     expect(doc.getSubject()).toContain("Projeto ilustrativo");
     expect(doc.getCreationDate()?.toISOString()).toBe(NOW.toISOString());
     expect(doc.getKeywords()).toContain(analysisFixture.dataHash);
