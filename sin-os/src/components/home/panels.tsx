@@ -2,16 +2,16 @@
 
 import Link from "next/link";
 import { motion } from "motion/react";
-import { useMemo, useSyncExternalStore } from "react";
-import { ArrowUpRight, BatteryCharging, CircleCheck, Droplets, Gauge, ShieldCheck, TrendingUp, TriangleAlert, Zap } from "lucide-react";
+import { useMemo } from "react";
+import { ArrowUpRight, CircleCheck, Droplets, ShieldCheck, TrendingUp, TriangleAlert, Zap } from "lucide-react";
 import type { ChartOption } from "@/components/EChart";
 import { ChartFrame } from "@/components/EChart";
 import { Appear, EASE } from "@/components/motion";
 import { ConfidenceBar, Empty, MetricRow, sourceState, type DataState } from "@/components/ui";
-import type { AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp } from "@/lib/apiTypes";
+import type { AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
 import type { BessAsset } from "@/lib/asset";
 import { band, baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, tooltipTime, valueAxis } from "@/lib/chart";
-import { ago, brl, compact, nf, num, pct } from "@/lib/fmt";
+import { brl, compact, nf, num, pct } from "@/lib/fmt";
 import type { Opportunity } from "@/lib/market/opportunities";
 import { addDays, brtDate, brtHour } from "@/lib/sources/time";
 import { SUB_NAMES, SUBS, type Sub } from "@/lib/sources/types";
@@ -47,7 +47,7 @@ const lastAtOrBefore = (ts: number[], vals: (number | null)[], t: number) => {
 
 const hh = (t: number | null | undefined) => (t ? `${String(brtHour(t)).padStart(2, "0")}h` : "");
 
-export function buildKpis(br?: BrasilResp, clima?: ClimaResp, audit?: AuditoriaResp, now = Date.now()): KpiSpec[] {
+export function buildKpis(br?: BrasilResp, clima?: ClimaResp, renov?: RenovaveisResp, now = Date.now()): KpiSpec[] {
   const out: KpiSpec[] = [];
   const pldState = sourceState(br?.meta.pld, 2 * 3600_000, now);
   const pldSrc = br?.meta.pld.note?.startsWith("PLD oficial") ? "CCEE oficial" : br?.meta.pld.fallback ? "ONS · CMO→PLD" : "CCEE";
@@ -102,9 +102,9 @@ export function buildKpis(br?: BrasilResp, clima?: ClimaResp, audit?: AuditoriaR
     deltaTitle: "vs. mesma hora de ontem",
     spark: li >= 0 ? sin.slice(Math.max(0, li - 71), li + 1) : [],
     color: C.series[6],
-    state: sourceState(br?.meta.load, 6 * 3600_000, now),
+    state: sourceState(br?.meta.load, 54 * 3600_000, now), // carga verificada sai com ~1 dia de defasagem
     at: li >= 0 ? load!.ts[li] : null,
-    source: `ONS · verificada ${li >= 0 ? hh(load!.ts[li]) : "—"}`,
+    source: `ONS · verificada ${li >= 0 ? `${brtDate(load!.ts[li]).slice(8, 10)}/${brtDate(load!.ts[li]).slice(5, 7)} ${hh(load!.ts[li])}` : "—"}`,
     detail: br?.meta.load.fallback ?? br?.meta.load.error,
   });
   // reservatórios SE/CO
@@ -171,23 +171,22 @@ export function buildKpis(br?: BrasilResp, clima?: ClimaResp, audit?: AuditoriaR
     at: clima?.generatedAt,
     source: `Open-Meteo · ${sol?.names ?? "polo MG"}`,
   });
-  // saúde das APIs (agente auditor)
-  const run = audit?.latest;
-  const hist = audit?.history ?? [];
+  // corte de eólica + solar (ONS), último dia fechado
+  const cd = renov?.curtailment?.daily ?? [];
+  const dayTot = cd.map((x) => SUBS.reduce((a, sb) => a + x.eolica[sb] + x.solar[sb], 0) / 1000);
   out.push({
-    key: "api",
-    label: "Saúde das APIs",
-    value: run?.overallScore ?? null,
+    key: "curt",
+    label: "Corte eólica + solar",
+    value: dayTot.length ? dayTot[dayTot.length - 1] : null,
     format: (v) => n0.format(v),
-    unit: "/100",
-    delta: hist.length >= 2 ? hist[hist.length - 1].overallScore - hist[hist.length - 2].overallScore : null,
-    deltaSuffix: " pts",
-    deltaTitle: "vs. execução anterior",
-    spark: hist.slice(-30).map((h) => h.overallScore),
-    color: C.good,
-    state: run ? (now - run.startedAt > 25 * 3600_000 ? "STALE" : run.overallScore >= 70 ? "LIVE" : "FALLBACK") : null,
-    at: run?.startedAt,
-    source: run ? `${run.counts.ok} ok · ${run.counts.degraded} degr. · ${run.counts.down} fora · ${ago(run.startedAt)}` : "sem auditoria",
+    unit: "GWh/dia",
+    delta: dayTot.length >= 2 && dayTot[dayTot.length - 2] > 0 ? (100 * (dayTot[dayTot.length - 1] - dayTot[dayTot.length - 2])) / dayTot[dayTot.length - 2] : null,
+    deltaTitle: "vs. dia anterior",
+    spark: dayTot,
+    color: C.series[2],
+    state: sourceState(renov?.meta.curtailment, 54 * 3600_000, now),
+    at: renov?.meta.curtailment.latestTs,
+    source: cd.length ? `ONS · ${cd[cd.length - 1].date.slice(8, 10)}/${cd[cd.length - 1].date.slice(5, 7)} · constrained-off` : "ONS · constrained-off",
   });
   return out;
 }
@@ -394,7 +393,7 @@ export function DaySummary({ br, fc, audit, now: nowTs }: { br?: BrasilResp; fc?
           <>
             PLD SE hoje, média <b className="text-ink">{brl(se.todayAvg)}</b>
             {ySE ? <> ({se.todayAvg >= ySE ? "+" : "−"}{n1.format(Math.abs((100 * (se.todayAvg - ySE)) / ySE))}% vs. ontem)</> : null}
-            {Number.isFinite(peak.v) ? <>; pico {brl(peak.v)} às {brtHour(peak.t)}h</> : null}.
+            {Number.isFinite(peak.v) ? (Math.abs(peak.v - se.todayAvg) < 0.01 ? <>; estável o dia todo{Math.abs(peak.v - br.limits.min) < 0.01 ? " no piso regulatório" : ""}</> : <>; pico {brl(peak.v)} às {brtHour(peak.t)}h</>) : null}.
           </>
         ),
       });
@@ -413,7 +412,7 @@ export function DaySummary({ br, fc, audit, now: nowTs }: { br?: BrasilResp; fc?
       });
     }
     if (se?.tomorrowAvg != null) {
-      out.push({ Icon: CircleCheck, tone: "text-good", text: <>PLD de amanhã publicado: média SE <b className="text-ink">{brl(se.tomorrowAvg)}</b>{se.todayAvg ? ` (${se.tomorrowAvg >= se.todayAvg ? "+" : "−"}${n1.format(Math.abs((100 * (se.tomorrowAvg - se.todayAvg)) / se.todayAvg))}% vs. hoje)` : ""}.</> });
+      out.push({ Icon: CircleCheck, tone: "text-good", text: <>PLD de amanhã {br.meta.pld.fallback ? "estimado pelo DESSEM (ONS)" : "publicado"}: média SE <b className="text-ink">{brl(se.tomorrowAvg)}</b>{se.todayAvg ? ` (${se.tomorrowAvg >= se.todayAvg ? "+" : "−"}${n1.format(Math.abs((100 * (se.tomorrowAvg - se.todayAvg)) / se.todayAvg))}% vs. hoje)` : ""}.</> });
     } else {
       out.push({ Icon: TriangleAlert, tone: "text-muted", text: <>PLD de amanhã ainda não disponível (a CCEE publica na véspera, no fim da tarde).</> });
     }
@@ -509,34 +508,6 @@ export function SinFlow({ br, now }: { br?: BrasilResp; now: number }) {
 
 /* ======================================================== curva do dia */
 
-export function priceCurveOption(br: BrasilResp, now: number): ChartOption | null {
-  if (!br.pld) return null;
-  const today = brtDate(now);
-  const tomorrow = addDays(today, 1);
-  const pick = (date: string, s: Sub) => {
-    const row = new Array<number | null>(24).fill(null);
-    br.pld!.ts.forEach((t, i) => {
-      if (brtDate(t) === date) row[brtHour(t)] = br.pld!.values[s][i];
-    });
-    return row;
-  };
-  const hasTomorrow = br.pld.ts.some((t) => brtDate(t) === tomorrow);
-  const hours = Array.from({ length: 24 }, (_, h) => `${h}h`);
-  const base = baseOption();
-  return {
-    ...base,
-    grid: { left: 4, right: 8, top: 8, bottom: 4, containLabel: true },
-    legend: { show: false },
-    tooltip: { ...base.tooltip, axisPointer: { type: "line", lineStyle: { color: C.muted, width: 1, type: [3, 3] } }, valueFormatter: (v: number) => (v == null ? "—" : brl(v)) },
-    xAxis: categoryAxis(hours, { axisLabel: { color: C.muted, fontSize: 9, interval: 3 } }),
-    yAxis: valueAxis(undefined, { splitNumber: 3 }),
-    series: SUBS.flatMap((s) => [
-      { name: `${s} hoje`, type: "line", data: pick(today, s), showSymbol: false, lineStyle: { width: 1.5, color: SUB_COLOR[s] }, itemStyle: { color: SUB_COLOR[s] } },
-      ...(hasTomorrow ? [{ name: `${s} amanhã`, type: "line", data: pick(tomorrow, s), showSymbol: false, lineStyle: { width: 1.2, color: SUB_COLOR[s], type: [4, 3] }, itemStyle: { color: SUB_COLOR[s] } }] : []),
-    ]),
-  };
-}
-
 /* ======================================================= BESS (mini) */
 
 export function BessMini({ bess, asset, loading, error }: { bess?: BessResp; asset: BessAsset; loading?: boolean; error?: unknown }) {
@@ -587,35 +558,6 @@ export function BessMini({ bess, asset, loading, error }: { bess?: BessResp; ass
 
 /* =================================================== previsão de carga */
 
-export function loadOption(br: BrasilResp): ChartOption | null {
-  const load = br.load;
-  if (!load || load.ts.length < 48) return null;
-  const sin = load.ts.map((_, i) => (SUBS.every((s) => load.values[s][i] !== null) ? SUBS.reduce((a, s) => a + (load.values[s][i] as number), 0) / 1000 : null));
-  const byTs = new Map(load.ts.map((t, i) => [t, sin[i]]));
-  let last = load.ts.length - 1;
-  while (last > 0 && sin[last] === null) last--;
-  const t0 = load.ts[last];
-  // previsão ingênua semanal: mesma hora 7 dias antes (ou 24 h, se faltar)
-  const fcst: [number, number | null][] = [];
-  for (let k = 1; k <= 24; k++) {
-    const t = t0 + k * 3600_000;
-    fcst.push([t, byTs.get(t - 7 * 86400_000) ?? byTs.get(t - 86400_000) ?? null]);
-  }
-  const from = t0 - 72 * 3600_000;
-  const base = baseOption();
-  return {
-    ...base,
-    grid: { left: 4, right: 8, top: 28, bottom: 4, containLabel: true },
-    tooltip: { ...base.tooltip, valueFormatter: (v: number) => (v == null ? "—" : `${n1.format(v)} GW`) },
-    xAxis: timeAxis(),
-    yAxis: valueAxis(undefined, { splitNumber: 3 }),
-    series: [
-      line("Verificada (ONS)", load.ts.map((t, i) => [t, sin[i]] as [number, number | null]).filter(([t]) => t >= from), C.series[6], { lineStyle: { width: 1.5, color: C.series[6] } }),
-      line("Previsão ingênua (D−7)", [[t0, sin[last]], ...fcst], C.series[6], { lineStyle: { width: 1.2, color: C.series[6], type: [4, 3] } }),
-    ],
-  };
-}
-
 /* ============================================ reservatórios & afluências */
 
 export function earOption(br: BrasilResp): ChartOption | null {
@@ -655,86 +597,7 @@ export function EnaRow({ br }: { br?: BrasilResp }) {
   );
 }
 
-/* ================================================ ativos & estratégias */
-
-const CKEY = "sinos.carteira.v1";
-const subscribeStorage = (cb: () => void) => {
-  const on = (e: StorageEvent) => e.key === CKEY && cb();
-  window.addEventListener("storage", on);
-  return () => window.removeEventListener("storage", on);
-};
-const readContracts = () => {
-  try {
-    return localStorage.getItem(CKEY) ?? "[]";
-  } catch {
-    return "[]";
-  }
-};
-
-export function AssetsPanel({ asset, bess, now }: { asset: BessAsset; bess?: BessResp; now: number }) {
-  const raw = useSyncExternalStore(subscribeStorage, readContracts, () => "[]");
-  const contracts = useMemo(() => {
-    try {
-      const a = JSON.parse(raw);
-      return Array.isArray(a) ? (a as { submarket: Sub; side: "compra" | "venda"; volumeMWm: number; start: string; end: string }[]) : [];
-    } catch {
-      return [];
-    }
-  }, [raw]);
-  const month = now ? brtDate(now).slice(0, 7) : "";
-  const exposure = SUBS.map((s) => ({ s, net: contracts.filter((c) => c.submarket === s && c.start <= month && c.end >= month).reduce((a, c) => a + (c.side === "compra" ? 1 : -1) * c.volumeMWm, 0) })).filter((e) => e.net !== 0);
-  const f = bess?.finance;
-  return (
-    <div className="flex flex-col gap-3">
-      <div>
-        <div className="eyebrow mb-1 flex items-center gap-1.5">
-          <BatteryCharging size={12} className="text-accent" aria-hidden /> Ativo
-        </div>
-        <MetricRow label={asset.name} value={`${asset.pow} MW / ${asset.cap} MWh`} />
-        <MetricRow label="Submercado · eficiência" value={`${asset.sub} · ${asset.rte}%`} />
-        <MetricRow label="TIR (12 meses de PLD)" value={f ? (f.irr === null ? "não se paga" : pct(100 * f.irr)) : "—"} tone={f ? (f.irr !== null && f.irr >= asset.wacc / 100 ? "good" : "critical") : undefined} />
-      </div>
-      <div>
-        <div className="eyebrow mb-1 flex items-center gap-1.5">
-          <Gauge size={12} className="text-accent-2" aria-hidden /> Carteira ({contracts.length} contrato{contracts.length === 1 ? "" : "s"})
-        </div>
-        {exposure.length ? (
-          exposure.map((e) => <MetricRow key={e.s} label={`Exposição ${e.s} · ${month}`} value={`${e.net > 0 ? "+" : "−"}${n1.format(Math.abs(e.net))} MWm`} tone={e.net > 0 ? "good" : "warning"} />)
-        ) : (
-          <p className="text-[11px] text-muted">Sem posição no mês. <Link href="/carteira" className="text-accent hover:underline">Cadastrar contratos →</Link></p>
-        )}
-      </div>
-    </div>
-  );
-}
-
 /* ======================================================== auditor */
-
-export function AuditorPanel({ audit }: { audit?: AuditoriaResp }) {
-  const run = audit?.latest;
-  if (!run) return <Empty label="Sem auditoria registrada ainda." height={140} />;
-  const report = audit.reports?.[0];
-  return (
-    <div className="flex flex-col gap-2">
-      <div className="flex items-baseline gap-3">
-        <span className={`tnum text-[28px] font-semibold leading-none ${run.overallScore >= 85 ? "text-good" : run.overallScore >= 60 ? "text-warning" : "text-critical"}`}>{run.overallScore}</span>
-        <span className="text-[11px] text-muted">/100 · {ago(run.startedAt)}{audit.slo?.samples ? ` · saudável em ${n0.format(audit.slo.healthyPct)}% dos runs` : ""}</span>
-      </div>
-      <ul className="grid grid-cols-1 gap-x-3 gap-y-0.5 sm:grid-cols-2">
-        {run.sources.map((s) => (
-          <li key={s.id} className="flex items-center justify-between gap-2 text-[11px]">
-            <span className="flex min-w-0 items-center gap-1.5 truncate text-ink-2">
-              <span className={`inline-block h-1.5 w-1.5 shrink-0 rounded-full ${s.status === "ok" ? "bg-good" : s.status === "degraded" ? "bg-warning" : s.status === "down" ? "bg-critical" : "bg-muted"}`} aria-hidden />
-              <span className="truncate">{s.name}</span>
-            </span>
-            <span className="tnum shrink-0 font-mono text-[10px] text-muted">{s.latencyMs !== null ? `${s.latencyMs}ms` : s.status === "disabled" ? "off" : "—"}</span>
-          </li>
-        ))}
-      </ul>
-      {report ? <p className="line-clamp-2 text-[11px] text-muted">IA: {report.summary}</p> : null}
-    </div>
-  );
-}
 
 /* =================================================== previsão (leque) */
 

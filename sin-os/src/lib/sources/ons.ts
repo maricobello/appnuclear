@@ -193,6 +193,7 @@ export const fetchEarDaily = (daysBack = 365) =>
       2,
       3 * 3600_000,
       subTimeValue([/^ear_data$/, /data/, /instante/], [[/^ear_verif_subsistema_percentual$/, /percentual/]]),
+      { prefix: "ear_subsistema_di", file: "EAR_DIARIO_SUBSISTEMA" },
     );
     const p = dailyPanel(rows, daysBack, "% EARmax", quality);
     p.quality.range = [0, 100.5];
@@ -207,6 +208,7 @@ export const fetchEnaDaily = (daysBack = 365) =>
       2,
       3 * 3600_000,
       subTimeValue([/^ena_data$/, /data/, /instante/], [[/^ena_bruta_.*percentualmlt$/, /bruta.*mlt/, /percentual/]]),
+      { prefix: "ena_subsistema_di", file: "ENA_DIARIO_SUBSISTEMA" },
     );
     const p = dailyPanel(rows, daysBack, "% MLT", quality);
     p.quality.range = [0, 1000];
@@ -221,6 +223,7 @@ export const fetchLoadHourly = (daysBack = 60) =>
       yearsNeeded(daysBack),
       60 * 60_000,
       subTimeValue([/^din_instante$/, /instante/, /^dat/], [[/^val_cargaenergiahomwmed$/, /carga/]]),
+      { prefix: "curva-carga-ho", file: "CURVA_CARGA" },
     );
     const p = hourlyPanel(rows, daysBack, "MWmed", quality);
     p.quality.range = [0, 120_000];

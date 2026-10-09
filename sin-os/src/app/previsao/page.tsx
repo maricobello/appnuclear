@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { Badge, ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, Stat, Table } from "@/components/ui";
+import { ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, Stat, Table } from "@/components/ui";
 import type { PrevisaoResp } from "@/lib/apiTypes";
 import { band, baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, valueAxis } from "@/lib/chart";
 import { brl, dayLabel, num, pct } from "@/lib/fmt";
@@ -122,11 +122,13 @@ export default function PrevisaoPage() {
       >
         {fanOpt ? <EChart option={fanOpt} height={380} label="Leque de previsão do PLD" dim={isValidating} /> : <Loading height={380} />}
         {f?.warnings.length ? (
-          <div className="mt-3 flex flex-wrap gap-2">
+          <ul className="mt-3 flex flex-col gap-1.5">
             {f.warnings.map((w, i) => (
-              <Badge key={i} level="warning">{w}</Badge>
+              <li key={i} className="rounded-[4px] border border-warning/35 bg-warning/[0.06] px-2 py-1 text-[11.5px] leading-snug text-warning">
+                {w}
+              </li>
             ))}
-          </div>
+          </ul>
         ) : null}
       </Panel>
 

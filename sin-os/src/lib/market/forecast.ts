@@ -218,6 +218,14 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     offFloor: rg.offErr.length ? mean(rg.offErr) : null,
     floorShare: act.length ? rg.floorErr.length / act.length : 0,
   };
+  // previsão pior que o ingênuo na janela: explica o regime em vez de esconder o número.
+  // Backtest de 150 dias reais (mai–out/2026): a combinação errou 5–7% menos que o ingênuo nos
+  // 4 submercados, mas perde em semanas coladas no piso (repetir o dia anterior acerta tudo).
+  const rmaeNow = rmae(act, fL, fN);
+  if (rmaeNow > 1)
+    warnings.push(
+      `Nos últimos ${bt.actuals.length} dias a previsão errou ${Math.round((rmaeNow - 1) * 100)}% mais que repetir o dia anterior (rMAE ${rmaeNow.toFixed(2)}): o PLD ficou no piso em ${Math.round(regimeMae.floorShare * 100)}% das horas, regime em que o ingênuo acerta quase sempre. No histórico longo a combinação erra menos que o ingênuo: 5–7% em 150 dias (mai–out/2026) e 1–5% em 891 dias.`,
+    );
   // QRA avaliado fora da amostra: ajusta na 1ª metade dos dias do backtest, mede na 2ª
   const cut = 24 * Math.floor(bt.actuals.length / 2);
   const qraCal = fitQRA(fLear.slice(0, cut).map((f, i) => [f, fN[i]]), act.slice(0, cut), QRA_TAUS);
