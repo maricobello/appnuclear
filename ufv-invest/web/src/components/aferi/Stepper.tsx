@@ -1,9 +1,11 @@
 "use client";
 
 import { Minus, Plus } from "lucide-react";
+import { useT } from "@/i18n/client";
 
 /** Campo numérico com − / + (quantidade de cotas) */
 export function Stepper({ value, onChange, min = 1, max, id, label }: { value: number; onChange: (n: number) => void; min?: number; max: number; id: string; label: string }) {
+  const { d } = useT();
   const clamp = (n: number) => Math.min(max, Math.max(min, Math.floor(Number.isFinite(n) ? n : min)));
   return (
     <div>
@@ -11,7 +13,7 @@ export function Stepper({ value, onChange, min = 1, max, id, label }: { value: n
         {label}
       </label>
       <div className="mt-1 flex h-11 items-center rounded-lg border border-line-strong bg-surface-2 focus-within:border-brand">
-        <button type="button" className="flex h-full w-10 items-center justify-center text-ink-2 hover:text-good disabled:opacity-30" onClick={() => onChange(clamp(value - 1))} disabled={value <= min} aria-label="Diminuir">
+        <button type="button" className="flex h-full w-10 items-center justify-center text-ink-2 hover:text-good disabled:opacity-30" onClick={() => onChange(clamp(value - 1))} disabled={value <= min} aria-label={d.common.decrease}>
           <Minus className="size-4" />
         </button>
         <input
@@ -21,7 +23,7 @@ export function Stepper({ value, onChange, min = 1, max, id, label }: { value: n
           onChange={(e) => onChange(clamp(Number(e.target.value.replace(/\D/g, "")) || min))}
           className="h-full w-full min-w-0 bg-transparent text-center text-[15px] font-semibold text-ink outline-none tnum"
         />
-        <button type="button" className="flex h-full w-10 items-center justify-center text-ink-2 hover:text-good disabled:opacity-30" onClick={() => onChange(clamp(value + 1))} disabled={value >= max} aria-label="Aumentar">
+        <button type="button" className="flex h-full w-10 items-center justify-center text-ink-2 hover:text-good disabled:opacity-30" onClick={() => onChange(clamp(value + 1))} disabled={value >= max} aria-label={d.common.increase}>
           <Plus className="size-4" />
         </button>
       </div>

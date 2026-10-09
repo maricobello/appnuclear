@@ -8,25 +8,27 @@ import { CheckCircle2, ExternalLink, Loader2 } from "lucide-react";
 import { erc20Abi, identityRegistryAbi, mockUsdtAbi, offeringAbi, plantTokenAbi } from "@/lib/web3/abi";
 import { chainName, explorerUrl, TARGET_CHAIN_ID } from "@/lib/web3/chains";
 import { plantContracts } from "@/lib/web3/deployments";
-import { stepText, useTx } from "@/lib/web3/useTx";
+import { useTx } from "@/lib/web3/useTx";
 import { useNowSec } from "@/lib/useNow";
-import { brl, dateBR, num, shortAddr, usdt } from "@/lib/fmt";
+import { shortAddr } from "@/lib/fmt";
+import { useT } from "@/i18n/client";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { Badge, buttonClass, cx, Notice } from "@/components/ui";
 
-const STATES = ["Agendada", "Aberta", "Meta atingida", "Não atingiu a meta", "Encerrada", "Cancelada"] as const;
 
 export function TxStatus({ state }: { state: ReturnType<typeof useTx>["state"] }) {
+  const { d, t } = useT();
   if (state.step === "idle") return null;
+  const stepText = state.step === "error" ? "" : d.tx[state.step];
   return (
     <div className={cx("mt-3 rounded-lg border px-3 py-2 text-[13px]", state.step === "error" ? "border-critical/30 bg-critical/5 text-critical" : state.step === "done" ? "border-good/30 bg-good/5 text-good" : "border-line bg-surface-2 text-ink-2")} role="status" aria-live="polite">
       <div className="flex items-center gap-2">
         {state.step === "done" ? <CheckCircle2 className="size-4" /> : state.step !== "error" ? <Loader2 className="size-4 animate-spin" /> : null}
-        <span>{state.step === "error" ? state.error : `${state.label ? `${state.label}: ` : ""}${stepText[state.step]}`}</span>
+        <span>{state.step === "error" ? state.error : `${state.label ? `${state.label}: ` : ""}${stepText}`}</span>
       </div>
       {state.hash && (
         <a href={explorerUrl("tx", state.hash)} target="_blank" rel="noopener noreferrer" className="mt-1 inline-flex items-center gap-1 text-[12px] text-ink-2 underline-offset-2 hover:underline">
-          ver transação {shortAddr(state.hash, 6)} <ExternalLink className="size-3" />
+          {t(d.ip.viewTx, { h: shortAddr(state.hash, 6) })} <ExternalLink className="size-3" />
         </a>
       )}
     </div>
@@ -51,6 +53,9 @@ export function InvestPanel({
   usdtBrl: number;
 }) {
   const c = plantContracts(slug);
+  const { d: L, t, f } = useT();
+  const ip = L.ip;
+  const { brl, num, usdt, date: dateBR } = f;
   const { address, isConnected } = useConnection();
   const tx = useTx();
   const now = useNowSec();
@@ -88,8 +93,8 @@ export function InvestPanel({
     ],
   });
 
-  const d = reads.data;
-  const v = <T,>(i: number) => (d?.[i]?.status === "success" ? (d[i].result as T) : undefined);
+  const data = reads.data;
+  const v = <T,>(i: number) => (data?.[i]?.status === "success" ? (data[i].result as T) : undefined);
   const state = v<number>(0);
   const price = v<bigint>(1);
   const minCotas = Number(v<bigint>(2) ?? BigInt(minCotasCatalog));
@@ -128,19 +133,19 @@ export function InvestPanel({
   if (!c || !offering) {
     return (
       <div className="space-y-3 text-[14px] text-ink-2">
-        <Notice tone="info" title={`Oferta ainda não implantada na ${chainName}`}>
-          Os contratos desta usina ainda não foram publicados nesta rede. Veja como implantar no README de <code className="font-mono">contracts/</code>.
+        <Notice tone="info" title={t(ip.notDeployed, { c: chainName })}>
+          {ip.notDeployedText}
         </Notice>
         <div className="rounded-xl border border-line bg-surface-2 p-3 text-[13px]">
           <div className="flex justify-between">
-            <span className="text-muted">Preço da cota</span>
+            <span className="text-muted">{ip.sharePrice}</span>
             <span className="tnum">
               {brl(cotaPriceBRL, 0)} ≈ {usdt(cotaPriceUSDT)}
             </span>
           </div>
           <div className="mt-1 flex justify-between">
-            <span className="text-muted">Renda estimada</span>
-            <span className="tnum">{brl(monthlyPerCotaBRL)}/cota/mês</span>
+            <span className="text-muted">{ip.estIncome}</span>
+            <span className="tnum">{t(ip.perShareMonth, { v: brl(monthlyPerCotaBRL) })}</span>
           </div>
         </div>
       </div>
@@ -152,7 +157,7 @@ export function InvestPanel({
   return (
     <div className="text-[14px]">
       <div className="flex items-center justify-between">
-        <Badge tone={state === 1 ? "brand" : state === 4 ? "good" : state === 3 || state === 5 ? "critical" : "default"}>{state !== undefined ? STATES[state] : "carregando…"}</Badge>
+        <Badge tone={state === 1 ? "brand" : state === 4 ? "good" : state === 3 || state === 5 ? "critical" : "default"}>{state !== undefined ? ip.state[String(state) as "0"] : ip.loading}</Badge>
         <a href={explorerUrl("address", offering)} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 font-mono text-[12px] text-muted hover:text-ink">
           {shortAddr(offering)} <ExternalLink className="size-3" />
         </a>
@@ -161,16 +166,16 @@ export function InvestPanel({
       <div className="mt-4">
         <div className="flex justify-between text-[13px]">
           <span className="text-ink-2">
-            <b className="text-ink tnum">{num(Number(sold))}</b> de {hardCap ? num(Number(hardCap)) : "—"} cotas
+            {t(ip.soldOf, { a: num(Number(sold)), b: hardCap ? num(Number(hardCap)) : "—" })}
           </span>
           <span className="tnum text-muted">{num(progress, 1)}%</span>
         </div>
-        <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label="Cotas vendidas">
+        <div className="relative mt-2 h-2 overflow-hidden rounded-full bg-surface-3" role="progressbar" aria-valuenow={progress} aria-valuemin={0} aria-valuemax={100} aria-label={ip.soldAria}>
           <div className="h-full rounded-full bg-brand" style={{ width: `${Math.min(100, progress)}%` }} />
-          {softPct > 0 && <div className="absolute top-0 h-full w-0.5 bg-ink-2" style={{ left: `${softPct}%` }} title="meta mínima" />}
+          {softPct > 0 && <div className="absolute top-0 h-full w-0.5 bg-ink-2" style={{ left: `${softPct}%` }} title={ip.softCap} />}
         </div>
         <div className="mt-1 flex justify-between text-[12px] text-muted">
-          <span>meta mínima {softCap ? num(Number(softCap)) : "—"}</span>
+          <span>{t(ip.softCapN, { n: softCap ? num(Number(softCap)) : "—" })}</span>
           <span>
             {start ? dateBR(Number(start) * 1000) : "—"} → {end ? dateBR(Number(end) * 1000) : "—"}
           </span>
@@ -182,15 +187,15 @@ export function InvestPanel({
         <div className="mt-4 rounded-xl border border-line bg-surface-2 p-3 text-[13px]">
           {myCotas > 0 && (
             <div className="flex justify-between">
-              <span className="text-muted">Sua reserva</span>
+              <span className="text-muted">{ip.reserve}</span>
               <span className="tnum">
-                {num(myCotas)} cotas · {fmtU(myPaid)}
+                {t(ip.reserveV, { n: num(myCotas), v: fmtU(myPaid) })}
               </span>
             </div>
           )}
           {(tokenBalance ?? 0n) > 0n && (
             <div className="mt-1 flex justify-between">
-              <span className="text-muted">Cotas na carteira</span>
+              <span className="text-muted">{ip.inWallet}</span>
               <span className="tnum">
                 {num(Number(tokenBalance))} {symbol}
               </span>
@@ -199,22 +204,23 @@ export function InvestPanel({
           {canWithdraw && (
             <>
               <p className="mt-2 text-[12px] text-muted">
-                Direito de desistência: {num(wCotas)} cotas dos aportes dos últimos 5 dias ({fmtU(wAmount)}) podem ser devolvidas até {dateBR(wDeadline * 1000, true)}.
-                {wCotas < myCotas && " Aportes mais antigos já estão firmes na custódia."} Ao desistir, esta carteira não poderá aportar de novo nesta oferta.
+                {t(ip.withdrawText, { n: num(wCotas), v: fmtU(wAmount), d: dateBR(wDeadline * 1000, true) })}
+                {wCotas < myCotas && ip.withdrawOlder}
+                {ip.withdrawNoRe}
               </p>
-              <button className={cx(buttonClass.secondary, "mt-2 w-full")} disabled={tx.busy} onClick={async () => (await tx.run("Desistência", { address: offering, abi: offeringAbi, functionName: "withdraw" })) && after()}>
-                Desistir e receber {fmtU(wAmount)}
+              <button className={cx(buttonClass.secondary, "mt-2 w-full")} disabled={tx.busy} onClick={async () => (await tx.run(ip.lbl.withdraw, { address: offering, abi: offeringAbi, functionName: "withdraw" })) && after()}>
+                {t(ip.withdrawBtn, { v: fmtU(wAmount) })}
               </button>
             </>
           )}
           {state === 4 && myCotas > 0 && !settled && (
-            <button className={cx(buttonClass.primary, "mt-3 w-full")} disabled={tx.busy} onClick={async () => (await tx.run("Recebimento das cotas", { address: offering, abi: offeringAbi, functionName: "claimTokens" })) && after()}>
-              Receber minhas {num(myCotas)} cotas
+            <button className={cx(buttonClass.primary, "mt-3 w-full")} disabled={tx.busy} onClick={async () => (await tx.run(ip.lbl.claim, { address: offering, abi: offeringAbi, functionName: "claimTokens" })) && after()}>
+              {t(ip.claimBtn, { n: num(myCotas) })}
             </button>
           )}
           {(state === 3 || state === 5) && myCotas > 0 && !refunded && (
-            <button className={cx(buttonClass.primary, "mt-3 w-full")} disabled={tx.busy} onClick={async () => (await tx.run("Reembolso", { address: offering, abi: offeringAbi, functionName: "refund" })) && after()}>
-              Resgatar reembolso de {fmtU(myPaid)}
+            <button className={cx(buttonClass.primary, "mt-3 w-full")} disabled={tx.busy} onClick={async () => (await tx.run(ip.lbl.refund, { address: offering, abi: offeringAbi, functionName: "refund" })) && after()}>
+              {t(ip.refundBtn, { v: fmtU(myPaid) })}
             </button>
           )}
         </div>
@@ -225,26 +231,24 @@ export function InvestPanel({
         {!isConnected ? (
           <ConnectButton full />
         ) : state === 0 ? (
-          <Notice tone="info">A oferta abre em {start ? dateBR(Number(start) * 1000, true) : "—"}.</Notice>
+          <Notice tone="info">{t(ip.opensAt, { d: start ? dateBR(Number(start) * 1000, true) : "—" })}</Notice>
         ) : state === 1 ? (
           withdrewBefore ? (
-            <Notice tone="info" title="Você desistiu desta oferta">
-              Para evitar que o teto da captação seja bloqueado por reservas que desistem no fim, uma carteira que exerceu a desistência não pode aportar de novo
-              nesta oferta.
+            <Notice tone="info" title={ip.withdrew}>
+              {ip.withdrewText}
             </Notice>
           ) : verified === false ? (
-            <Notice tone="warning" title="Verificação de identidade necessária">
-              Só carteiras com KYC aprovado podem investir.{" "}
+            <Notice tone="warning" title={ip.kycTitle}>
+              {ip.kycText}{" "}
               <Link href="/carteira#kyc" className="font-medium text-brand underline-offset-2 hover:underline">
-                Fazer KYC
+                {ip.kycLink}
               </Link>
             </Notice>
           ) : (
             <div className="space-y-3">
               <div>
                 <label htmlFor="invest-cotas" className="text-[13px] text-ink-2">
-                  Cotas (mín. {num(minCotas)}
-                  {maxPerInvestor ? `, máx. ${num(Number(maxPerInvestor))} por investidor` : ""})
+                  {t(ip.cotasLabel, { min: num(minCotas), max: maxPerInvestor ? t(ip.cotasMax, { n: num(Number(maxPerInvestor)) }) : "" })}
                 </label>
                 <input
                   id="invest-cotas"
@@ -259,75 +263,75 @@ export function InvestPanel({
               </div>
               <dl className="space-y-1 rounded-xl border border-line bg-surface-2 p-3 text-[13px]">
                 <div className="flex justify-between">
-                  <dt className="text-muted">Total</dt>
+                  <dt className="text-muted">{ip.total}</dt>
                   <dd className="font-semibold tnum">{fmtU(cost)}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted">Equivalente</dt>
+                  <dt className="text-muted">{ip.equiv}</dt>
                   <dd className="tnum">≈ {brl(cost !== undefined ? Number(formatUnits(cost, dec)) * usdtBrl : undefined)}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted">Renda estimada</dt>
-                  <dd className="tnum text-good">≈ {brl(cotas * monthlyPerCotaBRL)}/mês</dd>
+                  <dt className="text-muted">{ip.estIncome}</dt>
+                  <dd className="tnum text-good">{t(ip.perMonth, { v: brl(cotas * monthlyPerCotaBRL) })}</dd>
                 </div>
                 <div className="flex justify-between">
-                  <dt className="text-muted">Seu saldo</dt>
+                  <dt className="text-muted">{ip.balance}</dt>
                   <dd className="tnum">{fmtU(balance)}</dd>
                 </div>
               </dl>
 
               {TARGET_CHAIN_ID === 97 && balance !== undefined && cost !== undefined && balance < cost && (
-                <button className={cx(buttonClass.secondary, "w-full")} disabled={tx.busy} onClick={async () => (await tx.run("Faucet de USDT de teste", { address: c.paymentToken!, abi: mockUsdtAbi, functionName: "faucet" })) && after()}>
-                  Pegar USDT de teste (faucet)
+                <button className={cx(buttonClass.secondary, "w-full")} disabled={tx.busy} onClick={async () => (await tx.run(ip.lbl.faucet, { address: c.paymentToken!, abi: mockUsdtAbi, functionName: "faucet" })) && after()}>
+                  {ip.faucet}
                 </button>
               )}
 
               {cost !== undefined && cotas >= minCotas && allowance !== undefined && allowance < cost ? (
                 <>
                   <p className="text-[12px] text-muted">
-                    Passo 1 de 2: autorize exatamente {fmtU(cost)} para o contrato da oferta{" "}
+                    {t(ip.step1, { v: fmtU(cost) })}{" "}
                     <a className="font-mono underline-offset-2 hover:underline" href={explorerUrl("address", offering)} target="_blank" rel="noopener noreferrer">
                       {shortAddr(offering)}
                     </a>
-                    . Nunca pedimos aprovação ilimitada.
+                    {ip.noUnlimited}
                   </p>
                   <button
                     className={cx(buttonClass.primary, "w-full")}
                     disabled={tx.busy || (balance !== undefined && balance < cost)}
-                    onClick={async () => (await tx.run("Aprovação de USDT", { address: c.paymentToken!, abi: erc20Abi, functionName: "approve", args: [offering, cost] })) && after()}
+                    onClick={async () => (await tx.run(ip.lbl.approve, { address: c.paymentToken!, abi: erc20Abi, functionName: "approve", args: [offering, cost] })) && after()}
                   >
-                    Aprovar {fmtU(cost)}
+                    {t(ip.approve, { v: fmtU(cost) })}
                   </button>
                 </>
               ) : (
                 <button
                   className={cx(buttonClass.primary, "w-full")}
                   disabled={tx.busy || cotas < minCotas || cost === undefined || (balance !== undefined && balance < cost)}
-                  onClick={async () => (await tx.run("Investimento", { address: offering, abi: offeringAbi, functionName: "commit", args: [BigInt(cotas)] })) && after()}
+                  onClick={async () => (await tx.run(ip.lbl.invest, { address: offering, abi: offeringAbi, functionName: "commit", args: [BigInt(cotas)] })) && after()}
                 >
-                  {allowance !== undefined && cost !== undefined && allowance >= cost ? "Passo 2 de 2: " : ""}Investir em {num(cotas)} cotas
+                  {allowance !== undefined && cost !== undefined && allowance >= cost ? ip.step2 : ""}
+                  {t(ip.investN, { n: num(cotas) })}
                 </button>
               )}
               <p className="text-[12px] text-muted">
-                O valor fica em custódia no contrato. Cada aporte tem 5 dias próprios para desistência (um novo aporte não reabre os anteriores); se a meta mínima não
-                for atingida, tudo é devolvido.
+                {ip.custody}
               </p>
             </div>
           )
         ) : state === 2 ? (
-          <Notice tone="good">Meta atingida! A oferta será encerrada após o prazo de desistência e as cotas serão entregues.</Notice>
+          <Notice tone="good">{ip.reached}</Notice>
         ) : state === 4 ? (
           <Notice tone="good">
-            Oferta encerrada. Cotas e rendimentos na{" "}
+            {ip.closedIn}{" "}
             <Link href="/carteira" className="font-medium underline-offset-2 hover:underline">
-              sua carteira
+              {ip.yourWallet}
             </Link>
             .
           </Notice>
         ) : state === 3 || state === 5 ? (
           <Notice tone="warning">
-            {state === 3 ? "A oferta não foi concluída (meta mínima não atingida ou encerramento fora do prazo)." : "A oferta foi cancelada."} Quem investiu pode resgatar
-            100% do valor.
+            {state === 3 ? ip.failed : ip.cancelled}
+            {ip.refundAll}
           </Notice>
         ) : null}
       </div>

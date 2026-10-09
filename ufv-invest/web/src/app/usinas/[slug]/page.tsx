@@ -13,7 +13,9 @@ import { Gallery } from "@/components/aferi/Gallery";
 import { Tabs } from "@/components/aferi/Tabs";
 import { GenerationOverview } from "@/components/aferi/GenerationOverview";
 import { InvestBox } from "@/components/aferi/InvestBox";
-import { mwp } from "@/components/aferi/PlantCard";
+import { getT } from "@/i18n/server";
+import type { Plant } from "@/lib/types";
+
 
 export function generateStaticParams() {
   return plants.map((p) => ({ slug: p.slug }));
@@ -22,7 +24,13 @@ export function generateStaticParams() {
 export async function generateMetadata({ params }: PageProps<"/usinas/[slug]">): Promise<Metadata> {
   const { slug } = await params;
   const p = plants.find((x) => x.slug === slug);
-  return p ? { title: p.name, description: `${p.tagline}. ${p.location.municipio}/${p.location.uf}, ${num(p.tech.dcKWp / 1000, 1)} MWp.`, openGraph: { images: p.cover ? [p.cover] : [] } } : {};
+  if (!p) return {};
+  const { locale, d, t, f } = await getT();
+  const description =
+    locale === "pt"
+      ? `${p.tagline}. ${p.location.municipio}/${p.location.uf}, ${num(p.tech.dcKWp / 1000, 1)} MWp.`
+      : t(d.pg.aboutTpl, { name: p.name, p: f.num(p.tech.dcKWp / 1000, 1), city: p.location.municipio, uf: p.location.uf, dist: p.location.distribuidora });
+  return { title: p.name, description, openGraph: { images: p.cover ? [p.cover] : [] } };
 }
 
 function dms(v: number, pos: string, neg: string) {
@@ -46,12 +54,12 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
 
   // Histórico: geração estimada com a irradiação medida por satélite (NASA POWER) no último ano completo
   let history: { year: number; values: (number | null)[] } | null = null;
-  let historyNote = "";
+  let historyNote: { key: "noteNasa" | "noteBuilding" | "noteNoData" | "noteFirstYear"; date?: string } = { key: "noteNoData" };
   const comm = new Date(t.commissioning);
   if (plant.status === "implantacao") {
-    historyNote = `Usina em implantação (comissionamento previsto para ${dateBR(t.commissioning)}): ainda sem histórico de geração.`;
+    historyNote = { key: "noteBuilding", date: t.commissioning };
   } else if (!resource.lastYear) {
-    historyNote = "Série de irradiação do último ano indisponível agora (NASA POWER); mostrando a projeção.";
+    historyNote = { key: "noteNoData" };
   } else {
     const ly = resource.lastYear;
     const values = g.monthly.map((m, i) => {
@@ -62,16 +70,18 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
     });
     if (values.some((v) => v != null)) {
       history = { year: ly.year, values };
-      historyNote = "Estimativa com a irradiação medida por satélite (NASA POWER) em cada mês — a medição do medidor da usina substitui este valor quando integrada.";
+      historyNote = { key: "noteNasa" };
     } else {
-      historyNote = `Usina em operação desde ${dateBR(t.commissioning)}: o histórico aparece após o primeiro ano completo.`;
+      historyNote = { key: "noteFirstYear", date: t.commissioning };
     }
   }
 
+  const { locale, d: L, t: tt, f: fm } = await getT();
+  const pg = L.pg;
   const docs = [
-    { href: `/api/usinas/${plant.slug}/relatorio`, title: "Relatório para o investidor", meta: "PDF · 4 páginas · investimento × Selic", icon: FileText },
-    { href: `/api/usinas/${plant.slug}/relatorio?versao=completa`, title: "Relatório de auditoria completo", meta: "PDF · geração, economia, riscos e fontes", icon: FileText },
-    { href: `/api/usinas/${plant.slug}/analise`, title: "Dados da análise (JSON)", meta: `SHA-256 ${a.dataHash.slice(0, 12)}…`, icon: FileJson },
+    { href: `/api/usinas/${plant.slug}/relatorio`, title: pg.doc1, meta: locale === "pt" ? pg.doc1mPt : pg.doc1m, icon: FileText },
+    { href: `/api/usinas/${plant.slug}/relatorio?versao=completa`, title: pg.doc2, meta: pg.doc2m, icon: FileText },
+    { href: `/api/usinas/${plant.slug}/analise`, title: pg.doc3, meta: `SHA-256 ${a.dataHash.slice(0, 12)}…`, icon: FileJson },
   ];
 
   const documentsList = (
@@ -86,7 +96,7 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
               <span className="block text-[14px] font-medium text-ink group-hover:text-good">{d.title}</span>
               <span className="block text-[11px] text-muted">{d.meta}</span>
             </span>
-            <Download className="size-4 text-ink-2 group-hover:text-good" aria-label="Baixar" />
+            <Download className="size-4 text-ink-2 group-hover:text-good" aria-label={pg.download} />
           </a>
         </li>
       ))}
@@ -468,20 +478,22 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
     </div>
   );
 
+  const scaleL = com?.scale ? com.scale : { Microgeração: pg.scale.micro, Minigeração: pg.scale.mini, "Grande porte": pg.scale.large }[scale] ?? scale;
   const facts: [string, string][] = [
-    ["Local", `${plant.location.municipio}, ${plant.location.uf}`],
-    ["Potência", `${mwp(t.dcKWp)} · ${scale}`],
-    ["Contrato de energia", com?.ppaActive ? `PPA ativo${com.ppaCounterparty ? ` · ${com.ppaCounterparty}` : ""}` : "Sem PPA ativo"],
-    ["Preço do ativo", brlCompact(com?.askingPriceBRL ?? f.investmentBRL)],
-    ["Equipamentos", `${num(t.module.count)} módulos ${t.module.wp} Wp · ${t.mounting === "fixed" ? "estrutura fixa" : "seguidor solar"}`],
-    ["Início da operação", dateBR(t.commissioning)],
+    [pg.f.local, `${plant.location.municipio}, ${plant.location.uf}`],
+    [pg.f.power, `${fm.num(t.dcKWp / 1000, 1)} MWp · ${scaleL}`],
+    [pg.f.ppa, com?.ppaActive ? `${pg.f.ppaOn}${com.ppaCounterparty ? ` · ${com.ppaCounterparty}` : ""}` : pg.f.ppaOff],
+    [pg.f.price, fm.brlCompact(com?.askingPriceBRL ?? f.investmentBRL)],
+    [pg.f.equip, tt(pg.f.equipTpl, { n: fm.num(t.module.count), wp: t.module.wp, m: t.mounting === "fixed" ? pg.f.fixed : pg.f.tracker })],
+    [pg.f.start, fm.date(t.commissioning)],
   ];
+  const about = locale === "pt" ? plant.about : aboutText(plant, L, tt, fm);
 
   return (
     <Container className="page-in pt-5">
-      <nav aria-label="Trilha" className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
+      <nav aria-label={pg.crumb} className="flex flex-wrap items-center gap-1 text-[12px] text-muted">
         <Link href="/usinas" className="hover:text-ink">
-          Usinas
+          {L.nav.usinas}
         </Link>
         <ChevronRight className="size-3.5" />
         <span aria-current="page" className="text-ink-2">
@@ -495,8 +507,8 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
 
           <div className="mt-6 flex flex-wrap items-center gap-2">
             <StatusChip status={plant.status} />
-            {com?.ppaActive && <Badge tone="good">PPA ativo</Badge>}
-            {plant.illustrative && <Badge tone="warning">Projeto ilustrativo</Badge>}
+            {com?.ppaActive && <Badge tone="good">{pg.f.ppaOn}</Badge>}
+            {plant.illustrative && <Badge tone="warning">{pg.illustrative}</Badge>}
           </div>
           <h1 className="text-gradient mt-3 text-[36px] font-semibold leading-tight tracking-[-0.03em] sm:text-[44px]">{plant.name}</h1>
           <p className="mt-1 flex items-center gap-1.5 text-[15px] text-muted">
@@ -506,10 +518,10 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
           <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4">
             {(
               [
-                [`${pct(f.irrNominalPct)}`, "ao ano (estimado)", true],
-                [brl(f.perCota.avgMonthlyIncomeBRL), "por cota, por mês", false],
-                [f.paybackYears != null ? `${num(Math.ceil(f.paybackYears))} anos` : "—", "para recuperar o valor", false],
-                [brl(plant.token.cotaPriceBRL, 0), "por cota", false],
+                [fm.pct(f.irrNominalPct), pg.kpiIrr, true],
+                [fm.brl(f.perCota.avgMonthlyIncomeBRL), pg.kpiMonthly, false],
+                [f.paybackYears != null ? fm.nYears(Math.ceil(f.paybackYears)) : "—", pg.kpiPayback, false],
+                [fm.brl(plant.token.cotaPriceBRL, 0), pg.kpiShare, false],
               ] as const
             ).map(([v, l, hi]) => (
               <div key={l} className={cx("glass rounded-2xl p-4", hi && "border-brand/30 bg-[radial-gradient(ellipse_at_top_left,rgba(61,220,132,0.14),transparent_70%)]")}>
@@ -521,9 +533,9 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
 
           <section className="mt-10" aria-labelledby="sobre">
             <h2 id="sobre" className="text-[20px] font-bold text-ink">
-              Sobre a usina
+              {pg.about}
             </h2>
-            <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{plant.about}</p>
+            <p className="mt-2 text-[15px] leading-relaxed text-ink-2">{about}</p>
             <dl className="glass mt-5 divide-y divide-line rounded-2xl">
               {facts.map(([k, v]) => (
                 <div key={k} className="flex flex-wrap justify-between gap-x-6 gap-y-1 px-5 py-3.5 text-[14px]">
@@ -534,29 +546,34 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
             </dl>
           </section>
 
-          <section className="glass mt-10 rounded-2xl p-5" aria-label="Geração de energia">
+          <section className="glass mt-10 rounded-2xl p-5" aria-label={pg.genAria}>
             <GenerationOverview projection={g.monthly.map((m) => m.energyMWh)} history={history} historyNote={historyNote} />
           </section>
 
           <section className="mt-10" aria-labelledby="docs">
             <h2 id="docs" className="text-[20px] font-bold text-ink">
-              Documentos
+              {pg.docs}
             </h2>
             <div className="mt-2">{documentsList}</div>
           </section>
 
           <details className="glass group mt-10 rounded-2xl">
             <summary className="flex cursor-pointer list-none items-center justify-between px-5 py-4 text-[15px] font-semibold text-ink">
-              Ver análise completa
+              {pg.full}
               <ChevronRight className="size-4 text-muted transition group-open:rotate-90" />
             </summary>
-            <div className="border-t border-line px-5 pb-5">
+            <div className="border-t border-line px-5 pb-5" lang="pt-BR">
+              {locale !== "pt" && (
+                <p className="mt-4 rounded-lg bg-surface-2 px-3 py-2 text-[13px] text-ink-2" lang={locale}>
+                  {pg.fullPtNote}
+                </p>
+              )}
               <Tabs
                 tabs={[
-                  { id: "desempenho", label: "Retorno e geração", content: desempenho },
-                  { id: "riscos", label: "Riscos e condições", content: riscos },
-                  { id: "dados-tecnicos", label: "Dados técnicos", content: tecnico },
-                  { id: "transparencia", label: "Transparência", content: documentos },
+                  { id: "desempenho", label: pg.tab.desempenho, content: desempenho },
+                  { id: "riscos", label: pg.tab.riscos, content: riscos },
+                  { id: "dados-tecnicos", label: pg.tab.tecnico, content: tecnico },
+                  { id: "transparencia", label: pg.tab.transparencia, content: documentos },
                 ]}
               />
             </div>
@@ -578,4 +595,15 @@ export default async function PlantPage({ params }: PageProps<"/usinas/[slug]">)
       </div>
     </Container>
   );
+}
+
+/** Descrição da usina gerada a partir dos dados (idiomas além do português). */
+function aboutText(plant: Plant, L: Awaited<ReturnType<typeof getT>>["d"], tt: (s: string, v?: Record<string, string | number>) => string, fm: Awaited<ReturnType<typeof getT>>["f"]) {
+  const pg = L.pg;
+  const parts = [
+    tt(pg.aboutTpl, { name: plant.name, p: fm.num(plant.tech.dcKWp / 1000, 1), city: plant.location.municipio, uf: plant.location.uf, dist: plant.location.distribuidora }),
+    plant.status === "implantacao" ? tt(pg.aboutBuild, { d: fm.date(plant.tech.commissioning) }) : tt(pg.aboutOp, { d: fm.date(plant.tech.commissioning) }),
+  ];
+  if (plant.commercial?.ppaActive) parts.push(tt(pg.aboutPpa, { cp: plant.commercial.ppaCounterparty ? tt(pg.aboutPpaWith, { c: plant.commercial.ppaCounterparty }) : "" }));
+  return parts.join(" ");
 }

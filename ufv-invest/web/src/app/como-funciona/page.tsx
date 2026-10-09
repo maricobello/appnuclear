@@ -3,31 +3,35 @@ import Link from "next/link";
 import { ArrowRight, ChevronDown } from "lucide-react";
 import { buttonClass, Container, cx } from "@/components/ui";
 import { ContactButton } from "@/components/aferi/ContactButton";
+import { getT } from "@/i18n/server";
 
-export const metadata: Metadata = { title: "Como funciona", description: "Um processo simples, seguro e transparente para investir em usinas solares." };
+export async function generateMetadata(): Promise<Metadata> {
+  const { d } = await getT();
+  return { title: d.como.meta, description: d.como.metaDesc };
+}
 
-const steps = [
-  { title: "Escolha uma usina", text: "Compare rentabilidade, valor da cota e prazo.", href: "/usinas", cta: "Ver usinas" },
-  { title: "Simule", text: "Veja quanto investe e quanto recebe por mês.", href: "/simulador", cta: "Simular" },
-  { title: "Invista", text: "Entre com sua carteira e confirme o aporte.", href: "/usinas", cta: "Começar" },
-  { title: "Receba todo mês", text: "Acompanhe tudo no seu portfólio.", href: "/portfolio", cta: "Meu portfólio" },
-];
-
-const faq = [
-  ["O que eu compro ao investir?", "Cotas digitais (tokens) de uma sociedade de propósito específico (SPE) dona da usina. A receita líquida da energia é distribuída em USDT na proporção das suas cotas."],
-  ["De onde vem o rendimento?", "A usina gera créditos de energia que são cedidos a assinantes com desconto na conta de luz (geração compartilhada, Lei 14.300/2022). Descontados operação, seguro, impostos e taxa de administração, o restante vai para os cotistas."],
-  ["Como a rentabilidade se compara à Selic?", "Cada usina mostra a rentabilidade estimada ao lado da Selic, do CDI, do Tesouro IPCA+ e da poupança, com o mesmo horizonte. O relatório em PDF traz essa comparação."],
-  ["E se a oferta não atingir a meta?", "O contrato devolve integralmente o valor de todos os investidores. Também é possível desistir até 5 dias após cada aporte."],
-  ["Preciso de carteira cripto?", "Sim. O login e os aportes usam uma carteira da BNB Chain (Binance Wallet, MetaMask, Rabby ou Trust). Nunca pedimos sua frase de recuperação."],
-];
-
-export default function ComoFunciona() {
+export default async function ComoFunciona() {
+  const { d } = await getT();
+  const c = d.como;
+  const steps = [
+    { title: c.s1, text: c.s1d, href: "/usinas", cta: c.s1c },
+    { title: c.s2, text: c.s2d, href: "/simulador", cta: c.s2c },
+    { title: c.s3, text: c.s3d, href: "/usinas", cta: c.s3c },
+    { title: c.s4, text: c.s4d, href: "/portfolio", cta: c.s4c },
+  ];
+  const faq = [
+    [c.q1, c.a1],
+    [c.q2, c.a2],
+    [c.q3, c.a3],
+    [c.q4, c.a4],
+    [c.q5, c.a5],
+  ];
   return (
     <Container className="pt-8">
       <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_380px]">
         <div>
-          <h1 className="text-[30px] font-bold tracking-tight text-ink">Como funciona</h1>
-          <p className="mt-1 text-[15px] text-muted">Quatro passos.</p>
+          <h1 className="text-[30px] font-bold tracking-tight text-ink">{c.h1}</h1>
+          <p className="mt-1 text-[15px] text-muted">{c.sub}</p>
           <ol className="mt-8 space-y-0">
             {steps.map((s, i) => (
               <li key={s.title} className="relative flex gap-5 pb-8 last:pb-0">
@@ -48,8 +52,8 @@ export default function ComoFunciona() {
         </div>
         <aside className="space-y-4 lg:pt-16">
           <div className="rounded-2xl bg-brand-soft p-6">
-            <h2 className="text-[17px] font-semibold text-ink">Dúvidas?</h2>
-            <p className="mt-1 text-[14px] text-ink-2">Nossa equipe está pronta para te ajudar.</p>
+            <h2 className="text-[17px] font-semibold text-ink">{d.sup.questions}</h2>
+            <p className="mt-1 text-[14px] text-ink-2">{d.sup.team}</p>
             <ContactButton className={cx(buttonClass.outline, "mt-4")} />
           </div>
         </aside>
@@ -57,7 +61,7 @@ export default function ComoFunciona() {
 
       <section className="mt-16" aria-labelledby="faq">
         <h2 id="faq" className="text-[22px] font-bold text-ink">
-          Perguntas frequentes
+          {c.faq}
         </h2>
         <div className="mt-4 divide-y divide-line glass rounded-2xl">
           {faq.map(([q, a]) => (
@@ -70,7 +74,11 @@ export default function ComoFunciona() {
           ))}
         </div>
         <p className="mt-3 text-[13px] text-muted">
-          Detalhes de contratos e proteções em <Link href="/seguranca" className="font-semibold text-good hover:underline">Segurança</Link>.
+          {c.more}{" "}
+          <Link href="/seguranca" className="font-semibold text-good hover:underline">
+            {c.moreLink}
+          </Link>
+          .
         </p>
       </section>
     </Container>

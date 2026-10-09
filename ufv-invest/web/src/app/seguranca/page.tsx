@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { PtOnlyNote } from "@/components/i18n/PtOnlyNote";
 import { ExternalLink, KeyRound, Lock, ShieldAlert, ShieldCheck } from "lucide-react";
 import { plants } from "@/data/plants";
 import { chainName, explorerUrl, TARGET_CHAIN_ID } from "@/lib/web3/chains";
@@ -57,6 +58,7 @@ export default function SegurancaPage() {
   const deployed = plants.map((p) => ({ p, c: plantContracts(p.slug) }));
   return (
     <Container className="py-12">
+      <PtOnlyNote />
       <SectionTitle as="h1" eyebrow="Segurança" title="Seus fundos, sua chave, regras no código">
         A Aferi Capital é não-custodial: o dinheiro vai da sua carteira para contratos públicos e auditáveis na BNB Chain — nunca para uma conta da empresa durante a captação.
       </SectionTitle>

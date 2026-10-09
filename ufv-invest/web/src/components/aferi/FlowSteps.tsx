@@ -1,16 +1,14 @@
-import { cx } from "@/components/ui";
+"use client";
 
-export const ACQUISITION_STEPS = [
-  { title: "Escolha do ativo", text: "Selecione a usina e a quantidade de cotas." },
-  { title: "Resumo da operação", text: "Veja os valores e as condições da oferta." },
-  { title: "Cadastro", text: "Entre com a carteira e envie seus dados (KYC)." },
-  { title: "Documentos", text: "Leia o relatório e os termos da oferta." },
-  { title: "Confirmação", text: "Aprove o valor exato e confirme o aporte." },
-  { title: "Acompanhamento", text: "Acompanhe cotas e distribuições no portfólio." },
-];
+import { cx } from "@/components/ui";
+import { useT } from "@/i18n/client";
+
+const STEPS = ["0", "1", "2", "3", "4", "5"] as const;
 
 /** Fluxo de aquisição (linha do tempo vertical numerada) */
 export function FlowSteps({ current = 0, compact = false }: { current?: number; compact?: boolean }) {
+  const { d } = useT();
+  const ACQUISITION_STEPS = STEPS.map((k) => ({ title: d.flow[k].t, text: d.flow[k].d }));
   return (
     <ol className="relative">
       {ACQUISITION_STEPS.map((s, i) => (

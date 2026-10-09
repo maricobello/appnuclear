@@ -12,32 +12,34 @@ import { LogoMark } from "@/components/Logo";
 import { buttonClass, cx } from "@/components/ui";
 import { useMounted } from "@/lib/useNow";
 import { setDemo, useDemo } from "./data";
+import { useT } from "@/i18n/client";
 
-const items = [
-  { href: "/portfolio", label: "Meu portfólio", icon: LayoutDashboard },
-  { href: "/portfolio/transacoes", label: "Transações", icon: ArrowLeftRight },
-  { href: "/portfolio/documentos", label: "Documentos", icon: FileText },
-  { href: "/portfolio/perfil", label: "Perfil", icon: User },
-  { href: "/portfolio/suporte", label: "Suporte", icon: Headset },
-];
+const ITEMS = [
+  { href: "/portfolio", k: "portfolio", icon: LayoutDashboard },
+  { href: "/portfolio/transacoes", k: "tx", icon: ArrowLeftRight },
+  { href: "/portfolio/documentos", k: "docs", icon: FileText },
+  { href: "/portfolio/perfil", k: "profile", icon: User },
+  { href: "/portfolio/suporte", k: "support", icon: Headset },
+] as const;
 
 /** Pede a carteira para ver dados reais; a demonstração não exige conexão */
 export function RequireWallet({ children, allowDemo = true }: { children: ReactNode; allowDemo?: boolean }) {
   const mounted = useMounted();
   const { isConnected } = useConnection();
   const demo = useDemo();
+  const { d } = useT();
   if (!mounted) return <div className="h-64 animate-pulse rounded-xl bg-surface-2" />;
   if (isConnected || (allowDemo && demo)) return <>{children}</>;
   return (
     <div className="mx-auto max-w-lg glass rounded-2xl p-8 text-center">
       <Wallet className="mx-auto size-10 text-good" />
-      <h1 className="mt-4 text-[20px] font-semibold text-ink">Entre com a sua carteira</h1>
-      <p className="mt-2 text-[14px] text-ink-2">Suas cotas, distribuições e documentos ficam registrados na BNB Chain e aparecem aqui quando você conecta a carteira.</p>
+      <h1 className="mt-4 text-[20px] font-semibold text-ink">{d.pf.signInTitle}</h1>
+      <p className="mt-2 text-[14px] text-ink-2">{d.pf.signInText}</p>
       <div className="mt-6 flex flex-col items-center gap-3">
         <ConnectButton />
         {allowDemo && (
           <button className="inline-flex items-center gap-1.5 text-[14px] font-semibold text-good hover:underline" onClick={() => setDemo(true)}>
-            <PlayCircle className="size-4" /> Ver um portfólio de demonstração
+            <PlayCircle className="size-4" /> {d.pf.seeDemo}
           </button>
         )}
       </div>
@@ -54,6 +56,7 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
   const disconnect = useDisconnect();
   const profile = useProfile();
   const { isConnected } = useConnection();
+  const { d } = useT();
 
   const exit = async () => {
     setDemo(false);
@@ -62,17 +65,17 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
     router.push("/");
   };
 
-  const name = mounted && demo && !isConnected ? "Investidor (demonstração)" : profile.name ?? (mounted && isConnected ? profile.label : "Investidor");
+  const name = mounted && demo && !isConnected ? d.pf.demoName : profile.name ?? (mounted && isConnected ? profile.label : d.common.investor);
 
   return (
     <div className="mx-auto grid w-full max-w-7xl gap-6 px-4 pt-6 sm:px-6 lg:grid-cols-[230px_minmax(0,1fr)] lg:px-8">
       <aside className="min-w-0 lg:sticky lg:top-24 lg:self-start">
-        <nav aria-label="Área do investidor" className="flex gap-1 overflow-x-auto glass rounded-2xl p-2 text-ink lg:min-h-[520px] lg:flex-col lg:p-3">
+        <nav aria-label={d.pf.area} className="flex gap-1 overflow-x-auto glass rounded-2xl p-2 text-ink lg:min-h-[520px] lg:flex-col lg:p-3">
           <div className="hidden items-center gap-2 px-2 pb-4 pt-1 lg:flex">
             <LogoMark className="size-7" />
-            <span className="text-[13px] font-semibold text-white/80">Área do investidor</span>
+            <span className="text-[13px] font-semibold text-white/80">{d.pf.area}</span>
           </div>
-          {items.map((it) => {
+          {ITEMS.map((it) => {
             const active = it.href === "/portfolio" ? path === "/portfolio" : path?.startsWith(it.href);
             return (
               <Link
@@ -81,12 +84,12 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
                 aria-current={active ? "page" : undefined}
                 className={cx("flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] transition", active ? "bg-white/12 font-semibold text-white ring-1 ring-white/15" : "text-white/75 hover:bg-white/8 hover:text-white")}
               >
-                <it.icon className={cx("size-4", active && "text-leaf")} /> {it.label}
+                <it.icon className={cx("size-4", active && "text-leaf")} /> {d.pf.nav[it.k]}
               </Link>
             );
           })}
           <button onClick={exit} className="flex shrink-0 items-center gap-2.5 rounded-lg px-3 py-2.5 text-[14px] text-white/75 hover:bg-white/8 hover:text-white lg:mt-auto">
-            <LogOut className="size-4" /> Sair
+            <LogOut className="size-4" /> {d.pf.logout}
           </button>
         </nav>
       </aside>
@@ -103,10 +106,10 @@ export function PortfolioShell({ children }: { children: ReactNode }) {
         {mounted && demo && (
           <div className="mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-warning/30 bg-warning/5 px-4 py-2.5 text-[13px] text-ink-2" role="status">
             <span>
-              <b className="text-warning">Demonstração:</b> dados fictícios para conhecer o portfólio. Nada aqui é uma posição real.
+              <b className="text-warning">{d.pf.demoTitle}</b> {d.pf.demoText}
             </span>
             <button className={cx(buttonClass.ghost, "py-1 text-[13px]")} onClick={() => setDemo(false)}>
-              Sair da demonstração
+              {d.pf.demoExit}
             </button>
           </div>
         )}

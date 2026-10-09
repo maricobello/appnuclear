@@ -5,11 +5,13 @@ import { motion } from "motion/react";
 import { ShieldCheck, Wallet } from "lucide-react";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
 import { useMounted } from "@/lib/useNow";
+import { useT } from "@/i18n/client";
 
 /** Chegada na vitrine: conectar a carteira é o primeiro passo para investir */
 export function WalletBanner() {
   const mounted = useMounted();
   const { isConnected } = useConnection();
+  const { d } = useT();
   if (!mounted || isConnected) return <div className="h-0" />;
   return (
     <motion.div
@@ -23,9 +25,9 @@ export function WalletBanner() {
           <Wallet className="size-5" />
         </span>
         <div>
-          <div className="text-[15px] font-semibold">Conecte sua carteira para investir</div>
+          <div className="text-[15px] font-semibold">{d.banner.title}</div>
           <div className="flex items-center gap-1 text-[12px] text-muted">
-            <ShieldCheck className="size-3.5" /> Binance Wallet, MetaMask, Rabby ou Trust · sem senha
+            <ShieldCheck className="size-3.5" /> {d.banner.sub}
           </div>
         </div>
       </div>

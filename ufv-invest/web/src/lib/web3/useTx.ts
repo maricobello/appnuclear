@@ -3,6 +3,7 @@
 import { useCallback, useState } from "react";
 import { BaseError, ContractFunctionRevertedError, UserRejectedRequestError, type Abi, type Address, type Hash, type TransactionReceipt } from "viem";
 import type { Config } from "wagmi";
+import { useT } from "@/i18n/client";
 import { getConnection, simulateContract, switchChain, waitForTransactionReceipt, writeContract } from "wagmi/actions";
 import { wagmiConfig } from "./config";
 import { TARGET_CHAIN_ID } from "./chains";
@@ -41,21 +42,26 @@ const errorText: Record<string, string> = {
   AccessControlUnauthorizedAccount: "Esta carteira não tem permissão para esta operação.",
 };
 
-export function humanizeError(e: unknown): string {
+/** Textos de erro no idioma da interface (padrão: português). */
+export type TxTexts = { cancelled: string; refused: string; gas: string; e: Record<string, string> };
+
+export function humanizeError(e: unknown, tx?: TxTexts): string {
+  const cancelled = tx?.cancelled ?? "Você cancelou a assinatura na carteira.";
   if (e instanceof BaseError) {
-    if (e.walk((x) => x instanceof UserRejectedRequestError)) return "Você cancelou a assinatura na carteira.";
+    if (e.walk((x) => x instanceof UserRejectedRequestError)) return cancelled;
     const revert = e.walk((x) => x instanceof ContractFunctionRevertedError);
     if (revert instanceof ContractFunctionRevertedError) {
       const name = revert.data?.errorName;
-      if (name && errorText[name]) return errorText[name];
-      if (name) return `O contrato recusou a operação (${name}).`;
-      if (revert.reason) return `O contrato recusou a operação: ${revert.reason}`;
+      const known = name ? (tx?.e[name] ?? errorText[name]) : undefined;
+      if (known) return known;
+      if (name) return tx ? tx.refused.replace("{n}", name) : `O contrato recusou a operação (${name}).`;
+      if (revert.reason) return tx ? tx.refused.replace("{n}", revert.reason) : `O contrato recusou a operação: ${revert.reason}`;
     }
-    if (/insufficient funds/i.test(e.message)) return "Saldo de BNB insuficiente para pagar o gás.";
+    if (/insufficient funds/i.test(e.message)) return tx?.gas ?? "Saldo de BNB insuficiente para pagar o gás.";
     return e.shortMessage || e.message;
   }
   const msg = e instanceof Error ? e.message : String(e);
-  if (/reject|denied|cancel/i.test(msg)) return "Você cancelou a assinatura na carteira.";
+  if (/reject|denied|cancel/i.test(msg)) return cancelled;
   return msg;
 }
 
@@ -66,11 +72,13 @@ type WriteArgs = Parameters<typeof writeContract>[1];
 
 export function useTx() {
   const [state, setState] = useState<TxState>({ step: "idle" });
+  const { d } = useT();
+  const texts = d.tx;
 
   const run = useCallback(async (label: string, params: TxParams): Promise<TransactionReceipt | null> => {
     try {
       const conn = getConnection(wagmiConfig);
-      if (!conn.address) throw new Error("Conecte a carteira primeiro.");
+      if (!conn.address) throw new Error(d.wal.connect);
       if (conn.chainId !== TARGET_CHAIN_ID) {
         setState({ step: "switching", label });
         await switchChain(wagmiConfig, { chainId: TARGET_CHAIN_ID });
@@ -81,14 +89,14 @@ export function useTx() {
       const hash = await writeContract(wagmiConfig as Config, request as unknown as WriteArgs);
       setState({ step: "pending", label, hash });
       const receipt = await waitForTransactionReceipt(wagmiConfig, { hash, chainId: TARGET_CHAIN_ID, confirmations: 1 });
-      if (receipt.status !== "success") throw new Error("A transação foi revertida na rede.");
+      if (receipt.status !== "success") throw new Error(texts.reverted);
       setState({ step: "done", label, hash });
       return receipt;
     } catch (e) {
-      setState((s) => ({ step: "error", label, hash: s.hash, error: humanizeError(e) }));
+      setState((s) => ({ step: "error", label, hash: s.hash, error: humanizeError(e, texts) }));
       return null;
     }
-  }, []);
+  }, [texts, d.wal.connect]);
 
   const reset = useCallback(() => setState({ step: "idle" }), []);
   const busy = state.step === "switching" || state.step === "simulating" || state.step === "signing" || state.step === "pending";

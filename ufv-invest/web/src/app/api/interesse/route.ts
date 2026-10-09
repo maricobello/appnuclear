@@ -3,6 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 import { z } from "zod";
 import { getPlant } from "@/data/plants";
 import { rateLimit } from "@/lib/rateLimit";
+import { LOCALES } from "@/i18n/config";
 
 /**
  * "Demonstrar interesse" / "Fale conosco": registra o contato e, se LEADS_WEBHOOK_URL estiver
@@ -24,6 +25,8 @@ const Body = z.object({
   cotas: z.number().int().min(1).max(1_000_000).optional(),
   mensagem: z.string().trim().max(1000).optional().or(z.literal("")),
   aceite: z.literal(true),
+  /** idioma da interface, para a equipe responder na língua do investidor */
+  idioma: z.enum(LOCALES).optional(),
 });
 
 type Lead = z.infer<typeof Body> & { protocolo: string; at: string };

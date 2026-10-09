@@ -6,19 +6,20 @@ import { useMemo, useRef, useState } from "react";
 import { MapPin } from "lucide-react";
 import type { PlantSummary } from "@/lib/analysis";
 import { EChart } from "@/components/charts/EChart";
-import { base, C, catAxis, fmtMi, valAxis } from "@/components/charts/theme";
-import { brl, num, pct } from "@/lib/fmt";
+import { base, C, catAxis, valAxis } from "@/components/charts/theme";
+import { useT } from "@/i18n/client";
 import { buttonClass, Card, cx, StatusChip } from "@/components/ui";
 import { Stepper } from "./Stepper";
 import { PhotoPlaceholder } from "./PhotoPlaceholder";
 import { FlowSteps } from "./FlowSteps";
 import { InterestDialog } from "./InterestDialog";
 
-const SC_LABEL = { conservador: "Conservador", base: "Base", otimista: "Otimista" } as const;
-const SC_HINT = { conservador: "geração P90", base: "geração P50", otimista: "geração acima do P50" } as const;
 
 export function SimulatorView({ items }: { items: PlantSummary[] }) {
   const sp = useSearchParams();
+  const { d, t, f } = useT();
+  const { brl, num, pct } = f;
+  const sm = d.sim;
   const router = useRouter();
   const open = useMemo(() => items.filter((i) => i.status !== "encerrada"), [items]);
   const [slug, setSlug] = useState(open.find((i) => i.slug === sp.get("usina"))?.slug ?? open[0]?.slug);
@@ -40,14 +41,14 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
       ...base(),
       grid: { ...base().grid, top: 52 },
       xAxis: catAxis(cumulative.map((c) => c.year)),
-      yAxis: valAxis("R$", fmtMi),
+      yAxis: valAxis("R$", (v: number) => new Intl.NumberFormat(f.tag, { notation: "compact", maximumFractionDigits: 1 }).format(v)),
       series: [
-        { name: "Renda acumulada", type: "bar", barMaxWidth: 14, itemStyle: { color: C.s2, borderRadius: [3, 3, 0, 0] }, data: cumulative.map((c) => +c.value.toFixed(0)) },
-        { name: "Valor investido", type: "line", symbol: "none", lineStyle: { color: C.s1, width: 2, type: "dashed" }, data: cumulative.map(() => n * price) },
+        { name: sm.cumulative, type: "bar", barMaxWidth: 14, itemStyle: { color: C.s2, borderRadius: [3, 3, 0, 0] }, data: cumulative.map((c) => +c.value.toFixed(0)) },
+        { name: sm.invested, type: "line", symbol: "none", lineStyle: { color: C.s1, width: 2, type: "dashed" }, data: cumulative.map(() => n * price) },
       ],
       tooltip: { ...base().tooltip, valueFormatter: (v: number) => brl(v, 0) },
     }),
-    [cumulative, n, price],
+    [cumulative, n, price, brl, f.tag, sm.cumulative, sm.invested],
   );
 
   if (!p) return null;
@@ -68,7 +69,7 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
             {/* ativo */}
             <div>
               <label htmlFor="sim-usina" className="text-[12px] font-medium text-muted">
-                Usina
+                {sm.plant}
               </label>
               <select id="sim-usina" value={p.slug} onChange={(e) => choose(e.target.value)} className="mt-1 h-11 w-full rounded-lg border border-line-strong bg-surface-2 px-3 text-ink text-[14px] font-medium text-ink outline-none focus:border-brand">
                 {open.map((i) => (
@@ -78,7 +79,7 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
                 ))}
               </select>
               <div className="mt-3 flex items-center gap-3">
-                <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-3">{p.cover ? <Image src={p.cover} alt="" fill sizes="80px" className="object-cover" /> : <PhotoPlaceholder compact />}</div>
+                <div className="relative h-14 w-20 shrink-0 overflow-hidden rounded-lg bg-surface-3">{p.cover ? <Image src={p.cover} alt="" fill sizes="80px" className="object-cover" /> : <PhotoPlaceholder compact label={d.gal.soon} />}</div>
                 <div className="min-w-0">
                   <div className="truncate text-[14px] font-semibold text-ink">{p.name}</div>
                   <div className="flex items-center gap-1 text-[12px] text-muted">
@@ -89,34 +90,34 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
               </div>
               <div className="mt-4 grid grid-cols-2 gap-3 border-t border-line pt-4">
                 <div>
-                  <div className="text-[12px] text-muted">Valor por cota</div>
+                  <div className="text-[12px] text-muted">{sm.pricePerShare}</div>
                   <div className="text-[17px] font-bold text-ink tnum">{brl(p.cotaPriceBRL, 0)}</div>
                 </div>
                 <div>
-                  <div className="text-[12px] text-muted">Distribuição mensal (por cota)</div>
+                  <div className="text-[12px] text-muted">{sm.monthlyPerShare}</div>
                   <div className="text-[17px] font-bold text-ink tnum">{brl(p.monthlyPerCotaBRL)}</div>
                 </div>
               </div>
             </div>
             {/* cálculo */}
             <div className="md:border-l md:border-line md:pl-6">
-              <Stepper id="sim-cotas" label="Quantidade de cotas" value={n} onChange={setN} min={1} max={p.totalCotas} />
+              <Stepper id="sim-cotas" label={sm.qty} value={n} onChange={setN} min={1} max={p.totalCotas} />
               <div className="mt-4 grid grid-cols-2 gap-4">
                 <div>
-                  <div className="text-[12px] text-muted">Investimento total</div>
+                  <div className="text-[12px] text-muted">{sm.total}</div>
                   <div className="text-[22px] font-bold text-ink tnum">{brl(total, 0)}</div>
                 </div>
                 <div>
-                  <div className="text-[12px] text-muted">Distribuição mensal estimada</div>
+                  <div className="text-[12px] text-muted">{sm.monthlyEst}</div>
                   <div className="text-[22px] font-bold text-good tnum">{brl(monthly)}</div>
                 </div>
                 <div>
-                  <div className="text-[12px] text-muted">Rentabilidade anual (estimada)</div>
-                  <div className="text-[17px] font-bold text-good tnum">{pct(p.irrNominalPct)} a.a.</div>
+                  <div className="text-[12px] text-muted">{sm.annual}</div>
+                  <div className="text-[17px] font-bold text-good tnum">{t(sm.pa, { v: pct(p.irrNominalPct) })}</div>
                 </div>
                 <div>
-                  <div className="text-[12px] text-muted">Selic hoje</div>
-                  <div className="text-[17px] font-bold text-ink-2 tnum">{pct(p.selicPct, 2)} a.a.</div>
+                  <div className="text-[12px] text-muted">{sm.selic}</div>
+                  <div className="text-[17px] font-bold text-ink-2 tnum">{t(sm.pa, { v: pct(p.selicPct, 2) })}</div>
                 </div>
               </div>
               <button
@@ -127,7 +128,7 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
                   setTimeout(() => results.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
                 }}
               >
-                Simular
+                {sm.run}
               </button>
             </div>
           </div>
@@ -135,29 +136,29 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
 
         <section ref={results} aria-labelledby="cenarios" className="scroll-mt-24">
           <h2 id="cenarios" className="text-[15px] font-semibold text-ink">
-            Cenários (estimativos)
+            {sm.scenarios}
           </h2>
           <div className="mt-3 grid gap-3 sm:grid-cols-3">
             {p.scenarios.map((s) => (
               <div key={s.name} className={cx("rounded-xl border p-4", s.name === "base" ? "border-brand bg-brand-soft/60" : "border-line bg-white/[0.02]")}>
-                <div className="text-[13px] font-semibold text-ink">{SC_LABEL[s.name]}</div>
-                <div className="text-[11px] text-muted">{SC_HINT[s.name]}</div>
-                <div className="mt-2 text-[18px] font-bold text-ink tnum">{Number.isFinite(s.irrNominalPct) ? `${pct(s.irrNominalPct)} a.a.` : "—"}</div>
-                <div className={cx("text-[14px] font-semibold tnum", s.name === "base" ? "text-good" : "text-ink-2")}>{brl(s.avgMonthlyPerCotaBRL * n)}/mês</div>
+                <div className="text-[13px] font-semibold text-ink">{sm.sc[s.name]}</div>
+                <div className="text-[11px] text-muted">{sm.hint[s.name]}</div>
+                <div className="mt-2 text-[18px] font-bold text-ink tnum">{Number.isFinite(s.irrNominalPct) ? t(sm.pa, { v: pct(s.irrNominalPct) }) : "—"}</div>
+                <div className={cx("text-[14px] font-semibold tnum", s.name === "base" ? "text-good" : "text-ink-2")}>{t(sm.perMonth, { v: brl(s.avgMonthlyPerCotaBRL * n) })}</div>
               </div>
             ))}
           </div>
-          <p className="mt-2 text-[11px] text-muted">Os cenários apresentados são estimativas e não representam garantia de retorno. Valores médios mensais ao longo do prazo, antes de impostos do investidor.</p>
+          <p className="mt-2 text-[11px] text-muted">{sm.disclaimer}</p>
 
           {simulated && (
             <Card className="mt-5 p-5">
               <div className="flex flex-wrap items-baseline justify-between gap-2">
-                <h3 className="text-[15px] font-semibold text-ink">Renda acumulada × valor investido</h3>
+                <h3 className="text-[15px] font-semibold text-ink">{sm.chartTitle}</h3>
                 <span className="text-[12px] text-muted">
-                  {num(n)} cotas · {brl(cumulative.at(-1)?.value ?? 0, 0)} em {p.horizonYears} anos
+                  {t(sm.chartMeta, { n: num(n), v: brl(cumulative.at(-1)?.value ?? 0, 0), y: p.horizonYears })}
                 </span>
               </div>
-              <EChart option={option} height={260} label="Renda acumulada por ano comparada ao valor investido" />
+              <EChart option={option} height={260} label={sm.chartAria} />
             </Card>
           )}
         </section>
@@ -165,15 +166,15 @@ export function SimulatorView({ items }: { items: PlantSummary[] }) {
 
       <aside className="space-y-4">
         <Card className="p-5">
-          <h2 className="text-[15px] font-semibold text-ink">Fluxo de aquisição</h2>
+          <h2 className="text-[15px] font-semibold text-ink">{d.inv.flow}</h2>
           <div className="mt-4">
             <FlowSteps current={simulated ? 1 : 0} compact />
           </div>
           <button className={cx(buttonClass.primary, "mt-5 w-full")} onClick={() => setInterest(true)}>
-            Demonstrar interesse →
+            {sm.interest}
           </button>
           <a href={`/usinas/${p.slug}/investir`} className={cx(buttonClass.secondary, "mt-2 w-full")}>
-            Investir com carteira
+            {sm.withWallet}
           </a>
         </Card>
       </aside>

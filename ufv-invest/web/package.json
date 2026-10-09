@@ -10,7 +10,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "test": "vitest run",
     "usinas:importar": "node scripts/usinas/importar.mjs",
-    "usinas:modelo": "node scripts/usinas/modelo.mjs"
+    "usinas:modelo": "node scripts/usinas/modelo.mjs",
+    "i18n": "python3 scripts/i18n/gerar.py src/i18n/dict"
   },
   "engines": {
     "node": ">=20.9"

@@ -47,10 +47,11 @@ export type PortfolioData = {
   positions: Position[];
   txs: Tx[];
   /** patrimônio (valor de face + distribuições recebidas) mês a mês */
-  series: { label: string; value: number }[];
+  /** fim de cada mês (ISO) e patrimônio acumulado; o rótulo é formatado no idioma da interface */
+  series: { date: string; value: number }[];
   totals: { invested: number; cotas: number; received: number; monthly: number; claimable: number };
   loading: boolean;
-  logsNote: string | null;
+  logsNote: "note1" | "note2" | null;
   refetch: () => void;
 };
 
@@ -94,11 +95,9 @@ export function useDemo() {
   );
 }
 
-const MONTH_LABEL = (d: Date) => d.toLocaleDateString("pt-BR", { month: "short", year: "2-digit", timeZone: "UTC" }).replace(".", "");
-
 function buildSeries(positions: Position[], txs: Tx[], months = 12) {
   const now = new Date();
-  const out: { label: string; value: number }[] = [];
+  const out: { date: string; value: number }[] = [];
   for (let k = months - 1; k >= 0; k--) {
     const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - k + 1, 1));
     let v = 0;
@@ -108,7 +107,7 @@ function buildSeries(positions: Position[], txs: Tx[], months = 12) {
       if (t.kind === "desistencia" || t.kind === "reembolso") v -= t.amountBRL;
       if (t.kind === "distribuicao" || t.kind === "resgate") v += t.amountBRL;
     }
-    out.push({ label: MONTH_LABEL(new Date(end.getTime() - 86400000)), value: Math.max(0, v) });
+    out.push({ date: new Date(end.getTime() - 86400000).toISOString(), value: Math.max(0, v) });
   }
   if (positions.length && out.every((o) => o.value === 0)) out[out.length - 1].value = positions.reduce((s, p) => s + p.investedBRL + p.receivedBRL, 0);
   return out;
@@ -188,14 +187,14 @@ export function usePortfolio(): PortfolioData {
   });
 
   // extrato on-chain (eventos filtrados pelo endereço do investidor)
-  const [logs, setLogs] = useState<{ txs: Tx[]; note: string | null; loading: boolean }>({ txs: [], note: null, loading: false });
+  const [logs, setLogs] = useState<{ txs: Tx[]; note: "note1" | "note2" | null; loading: boolean }>({ txs: [], note: null, loading: false });
   useEffect(() => {
     if (demo || !isConnected || !address || !client || deployed.length === 0) return;
     let alive = true;
     (async () => {
       setLogs((l) => ({ ...l, loading: true }));
       const out: Tx[] = [];
-      let note: string | null = null;
+      let note: "note1" | "note2" | null = null;
       try {
         const latest = await client.getBlockNumber();
         const span = 45_000n; // ~1,5 dia na BSC; RPCs públicas limitam o intervalo do getLogs
@@ -227,9 +226,9 @@ export function usePortfolio(): PortfolioData {
             });
           }
         }
-        note = "Extrato dos últimos ~1,5 dia de blocos; o histórico completo está no BscScan.";
+        note = "note1";
       } catch {
-        note = "Não foi possível ler o extrato on-chain agora (limite da RPC pública). Consulte o histórico no BscScan.";
+        note = "note2";
       }
       if (alive) setLogs({ txs: out.sort((a, b) => b.at.localeCompare(a.at)), note, loading: false });
     })();

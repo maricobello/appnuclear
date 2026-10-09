@@ -6,6 +6,8 @@ import { useEffect, useRef, useState } from "react";
 import { AnimatePresence, motion, useMotionValue, useReducedMotion, useSpring, useTransform } from "motion/react";
 import { ArrowRight } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
+import { useT } from "@/i18n/client";
+import { LangSwitcher } from "@/components/i18n/LangSwitcher";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -15,6 +17,7 @@ const ease = [0.22, 1, 0.36, 1] as const;
  */
 export function Landing() {
   const router = useRouter();
+  const { d } = useT();
   const reduce = useReducedMotion();
   const btn = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState<{ x: number; y: number } | null>(null);
@@ -93,9 +96,12 @@ export function Landing() {
             Aferi <span className="font-normal text-white/70">Capital</span>
           </span>
         </span>
-        <button onClick={go} className="rounded-full px-4 py-2 text-[14px] text-white/80 ring-1 ring-white/20 backdrop-blur-md transition hover:bg-white/10 hover:text-white">
-          Entrar
-        </button>
+        <div className="flex items-center gap-2">
+          <LangSwitcher tone="overlay" />
+          <button onClick={go} className="rounded-full px-4 py-2 text-[14px] text-white/80 ring-1 ring-white/20 backdrop-blur-md transition hover:bg-white/10 hover:text-white">
+            {d.lp.enter}
+          </button>
+        </div>
       </motion.header>
 
       {/* conteúdo */}
@@ -106,7 +112,8 @@ export function Landing() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.9, ease }}
         >
-          Usinas solares<span className="hidden sm:inline"> · acesso exclusivo</span>
+          {d.lp.pill}
+          <span className="hidden sm:inline">{d.lp.pillExtra}</span>
         </motion.p>
         <motion.h1
           className="mt-7 max-w-4xl bg-gradient-to-b from-white to-white/70 bg-clip-text text-[52px] font-semibold leading-[0.98] tracking-[-0.03em] text-transparent sm:text-[96px]"
@@ -114,7 +121,7 @@ export function Landing() {
           animate={{ opacity: 1, y: 0, filter: "blur(0px)" }}
           transition={{ delay: 0.7, duration: 1.1, ease }}
         >
-          Invista no sol.
+          {d.lp.h1}
         </motion.h1>
         <motion.p
           className="mt-6 max-w-md text-[17px] text-white/75 sm:text-[19px]"
@@ -122,7 +129,7 @@ export function Landing() {
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 1, duration: 0.9, ease }}
         >
-          Cotas de usinas fotovoltaicas. Renda todo mês.
+          {d.lp.sub}
         </motion.p>
         <motion.div initial={{ opacity: 0, y: 20, scale: 0.96 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ delay: 1.25, duration: 0.9, ease }} className="mt-10">
           <button
@@ -130,7 +137,7 @@ export function Landing() {
             onClick={go}
             className="group relative inline-flex items-center gap-3 overflow-hidden rounded-full bg-white px-8 py-4 text-[16px] font-semibold text-[#06090e] shadow-[0_0_60px_-10px_rgba(245,165,36,0.75)] transition hover:shadow-[0_0_80px_-6px_rgba(245,165,36,0.95)] focus-visible:outline-white"
           >
-            <span className="relative z-10">Invest now</span>
+            <span className="relative z-10">{d.lp.cta}</span>
             <span className="relative z-10 flex size-8 items-center justify-center rounded-full bg-[#06090e] text-white transition group-hover:translate-x-1">
               <ArrowRight className="size-4" />
             </span>
@@ -138,7 +145,7 @@ export function Landing() {
           </button>
         </motion.div>
         <motion.p className="mt-5 text-[13px] text-white/55" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 1.6, duration: 1 }}>
-          A partir de R$ 1.000 · BNB Chain
+          {d.lp.from}
         </motion.p>
       </div>
 
@@ -148,7 +155,7 @@ export function Landing() {
         animate={{ opacity: 1 }}
         transition={{ delay: 1.8, duration: 1 }}
       >
-        Rentabilidade é projeção, não garantia. Demonstração em rede de testes.
+        {d.lp.disclaimer}
       </motion.p>
 
       {/* transição: círculo expandindo a partir do botão */}

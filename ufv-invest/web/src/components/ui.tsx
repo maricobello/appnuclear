@@ -86,21 +86,7 @@ export const buttonClass = {
   ghost: "inline-flex items-center justify-center gap-2 rounded-lg px-3 py-2 text-[14px] font-medium text-ink-2 transition hover:bg-surface-2 hover:text-ink disabled:opacity-50",
 };
 
-/** Selo de status da usina, no padrão da vitrine */
-export function StatusChip({ status, className }: { status: "operacao" | "implantacao" | "encerrada"; className?: string }) {
-  const map = {
-    operacao: { label: "Em operação", c: "bg-brand-soft text-good ring-good/25", dot: "bg-leaf" },
-    implantacao: { label: "Em implantação", c: "bg-info/10 text-info ring-info/25", dot: "bg-series-1" },
-    encerrada: { label: "Oferta encerrada", c: "bg-surface-3 text-ink-2 ring-line-strong", dot: "bg-muted" },
-  } as const;
-  const m = map[status];
-  return (
-    <span className={cx("inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ring-1 ring-inset", m.c, className)}>
-      <span className={cx("size-1.5 rounded-full", m.dot)} aria-hidden />
-      {m.label}
-    </span>
-  );
-}
+export { StatusChip } from "./StatusChip";
 
 /** Ícone em círculo verde suave (estatísticas e listas) */
 export function IconBubble({ children, className }: { children: ReactNode; className?: string }) {

@@ -4,6 +4,7 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState, t
 import { useConnection, useSignMessage } from "wagmi";
 import { createSiweMessage } from "viem/siwe";
 import { TARGET_CHAIN_ID } from "@/lib/web3/chains";
+import { useT } from "@/i18n/client";
 
 /**
  * Sign-In with Ethereum (EIP-4361): a pessoa prova que controla a carteira assinando uma
@@ -28,6 +29,7 @@ export function SiweProvider({ children }: { children: ReactNode }) {
   const [sessionAddress, setSessionAddress] = useState<string | null>(null);
   const [status, setStatus] = useState<SiweState["status"]>("loading");
   const [error, setError] = useState<string | null>(null);
+  const { d, locale } = useT();
 
   useEffect(() => {
     fetch("/api/auth/session", { cache: "no-store" })
@@ -55,7 +57,7 @@ export function SiweProvider({ children }: { children: ReactNode }) {
       const message = createSiweMessage({
         domain: window.location.host,
         address,
-        statement: "Entrar na Aferi Capital. Esta assinatura não autoriza nenhuma transação nem movimenta fundos.",
+        statement: d.wal.siweStatement,
         uri: window.location.origin,
         version: "1",
         chainId: TARGET_CHAIN_ID,
@@ -66,17 +68,17 @@ export function SiweProvider({ children }: { children: ReactNode }) {
       const signature = await sign.mutateAsync({ message });
       const res = await fetch("/api/auth/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ message, signature }) });
       const data = (await res.json()) as { address?: string; error?: string };
-      if (!res.ok || !data.address) throw new Error(data.error ?? "falha ao verificar a assinatura");
+      if (!res.ok || !data.address) throw new Error(locale === "pt" && data.error ? data.error : d.wal.sigFailed);
       setSessionAddress(data.address);
       setStatus("idle");
       return true;
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      setError(/reject|denied|cancel/i.test(msg) ? "Assinatura cancelada na carteira." : msg);
+      setError(/reject|denied|cancel/i.test(msg) ? d.wal.sigCancelled : msg);
       setStatus("error");
       return false;
     }
-  }, [address, sign]);
+  }, [address, sign, d, locale]);
 
   const value = useMemo<SiweState>(() => ({ address: sessionAddress, status, error, signIn, signOut, isSignedIn }), [sessionAddress, status, error, signIn, signOut, isSignedIn]);
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;

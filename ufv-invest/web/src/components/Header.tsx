@@ -8,16 +8,19 @@ import { Logo } from "./Logo";
 import { AccountButton } from "./wallet/AccountButton";
 import { buttonClass, cx, Container } from "./ui";
 import { TARGET_CHAIN_ID } from "@/lib/web3/chains";
+import { useT } from "@/i18n/client";
+import { LangSwitcher } from "./i18n/LangSwitcher";
 
-const nav = [
-  { href: "/usinas", label: "Usinas" },
-  { href: "/simulador", label: "Simulador" },
-  { href: "/portfolio", label: "Portfólio" },
-  { href: "/como-funciona", label: "Como funciona" },
-];
+const NAV = [
+  ["/usinas", "usinas"],
+  ["/simulador", "simulador"],
+  ["/portfolio", "portfolio"],
+  ["/como-funciona", "como"],
+] as const;
 
 function SearchBox({ onDone }: { onDone: () => void }) {
   const router = useRouter();
+  const { d } = useT();
   const input = useRef<HTMLInputElement>(null);
   useEffect(() => input.current?.focus(), []);
   return (
@@ -32,18 +35,18 @@ function SearchBox({ onDone }: { onDone: () => void }) {
       }}
     >
       <label htmlFor="busca-global" className="sr-only">
-        Buscar usina por nome ou cidade
+        {d.nav.searchLabel}
       </label>
       <input
         id="busca-global"
         ref={input}
         type="search"
-        placeholder="Buscar usina ou cidade…"
+        placeholder={d.nav.searchPh}
         className="h-10 w-full rounded-lg border border-line-strong bg-surface px-3 text-[14px] outline-none focus:border-brand"
         onKeyDown={(e) => e.key === "Escape" && onDone()}
       />
       <button type="submit" className={cx(buttonClass.primary, "h-10")}>
-        Buscar
+        {d.nav.searchBtn}
       </button>
     </form>
   );
@@ -51,6 +54,8 @@ function SearchBox({ onDone }: { onDone: () => void }) {
 
 export function Header() {
   const path = usePathname();
+  const { d } = useT();
+  const nav = NAV.map(([href, k]) => ({ href, label: d.nav[k] }));
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState(false);
   const active = (href: string) => (href === "/" ? path === "/" : path?.startsWith(href));
@@ -63,12 +68,12 @@ export function Header() {
             <Logo />
           </Link>
           {TARGET_CHAIN_ID === 97 && (
-            <span title="Demonstração na BNB Smart Chain Testnet: projetos ilustrativos, tokens sem valor real" className="hidden rounded-full bg-warning/10 px-2 py-0.5 text-[10px] sm:inline font-semibold uppercase tracking-wide text-warning">
-              Testnet
+            <span title={d.common.testnetTitle} className="hidden rounded-full bg-warning/10 px-2 py-0.5 text-[10px] sm:inline font-semibold uppercase tracking-wide text-warning">
+              {d.common.testnet}
             </span>
           )}
         </div>
-        <nav className="hidden items-center gap-1 lg:flex" aria-label="Principal">
+        <nav className="hidden items-center gap-1 lg:flex" aria-label={d.nav.main}>
           {nav.map((n) => (
             <Link
               key={n.href}
@@ -81,11 +86,12 @@ export function Header() {
           ))}
         </nav>
         <div className="flex items-center gap-1 sm:gap-2">
-          <button className="rounded-lg p-2 text-ink-2 hover:bg-surface-2 hover:text-ink" onClick={() => setSearch((s) => !s)} aria-label="Buscar usinas" aria-expanded={search}>
+          <button className="rounded-lg p-2 text-ink-2 hover:bg-surface-2 hover:text-ink" onClick={() => setSearch((s) => !s)} aria-label={d.nav.search} aria-expanded={search}>
             {search ? <X className="size-5" /> : <Search className="size-5" />}
           </button>
+          <LangSwitcher />
           <AccountButton />
-          <button className="rounded-lg p-2 text-ink-2 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label="Abrir menu" aria-expanded={open}>
+          <button className="rounded-lg p-2 text-ink-2 lg:hidden" onClick={() => setOpen((o) => !o)} aria-label={d.nav.openMenu} aria-expanded={open}>
             {open ? <X className="size-5" /> : <Menu className="size-5" />}
           </button>
         </div>
@@ -98,7 +104,7 @@ export function Header() {
         </div>
       )}
       {open && (
-        <nav className="border-t border-line bg-page/95 lg:hidden" aria-label="Principal (móvel)">
+        <nav className="border-t border-line bg-page/95 lg:hidden" aria-label={d.nav.mainMobile}>
           <Container className="flex flex-col py-2">
             {nav.map((n) => (
               <Link key={n.href} href={n.href} onClick={() => setOpen(false)} className={cx("rounded-lg px-3 py-2.5 text-[15px] hover:bg-surface-2", active(n.href) ? "font-semibold text-ink" : "text-ink-2")}>
@@ -106,7 +112,7 @@ export function Header() {
               </Link>
             ))}
             <Link href="/sobre" onClick={() => setOpen(false)} className="rounded-lg px-3 py-2.5 text-[15px] text-ink-2 hover:bg-surface-2">
-              Sobre nós
+              {d.nav.sobre}
             </Link>
           </Container>
         </nav>
