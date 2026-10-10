@@ -211,7 +211,7 @@ export function ProfilePage() {
         <Card className="p-5">
           <h2 className="text-[15px] font-semibold text-ink">{x.kycTitle}</h2>
           <p className="mb-4 text-[12px] text-muted">{x.kycSub}</p>
-          <KycForm verifiedOnChain={reg ? Boolean(kyc.data) : undefined} />
+          <KycForm verifiedOnChain={reg ? Boolean(kyc.data) : undefined} onApproved={() => void kyc.refetch()} />
         </Card>
       </div>
     </RequireWallet>

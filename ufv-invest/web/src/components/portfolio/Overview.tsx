@@ -154,7 +154,8 @@ function Inner() {
                   </td>
                   <td className="px-5 py-3 text-right">
                     <div className="flex items-center justify-end gap-3">
-                      {d.mode === "onchain" && p.claimable && p.claimable > 0n && p.token && (
+                      {/* `p.claimable && …` com 0n renderizaria um "0" solto na tabela */}
+                      {d.mode === "onchain" && (p.claimable ?? 0n) > 0n && p.token && (
                         <button
                           className={cx(buttonClass.primary, "px-3 py-1.5 text-[12px]")}
                           disabled={tx.busy}

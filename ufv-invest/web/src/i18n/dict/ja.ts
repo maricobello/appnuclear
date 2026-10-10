@@ -354,7 +354,6 @@ export const ja: Dict = {
     "withdrewText": "募集上限が直前の撤回でふさがれるのを防ぐため、撤回したウォレットは本募集に再投資できません。",
     "kycTitle": "本人確認が必要です",
     "kycText": "KYC 承認済みのウォレットのみ投資できます。",
-    "kycLink": "KYC を行う",
     "cotasLabel": "口数（最小 {min}{max}）",
     "cotasMax": "、1 人あたり最大 {n}",
     "total": "合計",
@@ -586,7 +585,12 @@ export const ja: Dict = {
     "prodNote": "本番環境では、KYC 事業者による書類確認と生体確認が含まれます。",
     "failed": "送信できませんでした。",
     "badCpf": "CPF が無効です。",
-    "foreignNote": "ブラジル非居住者の投資家は、承認前に追加のコンプライアンス審査を受けます。"
+    "foreignNote": "ブラジル非居住者の投資家は、承認前に追加のコンプライアンス審査を受けます。",
+    "approved": "本人確認が完了しました",
+    "approvedText": "ウォレットがコントラクトの投資家登録に記録されました。投資できます。",
+    "approving": "ブロックチェーンに登録中…",
+    "testnetAuto": "テストネット：デモのため自動で承認されます。メインネットでは KYC 事業者が確認します。",
+    "retry": "再試行"
   },
   "sup": {
     "title": "サポート",

@@ -13,6 +13,7 @@ import { useNowSec } from "@/lib/useNow";
 import { shortAddr } from "@/lib/fmt";
 import { useT } from "@/i18n/client";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
+import { KycForm } from "@/components/wallet/KycForm";
 import { Badge, buttonClass, cx, Notice } from "@/components/ui";
 
 
@@ -238,12 +239,13 @@ export function InvestPanel({
               {ip.withdrewText}
             </Notice>
           ) : verified === false ? (
-            <Notice tone="warning" title={ip.kycTitle}>
-              {ip.kycText}{" "}
-              <Link href="/carteira#kyc" className="font-medium text-brand underline-offset-2 hover:underline">
-                {ip.kycLink}
-              </Link>
-            </Notice>
+            // KYC aqui mesmo: na testnet a aprovação é imediata e o painel libera o aporte sozinho
+            <div className="space-y-3">
+              <Notice tone="warning" title={ip.kycTitle}>
+                {ip.kycText}
+              </Notice>
+              <KycForm verifiedOnChain={false} onApproved={after} />
+            </div>
           ) : (
             <div className="space-y-3">
               <div>

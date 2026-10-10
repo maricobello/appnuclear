@@ -354,7 +354,6 @@ export const es: Dict = {
     "withdrewText": "Para evitar que el tope de captación se bloquee con reservas que desisten al final, una billetera que ejerció el desistimiento no puede aportar de nuevo en esta oferta.",
     "kycTitle": "Verificación de identidad necesaria",
     "kycText": "Solo billeteras con KYC aprobado pueden invertir.",
-    "kycLink": "Hacer KYC",
     "cotasLabel": "Participaciones (mín. {min}{max})",
     "cotasMax": ", máx. {n} por inversor",
     "total": "Total",
@@ -586,7 +585,12 @@ export const es: Dict = {
     "prodNote": "En la versión de producción, esta etapa incluye validación de documento y prueba de vida por un proveedor de KYC.",
     "failed": "No se pudo enviar.",
     "badCpf": "CPF inválido.",
-    "foreignNote": "Los inversores no residentes en Brasil pasan por un análisis adicional de cumplimiento antes de la aprobación."
+    "foreignNote": "Los inversores no residentes en Brasil pasan por un análisis adicional de cumplimiento antes de la aprobación.",
+    "approved": "Identidad aprobada",
+    "approvedText": "Tu billetera fue registrada en el registro de inversores del contrato. Ya puedes invertir.",
+    "approving": "Registrando en la blockchain…",
+    "testnetAuto": "Testnet: la aprobación es automática para la demostración. En la red principal, la verificación la hace un proveedor de KYC.",
+    "retry": "Intentar de nuevo"
   },
   "sup": {
     "title": "Soporte",

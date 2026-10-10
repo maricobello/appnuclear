@@ -354,7 +354,6 @@ export const en: Dict = {
     "withdrewText": "To prevent the raise cap from being blocked by last-minute withdrawals, a wallet that has withdrawn cannot invest in this offer again.",
     "kycTitle": "Identity verification required",
     "kycText": "Only wallets with approved KYC can invest.",
-    "kycLink": "Complete KYC",
     "cotasLabel": "Shares (min. {min}{max})",
     "cotasMax": ", max. {n} per investor",
     "total": "Total",
@@ -586,7 +585,12 @@ export const en: Dict = {
     "prodNote": "In production, this step includes document validation and liveness check by a KYC provider.",
     "failed": "Could not submit.",
     "badCpf": "Invalid CPF.",
-    "foreignNote": "Investors not resident in Brazil undergo an additional compliance review before approval."
+    "foreignNote": "Investors not resident in Brazil undergo an additional compliance review before approval.",
+    "approved": "Identity approved",
+    "approvedText": "Your wallet was registered in the contract’s investor registry. You can invest now.",
+    "approving": "Registering on the blockchain…",
+    "testnetAuto": "Testnet: approval is automatic for demonstration. On mainnet, verification is done by a KYC provider.",
+    "retry": "Try again"
   },
   "sup": {
     "title": "Support",

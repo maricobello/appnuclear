@@ -1,16 +1,21 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ExternalLink } from "lucide-react";
 import { useSiwe } from "./useSiwe";
 import { buttonClass, cx, Notice } from "@/components/ui";
 import { useT } from "@/i18n/client";
+import { KYC_COUNTRY_CODES } from "@/lib/countries";
+import { explorerUrl, TARGET_CHAIN_ID } from "@/lib/web3/chains";
+import { shortAddr } from "@/lib/fmt";
 
-/** Países mais comuns no topo; o nome aparece no idioma da interface. */
-const COUNTRIES = ["BR", "US", "PT", "ES", "FR", "DE", "IT", "GB", "CH", "NL", "BE", "IE", "CA", "MX", "AR", "CL", "CO", "UY", "PY", "PE", "CN", "JP", "KR", "SG", "HK", "AE", "SA", "IL", "IN", "AU", "NZ", "ZA"];
+type KycStatus = { status: "nenhum" | "pendente" | "aprovado"; at?: string; nome?: string; docTipo?: "cpf" | "passaporte"; doc?: string; txHash?: string };
 
-type KycStatus = { status: "nenhum" | "pendente"; at?: string; nome?: string; docTipo?: "cpf" | "passaporte"; doc?: string };
-
-export function KycForm({ verifiedOnChain }: { verifiedOnChain: boolean | undefined }) {
+/**
+ * Formulário de KYC. Na testnet o site aprova na hora (relayer) e chama `onApproved` para a tela
+ * reler o registro on-chain; na rede principal o pedido fica pendente para a equipe de compliance.
+ */
+export function KycForm({ verifiedOnChain, onApproved }: { verifiedOnChain: boolean | undefined; onApproved?: () => void }) {
   const siwe = useSiwe();
   const { d, t, f, locale } = useT();
   const k = d.kyc;
@@ -57,10 +62,29 @@ export function KycForm({ verifiedOnChain }: { verifiedOnChain: boolean | undefi
     );
   }
 
+  if (status?.status === "aprovado") {
+    return (
+      <Notice tone="good" title={k.approved}>
+        {k.approvedText}
+        {status.txHash && (
+          <a href={explorerUrl("tx", status.txHash)} target="_blank" rel="noopener noreferrer" className="ml-1 inline-flex items-center gap-1 underline-offset-2 hover:underline">
+            {t(d.ip.viewTx, { h: shortAddr(status.txHash, 6) })} <ExternalLink className="size-3" />
+          </a>
+        )}
+      </Notice>
+    );
+  }
+
   if (status?.status === "pendente") {
     return (
       <Notice tone="info" title={k.pending}>
         {t(k.pendingText, { d: f.date(status.at, true), name: status.nome ?? "", doc: `${status.docTipo === "passaporte" ? k.passportLbl : "CPF"} ${status.doc ?? ""}` })}
+        {/* testnet: a aprovação é automática; se a rede falhou no envio, dá para tentar de novo */}
+        {TARGET_CHAIN_ID === 97 && (
+          <button type="button" className="ml-1 font-medium underline-offset-2 hover:underline" onClick={() => setStatus({ status: "nenhum" })}>
+            {k.retry}
+          </button>
+        )}
       </Notice>
     );
   }
@@ -72,9 +96,11 @@ export function KycForm({ verifiedOnChain }: { verifiedOnChain: boolean | undefi
     try {
       const body = { nome: form.nome, email: form.email, aceite: form.aceite, pais: form.pais, ...(isBr ? { cpf: form.cpf } : { passaporte: form.passaporte }) };
       const r = await fetch("/api/kyc", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-      const res = (await r.json()) as { at?: string; error?: string; issues?: string[] };
+      const res = (await r.json()) as { status?: KycStatus["status"]; at?: string; txHash?: string; error?: string; issues?: string[] };
       if (!r.ok) throw new Error(res.issues?.includes("cpf") ? k.badCpf : locale === "pt" && res.error ? res.error : k.failed);
-      setStatus({ status: "pendente", at: res.at, nome: form.nome, docTipo: isBr ? "cpf" : "passaporte", doc: "***" });
+      const approved = res.status === "aprovado";
+      setStatus({ status: approved ? "aprovado" : "pendente", at: res.at, nome: form.nome, docTipo: isBr ? "cpf" : "passaporte", doc: "***", txHash: res.txHash });
+      if (approved) onApproved?.();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -99,7 +125,7 @@ export function KycForm({ verifiedOnChain }: { verifiedOnChain: boolean | undefi
           <option value="" disabled>
             —
           </option>
-          {COUNTRIES.map((c) => (
+          {KYC_COUNTRY_CODES.map((c) => (
             <option key={c} value={c}>
               {names?.of(c) ?? c}
             </option>
@@ -137,8 +163,9 @@ export function KycForm({ verifiedOnChain }: { verifiedOnChain: boolean | undefi
       </label>
       {error && <p className="text-[13px] text-critical" role="alert">{error}</p>}
       <button type="submit" className={cx(buttonClass.primary, "w-full")} disabled={sending}>
-        {sending ? k.sending : k.submit}
+        {sending ? (TARGET_CHAIN_ID === 97 ? k.approving : k.sending) : k.submit}
       </button>
+      {TARGET_CHAIN_ID === 97 && <p className="text-[12px] text-muted">{k.testnetAuto}</p>}
       {form.pais && !isBr && <p className="text-[12px] text-muted">{k.foreignNote}</p>}
       <p className="text-[12px] text-muted">{k.prodNote}</p>
     </form>

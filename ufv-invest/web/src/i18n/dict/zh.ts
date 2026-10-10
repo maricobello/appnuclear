@@ -354,7 +354,6 @@ export const zh: Dict = {
     "withdrewText": "为避免募集上限被临近结束的撤回占用，已撤回的钱包不能再次参与本次认购。",
     "kycTitle": "需要身份验证",
     "kycText": "仅通过 KYC 的钱包可以投资。",
-    "kycLink": "完成 KYC",
     "cotasLabel": "份额（最少 {min}{max}）",
     "cotasMax": "，每位投资者最多 {n}",
     "total": "合计",
@@ -586,7 +585,12 @@ export const zh: Dict = {
     "prodNote": "正式版中，此步骤包括由 KYC 服务商进行证件验证与活体检测。",
     "failed": "提交失败。",
     "badCpf": "CPF 无效。",
-    "foreignNote": "非巴西居民投资者在审核通过前需接受额外的合规审查。"
+    "foreignNote": "非巴西居民投资者在审核通过前需接受额外的合规审查。",
+    "approved": "身份已通过",
+    "approvedText": "您的钱包已登记到合约投资者名册，现在可以投资。",
+    "approving": "正在区块链上登记…",
+    "testnetAuto": "测试网：为演示自动通过。主网上由 KYC 服务商审核。",
+    "retry": "重试"
   },
   "sup": {
     "title": "支持",

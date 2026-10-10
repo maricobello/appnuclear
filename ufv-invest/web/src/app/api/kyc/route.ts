@@ -4,6 +4,11 @@ import { getSession } from "@/lib/auth/session";
 import { keyedHash } from "@/lib/auth/token";
 import { isValidCpf, maskCpf } from "@/lib/cpf";
 import { rateLimit } from "@/lib/rateLimit";
+import { isKycCountry, KYC_COUNTRIES } from "@/lib/countries";
+import { approveInvestorOnChain } from "@/lib/web3/relayer";
+
+// a aprovação on-chain da testnet espera 1 confirmação (alguns segundos)
+export const maxDuration = 30;
 
 /**
  * Solicitação de KYC vinculada à carteira autenticada por SIWE.
@@ -13,6 +18,9 @@ import { rateLimit } from "@/lib/rateLimit";
  * unico, Sumsub) — que valida documentos e biometria. A aprovação é registrada on-chain pelo
  * papel COMPLIANCE no IdentityRegistry (script contracts/scripts/admin). LGPD: nada de CPF
  * em claro em log; a base legal e o aviso de privacidade devem acompanhar o formulário.
+ *
+ * Testnet: o relayer do site (lib/web3/relayer) aprova na hora, para o fluxo de investimento de
+ * demonstração funcionar de ponta a ponta. Na rede principal o relayer não existe.
  */
 const Body = z
   .object({
@@ -27,16 +35,23 @@ const Body = z
       .regex(/^[A-Za-z0-9-]+$/)
       .optional(),
     email: z.email().max(160),
-    pais: z
-      .string()
-      .length(2)
-      .regex(/^[A-Z]{2}$/)
-      .default("BR"),
+    pais: z.string().refine(isKycCountry).default("BR"),
     aceite: z.literal(true),
   })
   .refine((b) => (b.pais === "BR" ? Boolean(b.cpf) : Boolean(b.passaporte)), { path: ["documento"] });
 
-type KycRequest = { address: string; nome: string; docTipo: "cpf" | "passaporte"; docMasked: string; docHash: string; email: string; pais: string; at: string; status: "pendente" };
+type KycRequest = {
+  address: string;
+  nome: string;
+  docTipo: "cpf" | "passaporte";
+  docMasked: string;
+  docHash: string;
+  email: string;
+  pais: string;
+  at: string;
+  status: "pendente" | "aprovado";
+  txHash?: string;
+};
 
 function maskPassport(v: string) {
   const c = v.replace(/[^A-Za-z0-9]/g, "").toUpperCase();
@@ -48,7 +63,7 @@ export async function GET() {
   const s = await getSession();
   if (!s) return NextResponse.json({ error: "faça login com a carteira (SIWE)" }, { status: 401 });
   const r = store.get(s.address.toLowerCase());
-  return NextResponse.json(r ? { status: r.status, at: r.at, nome: r.nome, docTipo: r.docTipo, doc: r.docMasked } : { status: "nenhum" }, { headers: { "Cache-Control": "no-store" } });
+  return NextResponse.json(r ? { status: r.status, at: r.at, nome: r.nome, docTipo: r.docTipo, doc: r.docMasked, txHash: r.txHash } : { status: "nenhum" }, { headers: { "Cache-Control": "no-store" } });
 }
 
 export async function POST(req: NextRequest) {
@@ -86,5 +101,13 @@ export async function POST(req: NextRequest) {
       signal: AbortSignal.timeout(8000),
     }).catch(() => {});
   }
-  return NextResponse.json({ status: record.status, at: record.at });
+
+  // testnet: aprovação imediata on-chain pelo relayer do site (na rede principal fica "pendente")
+  const onchain = await approveInvestorOnChain(s.address, KYC_COUNTRIES[b.pais as keyof typeof KYC_COUNTRIES]);
+  if (onchain.status !== "unavailable") {
+    record.status = "aprovado";
+    if (onchain.status === "approved") record.txHash = onchain.txHash;
+    store.set(s.address.toLowerCase(), record);
+  }
+  return NextResponse.json({ status: record.status, at: record.at, txHash: record.txHash, onchain: onchain.status, reason: onchain.status === "unavailable" ? onchain.reason : undefined });
 }

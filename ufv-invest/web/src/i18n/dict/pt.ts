@@ -352,7 +352,6 @@ export const pt = {
     "withdrewText": "Para evitar que o teto da captação seja bloqueado por reservas que desistem no fim, uma carteira que exerceu a desistência não pode aportar de novo nesta oferta.",
     "kycTitle": "Verificação de identidade necessária",
     "kycText": "Só carteiras com KYC aprovado podem investir.",
-    "kycLink": "Fazer KYC",
     "cotasLabel": "Cotas (mín. {min}{max})",
     "cotasMax": ", máx. {n} por investidor",
     "total": "Total",
@@ -584,7 +583,12 @@ export const pt = {
     "prodNote": "Na versão de produção, esta etapa inclui validação de documento e prova de vida por um provedor de KYC.",
     "failed": "Não foi possível enviar.",
     "badCpf": "CPF inválido.",
-    "foreignNote": "Investidores não residentes no Brasil passam por análise adicional de conformidade antes da aprovação."
+    "foreignNote": "Investidores não residentes no Brasil passam por análise adicional de conformidade antes da aprovação.",
+    "approved": "Identidade aprovada",
+    "approvedText": "Sua carteira foi registrada no cadastro de investidores do contrato. Já pode investir.",
+    "approving": "Registrando na blockchain…",
+    "testnetAuto": "Testnet: a aprovação é automática para demonstração. Na rede principal, a verificação é feita por um provedor de KYC.",
+    "retry": "Tentar novamente"
   },
   "sup": {
     "title": "Suporte",

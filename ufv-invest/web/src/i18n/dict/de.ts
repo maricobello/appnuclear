@@ -354,7 +354,6 @@ export const de: Dict = {
     "withdrewText": "Damit die Obergrenze nicht durch kurzfristige Widerrufe blockiert wird, kann eine Wallet nach einem Widerruf nicht erneut investieren.",
     "kycTitle": "Identitätsprüfung erforderlich",
     "kycText": "Nur Wallets mit genehmigtem KYC können investieren.",
-    "kycLink": "KYC durchführen",
     "cotasLabel": "Anteile (min. {min}{max})",
     "cotasMax": ", max. {n} pro Anleger",
     "total": "Gesamt",
@@ -586,7 +585,12 @@ export const de: Dict = {
     "prodNote": "Im Produktivbetrieb umfasst dieser Schritt Dokumentenprüfung und Lebenderkennung durch einen KYC-Anbieter.",
     "failed": "Senden fehlgeschlagen.",
     "badCpf": "Ungültige CPF.",
-    "foreignNote": "Anleger ohne Wohnsitz in Brasilien durchlaufen vor der Freigabe eine zusätzliche Compliance-Prüfung."
+    "foreignNote": "Anleger ohne Wohnsitz in Brasilien durchlaufen vor der Freigabe eine zusätzliche Compliance-Prüfung.",
+    "approved": "Identität bestätigt",
+    "approvedText": "Ihre Wallet wurde im Anlegerregister des Vertrags eingetragen. Sie können jetzt investieren.",
+    "approving": "Wird in der Blockchain eingetragen…",
+    "testnetAuto": "Testnet: Die Freigabe erfolgt zu Demozwecken automatisch. Im Hauptnetz prüft ein KYC-Anbieter.",
+    "retry": "Erneut versuchen"
   },
   "sup": {
     "title": "Support",

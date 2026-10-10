@@ -6,6 +6,7 @@ import { ExternalLink, ShieldCheck, Smartphone, Wallet, X } from "lucide-react";
 import { TARGET_CHAIN_ID, walletNotes } from "@/lib/web3/chains";
 import { Badge, buttonClass, cx } from "@/components/ui";
 import { useT } from "@/i18n/client";
+import { useMounted } from "@/lib/useNow";
 
 const installLinks = [
   { name: "Rabby", url: "https://rabby.io" },
@@ -30,10 +31,13 @@ export function WalletModal({ open, onClose }: { open: boolean; onClose: () => v
     if (!open && d.open) d.close();
   }, [open]);
 
-  const discovered = connectors.filter((c) => c.type === "injected" && c.id !== "injected");
+  // As extensões de carteira (EIP-6963 e window.ethereum) só existem no navegador: listá-las já na
+  // hidratação faria o HTML do servidor (sem carteiras) divergir do cliente (React #418).
+  const mounted = useMounted();
+  const discovered = mounted ? connectors.filter((c) => c.type === "injected" && c.id !== "injected") : [];
   const generic = connectors.find((c) => c.id === "injected");
   const wc = connectors.find((c) => c.type === "walletConnect");
-  const hasWindowEthereum = typeof window !== "undefined" && "ethereum" in window;
+  const hasWindowEthereum = mounted && "ethereum" in window;
 
   const ordered = [...discovered].sort((a, b) => Number(Boolean(walletNotes[b.id]?.recommended)) - Number(Boolean(walletNotes[a.id]?.recommended)));
 

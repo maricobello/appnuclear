@@ -456,8 +456,7 @@ describe("Auditoria — deploy (scripts/lib/deploy-core)", () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "ufv-audit-"));
     const plantsFile = path.join(dir, "plants.json");
     const real = JSON.parse(fs.readFileSync(DEFAULT_PLANTS_FILE, "utf8"));
-    real.plants[0].startTime = "+0d";
-    real.plants[0].endTime = "+80d";
+    for (const p of real.plants) Object.assign(p, { startTime: "+0d", endTime: "+80d" });
     fs.writeFileSync(plantsFile, JSON.stringify(real));
     const opts = {
       admin: safe.address,
@@ -492,7 +491,8 @@ describe("Auditoria — deploy (scripts/lib/deploy-core)", () => {
         expect((await c.pendingDefaultAdmin())[0], `admin de ${a} não foi entregue à Safe`).to.equal(safe.address);
       }
     }
-    expect(record.pendingAdminTransfers).to.have.length(7);
+    // 1 registro + 6 × (token + oferta)
+    expect(record.pendingAdminTransfers).to.have.length(13);
     fs.rmSync(dir, { recursive: true, force: true });
   });
 });

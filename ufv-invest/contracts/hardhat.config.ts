@@ -52,6 +52,8 @@ const config: HardhatUserConfig = {
     hardhat: {
       // Os testes usam blocos com timestamp real (outubro/2026 em diante) e viajam no tempo.
       hardfork: "cancun",
+      // HARDHAT_CHAIN_ID=97 faz o `hardhat node` se passar pela BSC testnet (teste ponta a ponta do site)
+      chainId: Number(process.env.HARDHAT_CHAIN_ID) || 31337,
     },
     bscTestnet: {
       url: process.env.BSC_TESTNET_RPC_URL || "https://data-seed-prebsc-1-s1.bnbchain.org:8545",

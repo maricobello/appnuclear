@@ -1,43 +1,82 @@
 {
-  "$comment": "Configuração das ofertas. Datas: ISO 8601 (UTC) ou relativas ao momento do deploy no formato '+<n>d' / '+<n>h'. Preço em USDT (string decimal, convertido com os decimais do token de pagamento). maxCotasPerInvestor = 10% do total. hardCapCotas = maxSupply.",
+  "$comment": "Ofertas abertas do catálogo do site (web/src/data/plants.ts): os números precisam ser iguais aos do site — o teste web/tests/ofertas-contratos.test.ts confere. Ofertas já encerradas no catálogo não entram. Datas: ISO 8601 (UTC) ou relativas ao deploy ('+<n>d' / '+<n>h' / '+<n>m'). Preço em USDT (string decimal). maxCotasPerInvestor padrão = 10% do total; hardCapCotas = maxSupply.",
   "defaults": {
-    "pricePerCotaUSDT": "18.2",
-    "minCotas": 10,
+    "pricePerCotaUSDT": "182",
+    "minCotas": 1,
     "withdrawalWindowDays": 5
   },
   "plants": [
     {
-      "slug": "ufv-janauba-1",
-      "name": "Cota UFV Janaúba I",
-      "symbol": "UFVJAN1",
-      "maxSupply": 130000,
-      "hardCapCotas": 130000,
-      "softCapCotas": 91000,
-      "maxCotasPerInvestor": 13000,
-      "startTime": "2026-10-01T12:00:00Z",
+      "slug": "ufv-horizonte-azul",
+      "name": "Cota Usina Horizonte Azul",
+      "symbol": "AFHAZ1",
+      "maxSupply": 5000,
+      "hardCapCotas": 5000,
+      "softCapCotas": 3500,
+      "minCotas": 1,
+      "pricePerCotaUSDT": "182",
+      "startTime": "2026-09-01T12:00:00Z",
+      "endTime": "2026-12-15T23:59:59Z"
+    },
+    {
+      "slug": "ufv-vale-verde",
+      "name": "Cota Usina Vale Verde",
+      "symbol": "AFVVD1",
+      "maxSupply": 8800,
+      "hardCapCotas": 8800,
+      "softCapCotas": 6160,
+      "minCotas": 1,
+      "pricePerCotaUSDT": "218.4",
+      "startTime": "2026-08-15T12:00:00Z",
+      "endTime": "2026-11-30T23:59:59Z"
+    },
+    {
+      "slug": "ufv-serra-dourada",
+      "name": "Cota Usina Serra Dourada",
+      "symbol": "AFSDR1",
+      "maxSupply": 15800,
+      "hardCapCotas": 15800,
+      "softCapCotas": 11060,
+      "minCotas": 1,
+      "pricePerCotaUSDT": "172.9",
+      "startTime": "2026-09-20T12:00:00Z",
+      "endTime": "2027-02-28T23:59:59Z"
+    },
+    {
+      "slug": "ufv-sol-do-cerrado",
+      "name": "Cota Usina Sol do Cerrado",
+      "symbol": "AFSCE1",
+      "maxSupply": 6550,
+      "hardCapCotas": 6550,
+      "softCapCotas": 4585,
+      "minCotas": 1,
+      "pricePerCotaUSDT": "200.2",
+      "startTime": "2026-09-10T12:00:00Z",
       "endTime": "2026-12-20T23:59:59Z"
     },
     {
-      "slug": "ufv-petrolina-1",
-      "name": "Cota UFV Petrolina I",
-      "symbol": "UFVPET1",
-      "maxSupply": 84600,
-      "hardCapCotas": 84600,
-      "softCapCotas": 59220,
-      "maxCotasPerInvestor": 8460,
-      "startTime": "+1d",
-      "endTime": "+60d"
+      "slug": "ufv-janauba-1",
+      "name": "Cota UFV Janaúba I",
+      "symbol": "UFVJAN1",
+      "maxSupply": 13000,
+      "hardCapCotas": 13000,
+      "softCapCotas": 9100,
+      "minCotas": 1,
+      "pricePerCotaUSDT": "182",
+      "startTime": "2026-10-01T12:00:00Z",
+      "endTime": "2026-12-20T23:59:59Z"
     },
     {
       "slug": "ufv-bom-jesus-da-lapa-1",
       "name": "Cota UFV Bom Jesus da Lapa I",
       "symbol": "UFVBJL1",
-      "maxSupply": 105600,
-      "hardCapCotas": 105600,
-      "softCapCotas": 73920,
-      "maxCotasPerInvestor": 10560,
-      "startTime": "+1d",
-      "endTime": "+60d"
+      "maxSupply": 11500,
+      "hardCapCotas": 11500,
+      "softCapCotas": 8050,
+      "minCotas": 1,
+      "pricePerCotaUSDT": "182",
+      "startTime": "2026-09-15T12:00:00Z",
+      "endTime": "2027-01-31T23:59:59Z"
     }
   ]
 }

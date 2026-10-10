@@ -37,6 +37,11 @@ export interface DeployOptions {
   distributor?: string;
   /** COMPLIANCE_ROLE no IdentityRegistry (KYC). Não recebe nenhum papel nos tokens. Padrão: admin. */
   compliance?: string;
+  /**
+   * Carteiras adicionais com COMPLIANCE_ROLE (ex.: o relayer do site que aprova o KYC de demonstração
+   * na testnet). Também não recebem nenhum papel nos tokens.
+   */
+  extraCompliance?: string[];
   /** tesouraria que recebe a captação (obrigatória na mainnet). Padrão em testes: admin. */
   treasury?: string;
   /** endereço do token de pagamento (senão: MockUSDT em testnet/local, USDT oficial na mainnet) */
@@ -83,6 +88,7 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
   const admin = norm(opts.admin, "ADMIN_ADDRESS") ?? deployer.address;
   const distributor = norm(opts.distributor, "DISTRIBUTOR_ADDRESS") ?? admin;
   const compliance = norm(opts.compliance, "COMPLIANCE_ADDRESS") ?? admin;
+  const extraCompliance = (opts.extraCompliance ?? []).map((a, i) => norm(a, `EXTRA_COMPLIANCE_ADDRESSES[${i}]`)!);
   const treasuryDefault = norm(opts.treasury, "TREASURY_ADDRESS");
 
   checkPaymentTokenPolicy(chainId, opts.paymentToken, opts.allowCustomPaymentToken);
@@ -97,7 +103,7 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
 
   const balance = await ethers.provider.getBalance(deployer.address);
   log(`rede ${hre.network.name} (chainId ${chainId}) · deployer ${deployer.address} · saldo ${ethers.formatEther(balance)} BNB`);
-  log(`admin ${admin} · distribuidor ${distributor} · compliance ${compliance}`);
+  log(`admin ${admin} · distribuidor ${distributor} · compliance ${[compliance, ...extraCompliance].join(", ")}`);
 
   const recordFile = opts.recordFile === null ? undefined : (opts.recordFile ?? recordPath(chainId));
   const previous = !opts.forceRedeploy && recordFile ? readRecord(recordFile) : undefined;
@@ -189,6 +195,7 @@ export async function deployAll(hre: HardhatRuntimeEnvironment, opts: DeployOpti
   const registryAddress = await registry.getAddress();
   if ((await (registry as unknown as { defaultAdmin(): Promise<string> }).defaultAdmin()) === deployer.address) {
     await grant(registry, "IdentityRegistry", "COMPLIANCE_ROLE", compliance);
+    for (const extra of extraCompliance) await grant(registry, "IdentityRegistry", "COMPLIANCE_ROLE", extra);
   }
 
   // ─── Token de pagamento ───────────────────────────────────────────────────────────────────

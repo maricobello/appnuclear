@@ -22,6 +22,7 @@ async function main() {
     admin: env("ADMIN_ADDRESS"),
     distributor: env("DISTRIBUTOR_ADDRESS"),
     compliance: env("COMPLIANCE_ADDRESS"),
+    extraCompliance: envList("EXTRA_COMPLIANCE_ADDRESSES"),
     treasury: env("TREASURY_ADDRESS"),
     paymentToken: env("PAYMENT_TOKEN_ADDRESS"),
     only: envList("PLANTS"),
@@ -29,6 +30,7 @@ async function main() {
     allowEoaAdminOnMainnet: envFlag("ALLOW_EOA_ADMIN"),
     allowCustomPaymentToken: envFlag("ALLOW_CUSTOM_PAYMENT_TOKEN"),
     webFile: writeWeb ? env("WEB_DEPLOYMENTS_FILE") : null,
+    recordFile: env("DEPLOYMENTS_RECORD_FILE"),
     confirmations: chainId === 56 ? 2 : 1,
   });
 }

@@ -354,7 +354,6 @@ export const fr: Dict = {
     "withdrewText": "Pour éviter que le plafond de la levée soit bloqué par des rétractations de dernière minute, un portefeuille rétracté ne peut plus investir dans cette offre.",
     "kycTitle": "Vérification d’identité requise",
     "kycText": "Seuls les portefeuilles avec KYC approuvé peuvent investir.",
-    "kycLink": "Faire le KYC",
     "cotasLabel": "Parts (min. {min}{max})",
     "cotasMax": ", max. {n} par investisseur",
     "total": "Total",
@@ -586,7 +585,12 @@ export const fr: Dict = {
     "prodNote": "En production, cette étape inclut la validation du document et une preuve de vie par un prestataire KYC.",
     "failed": "Envoi impossible.",
     "badCpf": "CPF invalide.",
-    "foreignNote": "Les investisseurs non résidents au Brésil font l’objet d’un examen de conformité supplémentaire avant approbation."
+    "foreignNote": "Les investisseurs non résidents au Brésil font l’objet d’un examen de conformité supplémentaire avant approbation.",
+    "approved": "Identité approuvée",
+    "approvedText": "Votre portefeuille a été enregistré dans le registre des investisseurs du contrat. Vous pouvez investir.",
+    "approving": "Enregistrement sur la blockchain…",
+    "testnetAuto": "Testnet : l’approbation est automatique pour la démonstration. Sur le réseau principal, la vérification est faite par un prestataire KYC.",
+    "retry": "Réessayer"
   },
   "sup": {
     "title": "Assistance",
