@@ -14,6 +14,7 @@ import { Tabs } from "@/components/aferi/Tabs";
 import { GenerationOverview } from "@/components/aferi/GenerationOverview";
 import { InvestBox } from "@/components/aferi/InvestBox";
 import { getT } from "@/i18n/server";
+import { OG_IMAGE } from "@/lib/og";
 import type { Plant } from "@/lib/types";
 
 
@@ -30,7 +31,8 @@ export async function generateMetadata({ params }: PageProps<"/usinas/[slug]">):
     locale === "pt"
       ? `${p.tagline}. ${p.location.municipio}/${p.location.uf}, ${num(p.tech.dcKWp / 1000, 1)} MWp.`
       : t(d.pg.aboutTpl, { name: p.name, p: f.num(p.tech.dcKWp / 1000, 1), city: p.location.municipio, uf: p.location.uf, dist: p.location.distribuidora });
-  return { title: p.name, description, openGraph: { images: p.cover ? [p.cover] : [] } };
+  // o openGraph da página substitui o do layout por inteiro: repete título e descrição e, sem foto real, usa a imagem da marca
+  return { title: p.name, description, openGraph: { title: `${p.name} · Aferi Capital`, description, images: p.cover ? [p.cover] : [OG_IMAGE] } };
 }
 
 function dms(v: number, pos: string, neg: string) {

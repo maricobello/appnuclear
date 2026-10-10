@@ -20,16 +20,25 @@ export function PlantCard({ s, priority = false }: { s: PlantSummary; cta?: "out
     >
       <div className="relative aspect-[16/10] overflow-hidden bg-navy">
         {s.cover ? (
-          <Image src={s.cover} alt="" fill sizes="(min-width:1024px) 380px, (min-width:640px) 50vw, 100vw" className="object-cover transition duration-700 group-hover:scale-[1.05]" priority={priority} />
-        ) : (
           <Image
-            src="/images/lp/usina.jpg"
+            src={s.cover}
+            alt=""
+            fill
+            sizes="(min-width:1024px) 380px, (min-width:640px) 50vw, 100vw"
+            className="object-cover transition duration-700 group-hover:scale-[1.05]"
+            loading={priority ? "eager" : "lazy"}
+          />
+        ) : (
+          // sem foto real ainda: imagem ilustrativa bem desfocada (não pode parecer foto da usina);
+          // cada card mostra um recorte diferente (céu, sol, painéis)
+          <Image
+            src="/images/ilustrativa/usina-desfocada.jpg"
             alt=""
             fill
             sizes="(min-width:1024px) 380px, (min-width:640px) 50vw, 100vw"
             className="scale-125 object-cover transition duration-700 group-hover:scale-[1.32]"
-            style={{ objectPosition: `${(hash(s.slug) % 80) + 10}% ${(hash(s.slug + "y") % 60) + 30}%`, filter: `blur(2px) hue-rotate(${(hash(s.slug) % 40) - 20}deg)` }}
-            priority={priority}
+            style={{ objectPosition: `${(hash(s.slug) % 90) + 5}% ${(hash(s.slug + "y") % 70) + 15}%` }}
+            loading={priority ? "eager" : "lazy"}
           />
         )}
         <div className="absolute inset-0 bg-gradient-to-t from-surface via-surface/30 to-black/30" />

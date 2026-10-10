@@ -2,6 +2,8 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // AVIF primeiro (≈20–30% menor que WebP); 85 só para o fundo da landing, que tem céu em degradê
+  images: { formats: ["image/avif", "image/webp"], qualities: [75, 85] },
   // fontes TTF lidas via fs pelo gerador de PDF (rotas de relatório)
   outputFileTracingIncludes: { "/api/usinas/**": ["./src/lib/report/fonts/**/*"] },
   async headers() {

@@ -54,7 +54,7 @@ export const fr: Dict = {
     "eyebrow": "Infrastructures solaires · Brésil",
     "h1": "Le soleil, comme actif.",
     "cta": "Investir maintenant",
-    "disclaimer": "Les projections ne constituent pas une garantie de rendement. Environnement de démonstration.",
+    "disclaimer": "Image d’illustration. Les projections ne constituent pas une garantie de rendement. Environnement de démonstration.",
     "desc": "Parts de centrales solaires avec revenu mensuel."
   },
   "meta": {

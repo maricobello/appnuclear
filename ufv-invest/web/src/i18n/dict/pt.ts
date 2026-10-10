@@ -52,7 +52,7 @@ export const pt = {
     "eyebrow": "Infraestrutura solar · Brasil",
     "h1": "O sol como ativo.",
     "cta": "Invest now",
-    "disclaimer": "Projeções não constituem garantia de rentabilidade. Ambiente de demonstração.",
+    "disclaimer": "Imagem ilustrativa. Projeções não constituem garantia de rentabilidade. Ambiente de demonstração.",
     "desc": "Cotas de usinas solares com renda mensal."
   },
   "meta": {

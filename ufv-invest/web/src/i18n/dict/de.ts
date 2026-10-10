@@ -54,7 +54,7 @@ export const de: Dict = {
     "eyebrow": "Solarinfrastruktur · Brasilien",
     "h1": "Die Sonne als Anlage.",
     "cta": "Jetzt investieren",
-    "disclaimer": "Prognosen sind keine Renditegarantie. Demo-Umgebung.",
+    "disclaimer": "Symbolbild. Prognosen sind keine Renditegarantie. Demo-Umgebung.",
     "desc": "Solarpark-Anteile mit monatlichem Einkommen."
   },
   "meta": {

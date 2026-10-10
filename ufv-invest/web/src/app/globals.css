@@ -237,11 +237,13 @@ body::before {
 /* ─── Landing: movimento contínuo só em transform/opacity (roda no compositor, sem repintar) ─── */
 .lp-kenburns {
   animation: lp-kenburns 42s ease-in-out infinite alternate;
+  /* o zoom "aproxima" do sol (canto superior direito) em vez do centro */
+  transform-origin: 96% 14%;
   will-change: transform;
 }
 @keyframes lp-kenburns {
-  from { transform: scale(1.06) translate3d(0, 0, 0); }
-  to { transform: scale(1.16) translate3d(-1.5%, -1%, 0); }
+  from { transform: scale(1.04) translate3d(0, 0, 0); }
+  to { transform: scale(1.12) translate3d(-1%, 0.5%, 0); }
 }
 .lp-glow {
   animation: lp-glow 11s ease-in-out infinite alternate;

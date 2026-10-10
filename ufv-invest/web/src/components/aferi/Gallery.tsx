@@ -35,7 +35,7 @@ export function Gallery({ images, name }: { images: string[]; name: string }) {
   if (n === 0)
     return (
       <div className="relative h-[220px] overflow-hidden rounded-2xl bg-navy sm:h-[300px]">
-        <Image src="/images/lp/usina.jpg" alt="" fill priority sizes="(min-width:1024px) 860px, 100vw" className="scale-110 object-cover" style={{ filter: "blur(3px)" }} />
+        <Image src="/images/ilustrativa/usina-desfocada.jpg" alt="" fill preload sizes="(min-width:1024px) 860px, 100vw" className="scale-110 object-cover object-[70%_40%]" />
         <div className="absolute inset-0 bg-gradient-to-t from-navy/60 to-transparent" />
         <span className="absolute bottom-3 left-4 rounded-full bg-black/30 px-3 py-1 text-[11px] text-white/80 backdrop-blur-md">{g.soon}</span>
       </div>
@@ -46,7 +46,7 @@ export function Gallery({ images, name }: { images: string[]; name: string }) {
     <>
       <div className={thumbs.length ? "grid gap-2 sm:grid-cols-[1fr_190px] sm:gap-3" : ""}>
         <button className="relative aspect-[16/9] overflow-hidden rounded-xl bg-surface-3 sm:aspect-auto sm:h-[340px]" onClick={() => setOpen(0)} aria-label={g.zoomMain}>
-          <Image src={images[0]} alt={alt(0)} fill priority sizes="(min-width:1280px) 900px, 100vw" className="object-cover" />
+          <Image src={images[0]} alt={alt(0)} fill preload sizes="(min-width:1280px) 900px, 100vw" className="object-cover" />
         </button>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-1 sm:grid-rows-3 sm:gap-3">
           {thumbs.map((src, k) => {

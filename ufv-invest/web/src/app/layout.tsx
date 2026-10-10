@@ -10,6 +10,7 @@ import { HideOnLanding } from "@/components/HideOnLanding";
 import { wagmiConfig } from "@/lib/web3/config";
 import { siteUrl } from "@/lib/web3/chains";
 import { getT } from "@/i18n/server";
+import { OG_IMAGE } from "@/lib/og";
 import { I18nProvider } from "@/i18n/client";
 import "./globals.css";
 
@@ -19,7 +20,8 @@ export async function generateMetadata(): Promise<Metadata> {
     metadataBase: new URL(siteUrl),
     title: { default: d.meta.default, template: "%s · Aferi Capital" },
     description: d.meta.description,
-    openGraph: { title: "Aferi Capital", description: d.lp.desc, type: "website", locale: f.tag.replace("-", "_"), images: ["/images/lp/usina.jpg"] },
+    openGraph: { title: "Aferi Capital", description: d.lp.desc, type: "website", locale: f.tag.replace("-", "_"), images: [OG_IMAGE] },
+    twitter: { card: "summary_large_image", images: [OG_IMAGE.url] },
   };
 }
 

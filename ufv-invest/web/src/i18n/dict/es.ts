@@ -54,7 +54,7 @@ export const es: Dict = {
     "eyebrow": "Infraestructura solar · Brasil",
     "h1": "El sol como activo.",
     "cta": "Invertir ahora",
-    "disclaimer": "Las proyecciones no constituyen garantía de rentabilidad. Entorno de demostración.",
+    "disclaimer": "Imagen ilustrativa. Las proyecciones no constituyen garantía de rentabilidad. Entorno de demostración.",
     "desc": "Participaciones en plantas solares con ingresos mensuales."
   },
   "meta": {

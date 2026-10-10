@@ -8,6 +8,8 @@ import { ArrowRight } from "lucide-react";
 import { LogoMark } from "@/components/Logo";
 import { useT } from "@/i18n/client";
 import { LangSwitcher } from "@/components/i18n/LangSwitcher";
+import { cx } from "@/components/ui";
+import hero from "@/assets/lp/hero.jpg";
 
 const ease = [0.22, 1, 0.36, 1] as const;
 
@@ -31,6 +33,8 @@ const MOTES = [
  * Landing de tela única: foto de usina com zoom lento, luz em movimento e um botão.
  * Toda a animação contínua é CSS em transform/opacity (camada de GPU, sem repintura) e
  * para com "reduzir movimento". O clique expande um círculo a partir do botão e leva à vitrine.
+ *
+ * Fundo: `src/assets/lp/hero.jpg` (16:9, sol à direita). Para trocar a foto, substitua o arquivo.
  */
 export function Landing() {
   const router = useRouter();
@@ -38,6 +42,14 @@ export function Landing() {
   const reduce = useReducedMotion();
   const btn = useRef<HTMLButtonElement>(null);
   const [leaving, setLeaving] = useState<{ x: number; y: number } | null>(null);
+  // foco cinematográfico: a versão desfocada aparece na hora e a foto nítida entra por cima
+  const [loaded, setLoaded] = useState(false);
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!loaded) return;
+    const t = setTimeout(() => setSettled(true), 2000);
+    return () => clearTimeout(t);
+  }, [loaded]);
 
   // paralaxe sutil acompanhando o cursor (só transform)
   const mx = useMotionValue(0);
@@ -67,11 +79,29 @@ export function Landing() {
         my.set(e.clientY / window.innerHeight - 0.5);
       }}
     >
-      {/* foto da usina: entra em fade e segue com zoom lento (Ken Burns) */}
+      {/* foto da usina: sai do desfocado para o nítido (só opacidade) e segue com zoom lento (Ken Burns).
+          O recorte e o zoom ancoram no sol (canto superior direito da foto), em qualquer tela. */}
       <motion.div className="absolute -inset-8 will-change-transform" style={{ x: bgX, y: bgY }}>
-        <motion.div className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.6, ease }}>
+        <motion.div className="absolute inset-0" initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 1.2, ease }}>
           <div className="lp-kenburns absolute inset-0">
-            <Image src="/images/lp/usina.jpg" alt="" fill priority sizes="100vw" className="object-cover" />
+            {!settled && (
+              <div
+                aria-hidden
+                className="absolute inset-0 scale-110 bg-cover bg-[position:100%_50%] blur-2xl"
+                style={{ backgroundImage: `url(${hero.blurDataURL})` }}
+              />
+            )}
+            <Image
+              src={hero}
+              alt=""
+              fill
+              preload
+              quality={85}
+              // em tela vertical a foto (16:9) é exibida com ~1,78× a altura da tela, não com a largura
+              sizes="(max-aspect-ratio: 16/9) 178vh, 100vw"
+              onLoad={() => setLoaded(true)}
+              className={cx("object-cover object-[100%_50%] transition-opacity duration-[1800ms] ease-out", loaded ? "opacity-100" : "opacity-0")}
+            />
           </div>
         </motion.div>
       </motion.div>
@@ -94,6 +124,8 @@ export function Landing() {
       {/* leitura: escurecimento nas bordas, vinheta e grão (estáticos) */}
       <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(6,9,14,0.7)_0%,rgba(6,9,14,0.12)_38%,rgba(6,9,14,0.2)_60%,rgba(6,9,14,0.92)_100%)]" />
       <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_45%,rgba(0,0,0,0.6)_100%)]" />
+      {/* apoio de contraste atrás do texto (a foto nítida tem textura de painéis) */}
+      <div aria-hidden className="absolute inset-0 bg-[radial-gradient(ellipse_60%_36%_at_50%_50%,rgba(6,9,14,0.5),transparent_75%)]" />
       <div aria-hidden className="grain absolute inset-0 opacity-[0.05]" />
 
       {/* topo */}
@@ -120,7 +152,7 @@ export function Landing() {
       {/* conteúdo */}
       <div className="relative flex h-full flex-col items-center justify-center px-6 text-center">
         <motion.p
-          className="flex items-center gap-3 whitespace-nowrap text-[11px] font-medium uppercase tracking-[0.2em] text-white/70 sm:text-[12px] sm:tracking-[0.32em]"
+          className="flex items-center gap-3 whitespace-nowrap text-[12px] font-medium uppercase tracking-[0.18em] text-white/80 sm:tracking-[0.32em]"
           initial={{ opacity: 0, y: 12 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.45, duration: 0.9, ease }}
@@ -153,7 +185,7 @@ export function Landing() {
       </div>
 
       <motion.p
-        className="absolute inset-x-0 bottom-5 px-6 text-center text-[11px] text-white/45"
+        className="absolute inset-x-0 bottom-5 px-6 text-center text-[12px] text-white/50"
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         transition={{ delay: 1.4, duration: 1 }}

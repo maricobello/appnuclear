@@ -54,7 +54,7 @@ export const en: Dict = {
     "eyebrow": "Solar infrastructure · Brazil",
     "h1": "The sun, as an asset.",
     "cta": "Invest now",
-    "disclaimer": "Projections are not a guarantee of returns. Demo environment.",
+    "disclaimer": "Illustrative image. Projections are not a guarantee of returns. Demo environment.",
     "desc": "Solar plant shares with monthly income."
   },
   "meta": {

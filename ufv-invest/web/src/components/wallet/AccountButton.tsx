@@ -55,14 +55,14 @@ export function AccountButton() {
     return (
       <>
         <button
-          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-[#06090e] shadow-[0_0_24px_-6px_rgba(245,181,68,0.55)] transition hover:bg-white/85"
+          className="inline-flex items-center gap-2 rounded-full bg-white px-4 py-2 text-[14px] font-semibold text-[#06090e] shadow-[0_0_24px_-6px_rgba(245,181,68,0.55)] transition hover:bg-white/85 max-[399px]:px-2.5"
           onClick={() => {
             wantsLogin.current = true;
             setModal(true);
           }}
         >
           <Wallet className="size-4" /> <span className="hidden sm:inline">{w.connect}</span>
-          <span className="sm:hidden">{w.connectShort}</span>
+          <span className="sm:hidden max-[399px]:sr-only">{w.connectShort}</span>
         </button>
         <WalletModal open={modal} onClose={() => setModal(false)} />
       </>
