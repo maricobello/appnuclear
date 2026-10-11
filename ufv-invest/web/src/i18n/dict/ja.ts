@@ -221,6 +221,7 @@ export const ja: Dict = {
     "transactions": "取引履歴",
     "documents": "書類",
     "profile": "プロフィール",
+    "admin": "管理画面",
     "logout": "ログアウト",
     "via": "{w} で接続中 · {c}",
     "copied": "コピーしました",

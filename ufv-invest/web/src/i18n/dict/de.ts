@@ -221,6 +221,7 @@ export const de: Dict = {
     "transactions": "Transaktionen",
     "documents": "Dokumente",
     "profile": "Profil",
+    "admin": "Verwaltung",
     "logout": "Abmelden",
     "via": "Verbunden über {w} · {c}",
     "copied": "Kopiert",

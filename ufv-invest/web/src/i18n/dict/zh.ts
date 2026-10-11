@@ -221,6 +221,7 @@ export const zh: Dict = {
     "transactions": "交易记录",
     "documents": "文件",
     "profile": "个人资料",
+    "admin": "管理后台",
     "logout": "退出",
     "via": "已通过 {w} 连接 · {c}",
     "copied": "已复制",

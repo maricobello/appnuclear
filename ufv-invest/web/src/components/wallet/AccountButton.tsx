@@ -2,9 +2,11 @@
 
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
-import { useChainId, useConnection, useDisconnect, useSwitchChain } from "wagmi";
-import { AlertTriangle, ArrowLeftRight, ChevronDown, FileText, KeyRound, LayoutDashboard, LogOut, User, Wallet } from "lucide-react";
+import { useChainId, useConnection, useDisconnect, useReadContracts, useSwitchChain } from "wagmi";
+import { AlertTriangle, ArrowLeftRight, ChevronDown, FileText, KeyRound, LayoutDashboard, LogOut, ShieldCheck, User, Wallet } from "lucide-react";
 import { chainName, TARGET_CHAIN_ID } from "@/lib/web3/chains";
+import { networkDeployment } from "@/lib/web3/deployments";
+import { identityRegistryAbi, roles } from "@/lib/web3/abi";
 import { useMounted } from "@/lib/useNow";
 import { cx } from "@/components/ui";
 import { WalletModal } from "./WalletModal";
@@ -111,6 +113,7 @@ export function AccountButton() {
             <Link role="menuitem" href="/portfolio/perfil" className={item} onClick={() => setMenu(false)}>
               <User className="size-4" /> {w.profile}
             </Link>
+            <AdminMenuLink className={item} label={w.admin} onClick={() => setMenu(false)} />
             <button
               role="menuitem"
               className={cx(item, "text-critical hover:text-critical")}
@@ -127,5 +130,30 @@ export function AccountButton() {
         </div>
       )}
     </div>
+  );
+}
+
+const ZERO = "0x0000000000000000000000000000000000000000" as const;
+
+/** "Administração" só aparece para quem tem papel no registro (admin, admin pendente ou KYC); lido só com o menu aberto. */
+function AdminMenuLink({ className, label, onClick }: { className: string; label: string; onClick: () => void }) {
+  const { address } = useConnection();
+  const registry = networkDeployment().identityRegistry;
+  const r = useReadContracts({
+    allowFailure: true,
+    query: { enabled: Boolean(registry && address) },
+    contracts: [
+      { address: registry ?? ZERO, abi: identityRegistryAbi, functionName: "defaultAdmin", chainId: TARGET_CHAIN_ID },
+      { address: registry ?? ZERO, abi: identityRegistryAbi, functionName: "pendingDefaultAdmin", chainId: TARGET_CHAIN_ID },
+      { address: registry ?? ZERO, abi: identityRegistryAbi, functionName: "hasRole", args: [roles.COMPLIANCE_ROLE, address ?? ZERO], chainId: TARGET_CHAIN_ID },
+    ],
+  });
+  const mine = (a?: string) => Boolean(a && address && a.toLowerCase() === address.toLowerCase());
+  const pending = r.data?.[1]?.result as readonly [string, number] | undefined;
+  if (!(mine(r.data?.[0]?.result as string | undefined) || mine(pending?.[0]) || r.data?.[2]?.result === true)) return null;
+  return (
+    <Link role="menuitem" href="/admin" className={className} onClick={onClick}>
+      <ShieldCheck className="size-4" /> {label}
+    </Link>
   );
 }

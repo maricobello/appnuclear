@@ -11,6 +11,7 @@ wal.myPortfolio|Meu portfólio|My portfolio|Mi portafolio|Mon portefeuille|Mein 
 wal.transactions|Transações|Transactions|Transacciones|Transactions|Transaktionen|交易记录|取引履歴
 wal.documents|Documentos|Documents|Documentos|Documents|Dokumente|文件|書類
 wal.profile|Perfil|Profile|Perfil|Profil|Profil|个人资料|プロフィール
+wal.admin|Administração|Administration|Administración|Administration|Verwaltung|管理后台|管理画面
 wal.logout|Sair|Sign out|Salir|Se déconnecter|Abmelden|退出|ログアウト
 wal.via|Conectado via {w} · {c}|Connected via {w} · {c}|Conectado vía {w} · {c}|Connecté via {w} · {c}|Verbunden über {w} · {c}|已通过 {w} 连接 · {c}|{w} で接続中 · {c}
 wal.copied|Copiado|Copied|Copiado|Copié|Kopiert|已复制|コピーしました

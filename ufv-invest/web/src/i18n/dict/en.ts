@@ -221,6 +221,7 @@ export const en: Dict = {
     "transactions": "Transactions",
     "documents": "Documents",
     "profile": "Profile",
+    "admin": "Administration",
     "logout": "Sign out",
     "via": "Connected via {w} · {c}",
     "copied": "Copied",

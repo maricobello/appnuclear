@@ -219,6 +219,7 @@ export const pt = {
     "transactions": "Transações",
     "documents": "Documentos",
     "profile": "Perfil",
+    "admin": "Administração",
     "logout": "Sair",
     "via": "Conectado via {w} · {c}",
     "copied": "Copiado",
