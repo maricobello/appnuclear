@@ -14,6 +14,7 @@ import { shortAddr } from "@/lib/fmt";
 import { KYC_COUNTRIES, KYC_COUNTRY_CODES } from "@/lib/countries";
 import { useT } from "@/i18n/client";
 import { ConnectButton } from "@/components/wallet/ConnectButton";
+import { useSiwe } from "@/components/wallet/useSiwe";
 import { TxStatus } from "@/components/plant/InvestPanel";
 import { Badge, buttonClass, Card, CardHeader, cx, Notice } from "@/components/ui";
 
@@ -56,31 +57,93 @@ export function AdminPanel({ plants }: { plants: AdminPlant[] }) {
   );
 
   if (!mounted) return <div className="h-64 animate-pulse rounded-xl bg-surface-2" />;
-  if (!net.identityRegistry) {
-    return (
-      <Notice tone="info" title={`Contratos ainda não implantados na ${chainName}`}>
-        Depois do deploy (contracts/scripts/deploy.ts), os endereços entram em src/data/deployments.json e esta tela passa a funcionar.
-      </Notice>
-    );
-  }
+  const registry = net.identityRegistry;
+  const notDeployed = !registry && (
+    <Notice tone="info" title={`Contratos ainda não implantados na ${chainName}`}>
+      Depois do deploy (contracts/scripts/deploy.ts), os endereços entram em src/data/deployments.json e as operações abaixo passam a funcionar. O prontuário já pode ser
+      emitido.
+    </Notice>
+  );
   if (!isConnected || !address) {
     return (
-      <Card className="p-6">
-        <p className="text-[14px] text-ink-2">Conecte a carteira de administração para continuar.</p>
-        <div className="mt-4">
-          <ConnectButton />
-        </div>
-      </Card>
+      <div className="space-y-6">
+        {notDeployed}
+        <Card className="p-6">
+          <p className="text-[14px] text-ink-2">Conecte a carteira de administração para continuar.</p>
+          <div className="mt-4">
+            <ConnectButton />
+          </div>
+        </Card>
+      </div>
     );
   }
   return (
     <div className="space-y-6">
-      <AdminRolesCard me={address} registry={net.identityRegistry} plants={deployed} />
-      {TARGET_CHAIN_ID === 97 && <RelayerCard me={address} registry={net.identityRegistry} />}
-      <KycCard me={address} registry={net.identityRegistry} />
-      <OfferingsCard me={address} plants={deployed} decimals={net.paymentTokenDecimals} />
-      {net.paymentToken && <DistributionCard me={address} plants={deployed} payment={net.paymentToken} decimals={net.paymentTokenDecimals} />}
+      {notDeployed}
+      <ProntuarioCard />
+      {registry && (
+        <>
+          <AdminRolesCard me={address} registry={registry} plants={deployed} />
+          {TARGET_CHAIN_ID === 97 && <RelayerCard me={address} registry={registry} />}
+          <KycCard me={address} registry={registry} />
+          <OfferingsCard me={address} plants={deployed} decimals={net.paymentTokenDecimals} />
+          {net.paymentToken && <DistributionCard me={address} plants={deployed} payment={net.paymentToken} decimals={net.paymentTokenDecimals} />}
+        </>
+      )}
     </div>
+  );
+}
+
+// ─── Prontuário econômico-financeiro (PDF confidencial) ──────────────────────────────────────
+
+function ProntuarioCard() {
+  const siwe = useSiwe();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const gerar = async () => {
+    setBusy(true);
+    setError(null);
+    try {
+      if (!siwe.isSignedIn && !(await siwe.signIn())) throw new Error("É preciso confirmar o login com a assinatura da carteira.");
+      const r = await fetch("/api/prontuario", { cache: "no-store" });
+      if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { error?: string };
+        throw new Error(j.error ?? `Falha ao gerar (${r.status}).`);
+      }
+      const blob = await r.blob();
+      const name = /filename="([^"]+)"/.exec(r.headers.get("Content-Disposition") ?? "")?.[1] ?? "prontuario-aferi.pdf";
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = name;
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(url), 10_000);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Card>
+      <CardHeader
+        title="Prontuário econômico-financeiro"
+        subtitle="PDF confidencial recalculado na hora: levantamento das usinas, modelo de remuneração, DRE projetada, estresse, auditoria de perdas e revisão técnica."
+        right={
+          <button className={buttonClass.primary} disabled={busy} onClick={gerar}>
+            {busy ? "Gerando…" : "Gerar PDF"}
+          </button>
+        }
+      />
+      <div className="space-y-2 px-5 pb-5 text-[12px] text-muted">
+        {error && (
+          <p className="text-[13px] text-critical" role="alert">
+            {error}
+          </p>
+        )}
+        <p>Exige login com a carteira e papel administrativo nos contratos (ou o endereço na variável ADMIN_WALLETS da Vercel).</p>
+      </div>
+    </Card>
   );
 }
 

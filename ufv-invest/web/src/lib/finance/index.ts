@@ -8,7 +8,7 @@
  *  - projectCotas(finance, cotas) → aporte, rendimentos e payback de um investidor
  */
 
-export { analyzeFinance, nominalDiscountRatePct, RISK_PREMIUM_PP } from "./analyze";
+export { analyzeFinance, baseScenarioParams, nominalDiscountRatePct, RISK_PREMIUM_PP } from "./analyze";
 export { fioBChargedPct } from "./regulation";
 export { npv, irr, paybackYears, percentile, realRatePct } from "./metrics";
 export { projectCotas, type CotasProjection } from "./cotas";

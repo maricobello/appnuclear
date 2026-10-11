@@ -32,20 +32,12 @@ export function energyProfileMWh(plant: Plant, generation: GenerationResult, yea
   return Array.from({ length: years }, (_, i) => byYear.get(i + 1) ?? generation.annualP50MWh * Math.max(0, 1 - d * i));
 }
 
-/**
- * Analisa a usina do ponto de vista do cotista.
- * `irrNominalPct`/`irrRealPct` valem NaN se a TIR não existir (fluxos sem troca de sinal).
- */
-export function analyzeFinance(plant: Plant, generation: GenerationResult, market: MarketRates, opts?: { monteCarloRuns?: number; seed?: number }): FinancialResult {
+/** Cenário-base (P50, premissas do catálogo e do mercado): o mesmo usado em toda a análise. */
+export function baseScenarioParams(plant: Plant, generation: GenerationResult, market: MarketRates): ScenarioParams {
   const f = plant.finance;
-  const runs = Math.max(0, Math.round(opts?.monteCarloRuns ?? DEFAULT_MC_RUNS));
-  const seed = opts?.seed ?? DEFAULT_MC_SEED;
   const N = Math.max(1, Math.round(f.horizonYears));
-  const energy = energyProfileMWh(plant, generation, N);
-  const discountRatePct = nominalDiscountRatePct(market.realRatePct, market.ipcaLongTermPct);
-
-  const base: ScenarioParams = {
-    energyMWh: energy,
+  return {
+    energyMWh: energyProfileMWh(plant, generation, N),
     ipcaPct: market.ipcaLongTermPct,
     tariffRealGrowthPct: f.tariffRealGrowthPct,
     tariffMult: 1,
@@ -55,8 +47,22 @@ export function analyzeFinance(plant: Plant, generation: GenerationResult, marke
     omMult: 1,
     capexMult: 1,
     fioBFullFromYear: null,
-    discountRatePct,
+    discountRatePct: nominalDiscountRatePct(market.realRatePct, market.ipcaLongTermPct),
   };
+}
+
+/**
+ * Analisa a usina do ponto de vista do cotista.
+ * `irrNominalPct`/`irrRealPct` valem NaN se a TIR não existir (fluxos sem troca de sinal).
+ */
+export function analyzeFinance(plant: Plant, generation: GenerationResult, market: MarketRates, opts?: { monteCarloRuns?: number; seed?: number }): FinancialResult {
+  const f = plant.finance;
+  const runs = Math.max(0, Math.round(opts?.monteCarloRuns ?? DEFAULT_MC_RUNS));
+  const seed = opts?.seed ?? DEFAULT_MC_SEED;
+  const N = Math.max(1, Math.round(f.horizonYears));
+  const base = baseScenarioParams(plant, generation, market);
+  const energy = base.energyMWh;
+  const discountRatePct = base.discountRatePct;
   const cf = buildCashFlows(plant, base);
   const investment = cf.investmentBRL;
   const flows = cf.flows;

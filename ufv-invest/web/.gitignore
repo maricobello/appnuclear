@@ -49,3 +49,6 @@ next-env.d.ts
 
 # testes descartáveis de trabalho (não versionar)
 /tests/zz-*
+
+# prontuários emitidos localmente (npm run prontuario): documentos confidenciais
+/prontuarios

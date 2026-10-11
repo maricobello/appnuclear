@@ -80,6 +80,18 @@ function loadFontBytes(): Promise<FontBytes> {
   return fontBytesPromise;
 }
 
+/** Embute as fontes Geist do relatório num PDF (reutilizado pelo Prontuário Econômico-Financeiro). */
+export async function embedReportFonts(pdf: PDFDocument): Promise<Fonts> {
+  pdf.registerFontkit(fontkit);
+  const bytes = await loadFontBytes();
+  return {
+    regular: await pdf.embedFont(bytes.regular, { subset: true, features: { tnum: true } }),
+    semibold: await pdf.embedFont(bytes.semibold, { subset: true, features: { tnum: true } }),
+    bold: await pdf.embedFont(bytes.bold, { subset: true, features: { tnum: true } }),
+    mono: await pdf.embedFont(bytes.mono, { subset: true }),
+  };
+}
+
 export function defaultReportId(analysis: PlantAnalysis, now: Date): string {
   const sym = (analysis.plant.token?.symbol || analysis.plant.slug).toUpperCase().replace(/[^A-Z0-9]/g, "");
   const h = (analysis.dataHash || "").replace(/^0x/, "").slice(0, 6).toUpperCase() || "000000";
@@ -98,14 +110,7 @@ export async function renderAuditReport(
   const plantUrl = `${siteUrl}/usinas/${plant.slug}`;
 
   const pdf = await PDFDocument.create();
-  pdf.registerFontkit(fontkit);
-  const bytes = await loadFontBytes();
-  const fonts: Fonts = {
-    regular: await pdf.embedFont(bytes.regular, { subset: true, features: { tnum: true } }),
-    semibold: await pdf.embedFont(bytes.semibold, { subset: true, features: { tnum: true } }),
-    bold: await pdf.embedFont(bytes.bold, { subset: true, features: { tnum: true } }),
-    mono: await pdf.embedFont(bytes.mono, { subset: true }),
-  };
+  const fonts = await embedReportFonts(pdf);
 
   // ── metadados ──
   const title = `Relatório de Auditoria — ${plant.name}`;
