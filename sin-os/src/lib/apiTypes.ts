@@ -102,3 +102,26 @@ export interface ConfiancaResp {
 }
 
 export type { RenewablesReport as RenovaveisResp } from "./market/renewables-report";
+
+export interface AlertasResp {
+  generatedAt: number;
+  day: string | null;
+  pldOfficial: boolean;
+  thresholds: { pldMax: number; spread: number; intraday: number; curtailFactor: number; curtailMinGWh: number };
+  alerts: { id: string; rule: "pld_max" | "spread" | "intraday" | "curtailment"; title: string; text: string }[];
+}
+
+export interface RenovaveisHistoricoResp {
+  generatedAt: number;
+  months: {
+    month: string;
+    eolicaMWh: number;
+    solarMWh: number;
+    cappedMWh: number;
+    bySub: Record<Sub, number>;
+    byReason: Record<"REL" | "CNF" | "ENE", number>;
+    days: number;
+    computedAt: number;
+    revision: { fromVersion: string; prevTotalMWh: number; detectedAt: number } | null;
+  }[];
+}

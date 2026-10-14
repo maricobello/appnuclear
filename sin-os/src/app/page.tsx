@@ -18,7 +18,7 @@ import {
 } from "@/components/home/panels";
 import { Appear } from "@/components/motion";
 import { Kpi, Panel, Segmented, SimBanner, SourceTag } from "@/components/ui";
-import type { ArbitragemResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
+import type { ArbitragemResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp, AlertasResp } from "@/lib/apiTypes";
 import { assetQuery, useAsset } from "@/lib/asset";
 import { brl } from "@/lib/fmt";
 import { buildOpportunities, pickDay } from "@/lib/market/opportunities";
@@ -59,6 +59,7 @@ export default function Home() {
   const fcNE = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=NE" : null, 600_000);
   const fcN = useApi<PrevisaoResp>(mode === "prev" ? "/api/previsao?sub=N" : null, 600_000);
   const renov = useApi<RenovaveisResp>("/api/renovaveis?dias=14", 30 * 60_000);
+  const alertas = useApi<AlertasResp>("/api/alertas", 10 * 60_000);
   const d = br.data;
 
   const kpis = useMemo(() => buildKpis(d, clima.data, renov.data, now || undefined), [d, clima.data, renov.data, now]);
@@ -126,7 +127,7 @@ export default function Home() {
           <ChartFrame option={mainOpt} loading={br.isLoading} error={br.error} onRetry={() => br.mutate()} height={340} label="PLD horário por submercado" dim={(br.isValidating && !!d) || fcLoading} />
         </Panel>
         <Panel className="xl:col-span-3" title="Resumo do dia" subtitle="gerado dos dados, sem texto fixo">
-          <DaySummary br={d} fc={fcSE.data} audit={audit.data} now={now} />
+          <DaySummary br={d} fc={fcSE.data} audit={audit.data} alerts={alertas.data} now={now} />
         </Panel>
       </div>
 

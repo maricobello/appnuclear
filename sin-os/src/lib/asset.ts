@@ -24,16 +24,18 @@ export interface BessAsset {
   ref: number;
   maxc: number;
   days: number;
+  /** Receita de capacidade, R$/kW·ano (ex.: LRCAP); 0 = só arbitragem. */
+  capr: number;
 }
 
 export const ASSET_PRESETS: { id: string; asset: BessAsset }[] = [
   {
     id: "megapack",
-    asset: { name: "BESS - Tesla Megapack", sub: "SE", pow: 100, cap: 400, rte: 88, deg: 0.5, lcos: 312.45, wacc: 10, life: 20, opex: 2, ref: 1, maxc: 1, days: 365 },
+    asset: { name: "BESS - Tesla Megapack", sub: "SE", pow: 100, cap: 400, rte: 88, deg: 0.5, lcos: 312.45, wacc: 10, life: 20, opex: 2, ref: 1, maxc: 1, days: 365, capr: 0 },
   },
   {
     id: "custom",
-    asset: { name: "Personalizado", sub: "SE", pow: 50, cap: 200, rte: 87, deg: 1.5, lcos: 350, wacc: 10, life: 15, opex: 2, ref: 1, maxc: 1, days: 365 },
+    asset: { name: "Personalizado", sub: "SE", pow: 50, cap: 200, rte: 87, deg: 1.5, lcos: 350, wacc: 10, life: 15, opex: 2, ref: 1, maxc: 1, days: 365, capr: 0 },
   },
 ];
 
@@ -87,6 +89,7 @@ export function parseAsset(raw: string): BessAsset {
       ref: n(o.ref, DEFAULT_ASSET.ref),
       maxc: n(o.maxc, DEFAULT_ASSET.maxc),
       days: n(o.days, DEFAULT_ASSET.days),
+      capr: n(o.capr, 0),
     };
   } catch {
     return DEFAULT_ASSET;
@@ -100,5 +103,5 @@ export function useAsset(): BessAsset {
 
 export const assetQuery = (a: BessAsset, override: Partial<BessAsset> = {}) => {
   const x = { ...a, ...override };
-  return `sub=${x.sub}&pow=${x.pow}&cap=${x.cap}&rte=${x.rte}&deg=${x.deg}&lcos=${x.lcos}&wacc=${x.wacc}&life=${x.life}&opex=${x.opex}&ref=${x.ref}&maxc=${x.maxc}&days=${x.days}`;
+  return `sub=${x.sub}&pow=${x.pow}&cap=${x.cap}&rte=${x.rte}&deg=${x.deg}&lcos=${x.lcos}&wacc=${x.wacc}&life=${x.life}&opex=${x.opex}&ref=${x.ref}&maxc=${x.maxc}&days=${x.days}&capr=${x.capr}`;
 };

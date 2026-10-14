@@ -38,6 +38,22 @@ describe("modelo econômico do BESS", () => {
     const full = 365 * 400 * Math.sqrt(0.88);
     expect(bessFinance(BASE, rev, full / 2).effectiveLcos!).toBeCloseTo(2 * 312.45, 6);
   });
+
+  it("receita de capacidade (ex.: LRCAP): fixa por kW·ano, entra no fluxo e no LCOS de equilíbrio", () => {
+    const rev = 20e6;
+    const f = bessFinance(BASE, rev, 146000);
+    const c = bessFinance({ ...BASE, capacityRevenueKWYear: 150 }, rev, 146000);
+    expect(f.capacityRevenueYear).toBe(0);
+    expect(c.capacityRevenueYear).toBe(150 * 100 * 1000); // 15 milhões/ano para 100 MW
+    expect(c.cashflows[1] - f.cashflows[1]).toBeCloseTo(15e6, 6);
+    expect(c.cashflows[20] - f.cashflows[20]).toBeCloseTo(15e6, 6); // não degrada com o tempo
+    expect(c.npv).toBeGreaterThan(f.npv);
+    expect(c.capex).toBe(f.capex); // o CAPEX implícito não muda
+    const g = bessFinance({ ...BASE, capacityRevenueKWYear: 150, lcos: c.breakevenLcos }, rev, 146000);
+    expect(g.npv / g.capex).toBeCloseTo(0, 6);
+    // valor negativo é ignorado
+    expect(bessFinance({ ...BASE, capacityRevenueKWYear: -50 }, rev, 146000).capacityRevenueYear).toBe(0);
+  });
 });
 
 describe("estudo do BESS no PLD", () => {

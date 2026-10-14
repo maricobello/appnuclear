@@ -219,7 +219,8 @@ export default function BessPage() {
               <MetricRow label="LCOS efetivo" hint="despacho real" value={f?.effectiveLcos ? `${n2.format(f.effectiveLcos)} R$/MWh` : "—"} />
               <MetricRow label="LCOS de equilíbrio" hint="VPL = 0" value={f ? `${n2.format(f.breakevenLcos)} R$/MWh` : "—"} tone={f && p ? (f.breakevenLcos >= p.lcos ? "good" : "warning") : undefined} />
               <MetricRow label="CAPEX implícito" value={f ? `${fmtMoney(f.capex)} · ${brl(f.capexPerKWh, 0)}/kWh` : "—"} />
-              <MetricRow label="Receita anual" value={f ? fmtMoney(f.revenueYear1) : "—"} />
+              <MetricRow label="Receita anual" hint="arbitragem" value={f ? fmtMoney(f.revenueYear1) : "—"} />
+              {f && f.capacityRevenueYear > 0 ? <MetricRow label="Receita de capacidade" hint="por ano, fixa" value={fmtMoney(f.capacityRevenueYear)} /> : null}
               <MetricRow label="TIR (estimada)" value={f ? (f.irr === null ? "não se paga" : pct(100 * f.irr)) : "—"} tone={irrTone} />
               <MetricRow label="VPL" value={f ? fmtMoney(f.npv) : "—"} tone={f ? (f.npv >= 0 ? "good" : "critical") : undefined} />
               <MetricRow label="Payback" value={f ? (f.paybackYears === null ? "não se paga" : `${n1.format(f.paybackYears)} anos`) : "—"} />

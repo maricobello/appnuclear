@@ -7,6 +7,7 @@ import {
   curtailmentVsFloor,
   curtRowFrom,
   hourConventionCheck,
+  monthAggregate,
   netLoadSummary,
   wallClockToTs,
   type CurtRow,
@@ -120,5 +121,19 @@ describe("corte na camada de confiança", () => {
     const d = digestSource("ons_curtailment", rows, brtToUtc(2026, 10, 8, 12), 10);
     expect(d.find((x) => x.date === "2026-10-04")).toMatchObject({ expected: 4, present: 4 });
     expect(d.find((x) => x.date === "2026-10-05")).toMatchObject({ present: 0 });
+  });
+});
+
+describe("agregado mensal", () => {
+  it("soma só as linhas do mês, em MWh (apurada × 0,5), com piso e razões", () => {
+    const rows = fx.raw.map((o) => curtRowFrom(o, "eolica")!);
+    const a = monthAggregate("2026-10", rows);
+    const official = rows.reduce((s, r) => s + r.apurada! * 0.5, 0);
+    expect(a.eolicaMWh).toBe(Math.round(official));
+    expect(a.solarMWh).toBe(0);
+    expect(a.cappedMWh).toBeLessThan(a.eolicaMWh);
+    expect(a.byReason.ENE).toBe(Math.round(official));
+    expect(a.days).toBe(4);
+    expect(monthAggregate("2026-09", rows).eolicaMWh).toBe(0);
   });
 });

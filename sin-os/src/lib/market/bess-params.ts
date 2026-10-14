@@ -18,6 +18,8 @@ export const BESS_QUERY = z.object({
   ref: z.coerce.number().min(0.25).max(3).default(1),
   maxc: z.coerce.number().min(0.25).max(3).default(1),
   days: z.coerce.number().int().min(30).max(365).default(365),
+  /** Receita de capacidade (R$/kW·ano), ex.: LRCAP. */
+  capr: z.coerce.number().min(0).max(5000).default(0),
 });
 export type BessQuery = z.infer<typeof BESS_QUERY>;
 
@@ -34,4 +36,5 @@ export const toBessParams = (sub: Sub, q: BessQuery): BessParams => ({
   refCyclesPerDay: q.ref,
   maxCyclesPerDay: q.maxc,
   days: q.days,
+  capacityRevenueKWYear: q.capr,
 });

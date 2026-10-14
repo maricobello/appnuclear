@@ -42,7 +42,7 @@ export function healthWithAge(run: AuditRun, now = Date.now()): Health & { ageMi
 
 
 export interface HealthMessage {
-  kind: "degraded" | "recovered" | "test" | "pld";
+  kind: "degraded" | "recovered" | "test" | "pld" | "market";
   title: string;
   text: string;
 }
@@ -88,8 +88,8 @@ export function alertRequest(url: string, msg: HealthMessage, format = process.e
         "Content-Type": "text/plain; charset=utf-8",
         // cabeçalho HTTP só aceita latin-1: título com acento vai em RFC 2047 (o ntfy decodifica)
         Title: /^[\x20-\x7e]*$/.test(msg.title) ? msg.title : `=?UTF-8?B?${Buffer.from(msg.title, "utf8").toString("base64")}?=`,
-        Priority: msg.kind === "degraded" ? "high" : "default",
-        Tags: msg.kind === "degraded" ? "warning" : msg.kind === "test" ? "test_tube" : msg.kind === "pld" ? "zap" : "white_check_mark",
+        Priority: msg.kind === "degraded" || msg.kind === "market" ? "high" : "default",
+        Tags: msg.kind === "degraded" ? "warning" : msg.kind === "test" ? "test_tube" : msg.kind === "pld" ? "zap" : msg.kind === "market" ? "chart_with_upwards_trend" : "white_check_mark",
         ...(/^https?:\/\//.test(link) ? { Click: link } : {}),
       },
     };

@@ -194,6 +194,15 @@ oficial `listarPLD` (PLDBSv1) da [Plataforma de Integração](https://github.com
 gera uma notificação com média, mínimo, máximo e hora do pico por submercado. `PLD_ALERT_ABOVE=500`
 marca submercados com máximo acima do valor; `PLD_ALERTS=off` desliga.
 
+**Alertas de mercado** (mesmo `ALERT_WEBHOOK_URL`, um aviso por regra e por dia, prioridade alta):
+pico de PLD acima de `ALERT_PLD_MAX` (padrão R$ 300), descolamento entre submercados na mesma hora acima
+de `ALERT_SPREAD` (R$ 100), janela de bateria (máx − mín do dia) acima de `ALERT_INTRADAY` (R$ 200) e corte
+de renováveis acima de `ALERT_CURTAIL_FACTOR` (1,5) × a mediana dos 7 dias anteriores e de
+`ALERT_CURTAIL_MIN_GWH` (50). `MARKET_ALERTS=off` desliga. Os alertas ativos aparecem no "Resumo do dia" da
+Sala de Comando e em `GET /api/alertas`. Para checar com frequência, um agendador externo chama
+`/api/alertas/run` com `Authorization: Bearer <ADMIN_KEY>` — passo a passo em
+[docs/agendador.md](docs/agendador.md).
+
 ## Iara — assistente de voz (Groq)
 
 Botão **Iara** no cabeçalho (ou ⌘J / Ctrl+J). Fica **desligada** até o usuário ativar, e o microfone só abre
@@ -233,7 +242,9 @@ Tela `/renovaveis` e `GET /api/renovaveis?dias=14` (3–31). Lê do bucket públ
 restrição por constrained-off de eólicas e fotovoltaicas (meia hora, por conjunto) e o balanço de energia
 por subsistema (horário), e cruza com o PLD da mesma hora. Mostra quanto foi cortado, por quê (sobra de
 energia, rede, confiabilidade), em que hora, quanto vale a PLD, quantas horas de corte tiveram PLD no piso
-e a curva do pato (carga × carga líquida, rampa da noite). A Iara responde pela ferramenta
+e a curva do pato (carga × carga líquida, rampa da noite). O histórico de 12 meses (`GET
+/api/renovaveis/historico?meses=12`) guarda o total de cada mês com a versão do arquivo do ONS e, quando o
+ONS republica um mês com números diferentes, registra o total anterior. A Iara responde pela ferramenta
 `renovaveis_corte`, e a oportunidade "Curtailment → Storage" da Sala de Comando passa a citar o corte medido.
 
 Checagens feitas a cada leitura (e testadas com amostra real em `tests/fixtures/ons-renewables.json`):

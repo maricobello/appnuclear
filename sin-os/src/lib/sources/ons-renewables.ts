@@ -21,7 +21,7 @@ export const curtailmentUrl = (tech: Tech, y: number, m: number) =>
   `${ONS_S3}/${CURT_FILE[tech].prefix}/${CURT_FILE[tech].file}_${y}_${String(m).padStart(2, "0")}.parquet`;
 export const balanceUrl = (y: number) => `${ONS_S3}/balanco_energia_subsistema_ho/BALANCO_ENERGIA_SUBSISTEMA_${y}.parquet`;
 
-async function readParquet(url: string): Promise<{ rows: Record<string, unknown>[]; probes: Probe[] }> {
+export async function readParquet(url: string): Promise<{ rows: Record<string, unknown>[]; probes: Probe[] }> {
   const { buf, probes } = await fetchBuffer(url, { timeoutMs: 60_000 });
   const rows = (await parquetReadObjects({ file: buf })) as Record<string, unknown>[];
   return { rows, probes };

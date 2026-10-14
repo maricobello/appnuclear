@@ -33,6 +33,11 @@ export interface FinanceInputs {
   opexPctCapex: number;
   /** Ciclos completos por dia no perfil de referência do LCOS. */
   refCyclesPerDay: number;
+  /**
+   * Receita fixa de capacidade (R$/kW·ano sobre a potência), ex.: contrato de reserva de
+   * capacidade (LRCAP). Informada pelo usuário; padrão 0 (só arbitragem).
+   */
+  capacityRevenueKWYear?: number;
 }
 
 export interface FinanceResult {
@@ -41,6 +46,8 @@ export interface FinanceResult {
   opexYear: number;
   /** Receita de arbitragem no ano 1 (R$). */
   revenueYear1: number;
+  /** Receita fixa de capacidade por ano (R$), constante ao longo da vida. */
+  capacityRevenueYear: number;
   /** Energia descarregada no ano 1 (MWh). */
   dischargedYear1: number;
   /** Custo anual equivalente pelo LCOS informado × energia realmente descarregada. */
@@ -101,7 +108,8 @@ export function bessFinance(inp: FinanceInputs, revenueYear1: number, discharged
   const qRef = pv(r, L, (t) => inp.refCyclesPerDay * 365 * inp.capacityMWh * Math.sqrt(inp.rte) * fade(t));
   const capex = (inp.lcos * qRef) / (1 + o * A);
   const opexYear = o * capex;
-  const cashflows = [-capex, ...Array.from({ length: L }, (_, k) => revenueYear1 * fade(k + 1) - opexYear)];
+  const capYear = Math.max(0, inp.capacityRevenueKWYear ?? 0) * inp.powerMW * 1000;
+  const cashflows = [-capex, ...Array.from({ length: L }, (_, k) => revenueYear1 * fade(k + 1) + capYear - opexYear)];
   const B = pv(r, L, fade);
   const qReal = pv(r, L, (t) => dischargedYear1 * fade(t));
   return {
@@ -109,15 +117,16 @@ export function bessFinance(inp: FinanceInputs, revenueYear1: number, discharged
     capexPerKWh: capex / (inp.capacityMWh * 1000),
     opexYear,
     revenueYear1,
+    capacityRevenueYear: capYear,
     dischargedYear1,
     lcosCostYear1: inp.lcos * dischargedYear1,
-    netYear1: revenueYear1 - opexYear,
+    netYear1: revenueYear1 + capYear - opexYear,
     cashflows,
     npv: npvAt(cashflows, r),
     irr: irr(cashflows),
     paybackYears: payback(cashflows),
     roi: (cashflows.slice(1).reduce((a, b) => a + b, 0) - capex) / capex,
-    breakevenLcos: qRef > 0 ? (revenueYear1 * B) / qRef : 0,
+    breakevenLcos: qRef > 0 ? (revenueYear1 * B + capYear * A) / qRef : 0,
     effectiveLcos: qReal > 0 ? (capex * (1 + o * A)) / qReal : null,
   };
 }

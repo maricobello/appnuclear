@@ -106,6 +106,7 @@ const LIMITS: Record<keyof Omit<BessAsset, "name" | "sub">, [number, number]> = 
   ref: [0.25, 3],
   maxc: [0.25, 3],
   days: [30, 365],
+  capr: [0, 5000],
 };
 
 export function validAsset(a: BessAsset) {
@@ -173,6 +174,7 @@ export function ParamPanel({ initial, onApply, busy }: { initial: BessAsset; onA
             <NumberField label="Ciclos ref. LCOS" suffix="/dia" value={f.ref} onChange={set("ref")} step={0.25} min={0.25} max={3} />
             <NumberField label="Máx. ciclos" suffix="/dia" value={f.maxc} onChange={set("maxc")} step={0.25} min={0.25} max={3} />
             <NumberField label="Janela de PLD" suffix="dias" value={f.days} onChange={(v) => set("days")(Math.round(v))} step={30} min={30} max={365} />
+            <NumberField label="Receita de capacidade" suffix="R$/kW·ano" value={f.capr} onChange={set("capr")} step={10} min={0} max={5000} />
           </div>
         </motion.div>
 

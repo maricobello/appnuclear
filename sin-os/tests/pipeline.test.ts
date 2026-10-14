@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 import { mean } from "../src/lib/quant/stats";
 import { buildForecast } from "../src/lib/market/forecast";
 import { bessArbitrage, euBattery, euBorders, globalLens, submarketSpreads } from "../src/lib/market/arbitrage";
@@ -8,6 +8,11 @@ import { SUBS, type SubPanel } from "../src/lib/sources/types";
 import { simEu, simFx, simPld, simUkMid } from "../src/lib/sources/simulate";
 import { parseCsv, num } from "../src/lib/sources/csv";
 import { subOf } from "../src/lib/sources/ckan";
+
+// os dados simulados dependem do relógio: data fixa para o teste ser reproduzível
+vi.useFakeTimers({ toFake: ["Date"] });
+vi.setSystemTime(new Date("2026-10-08T15:00:00Z"));
+afterAll(() => vi.useRealTimers());
 
 describe("pipeline completo sobre dados simulados", () => {
   const pld = simPld(120);

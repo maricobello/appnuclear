@@ -465,3 +465,45 @@ export function pldHourlyProfile(pld: PldPanel | null, from: string, to: string)
   });
   return Object.fromEntries(SUBS.map((s) => [s, acc[s].v.map((v, h) => (acc[s].n[h] ? round(v / acc[s].n[h], 2) : null))])) as Record<Sub, (number | null)[]>;
 }
+
+export interface MonthAggregate {
+  month: string; // AAAA-MM
+  eolicaMWh: number;
+  solarMWh: number;
+  /** Piso conservador (referência limitada à disponibilidade). */
+  cappedMWh: number;
+  bySub: Record<Sub, number>;
+  byReason: Record<Reason, number>;
+  /** Dias com dado no mês. */
+  days: number;
+}
+
+/** Totais de corte de um mês (linhas de eólica e solar do mesmo mês). */
+export function monthAggregate(month: string, rows: CurtRow[]): MonthAggregate {
+  const bySub = zeros();
+  const byReason = { REL: 0, CNF: 0, ENE: 0 } as Record<Reason, number>;
+  const tech: Record<Tech, number> = { eolica: 0, solar: 0 };
+  let capped = 0;
+  const days = new Set<string>();
+  for (const r of rows) {
+    const d = brtDate(r.ts);
+    if (!d.startsWith(month)) continue;
+    days.add(d);
+    if (!r.razao) continue;
+    const mwh = Math.max(0, r.apurada ?? 0) * 0.5;
+    tech[r.tech] += mwh;
+    bySub[r.sub] += mwh;
+    byReason[r.razao] += mwh;
+    capped += r.ref !== null && r.disp !== null && r.geracao !== null ? Math.min(mwh, Math.max(0, Math.min(r.ref, r.disp) - r.geracao) * 0.5) : mwh;
+  }
+  const rd = (x: number) => round(x, 0);
+  return {
+    month,
+    eolicaMWh: rd(tech.eolica),
+    solarMWh: rd(tech.solar),
+    cappedMWh: rd(capped),
+    bySub: Object.fromEntries(SUBS.map((x) => [x, rd(bySub[x])])) as Record<Sub, number>,
+    byReason: Object.fromEntries(REASONS.map((x) => [x, rd(byReason[x])])) as Record<Reason, number>,
+    days: days.size,
+  };
+}

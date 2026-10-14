@@ -8,7 +8,7 @@ import type { ChartOption } from "@/components/EChart";
 import { ChartFrame } from "@/components/EChart";
 import { Appear, EASE } from "@/components/motion";
 import { ConfidenceBar, Empty, MetricRow, sourceState, type DataState } from "@/components/ui";
-import type { AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
+import type { AlertasResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
 import type { BessAsset } from "@/lib/asset";
 import { band, baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, tooltipTime, valueAxis } from "@/lib/chart";
 import { brl, compact, nf, num, pct } from "@/lib/fmt";
@@ -374,10 +374,12 @@ export function OpportunitiesTable({ rows }: { rows: Opportunity[] }) {
 
 /* ========================================================= resumo do dia */
 
-export function DaySummary({ br, fc, audit, now: nowTs }: { br?: BrasilResp; fc?: PrevisaoResp; audit?: AuditoriaResp; now: number }) {
+export function DaySummary({ br, fc, audit, alerts, now: nowTs }: { br?: BrasilResp; fc?: PrevisaoResp; audit?: AuditoriaResp; alerts?: AlertasResp; now: number }) {
   const items = useMemo(() => {
     const out: { Icon: typeof Zap; tone: string; text: React.ReactNode }[] = [];
     if (!br?.kpis || !br.pld || !nowTs) return out;
+    // alertas de mercado ativos primeiro: é o que pede ação
+    for (const a of alerts?.alerts ?? []) out.push({ Icon: TriangleAlert, tone: "text-serious", text: <b className="text-ink">{a.title}</b> });
     const today = brtDate(nowTs);
     const se = br.kpis.find((k) => k.sub === "SE");
     const agg = br.aggregates;
@@ -432,7 +434,7 @@ export function DaySummary({ br, fc, audit, now: nowTs }: { br?: BrasilResp; fc?
       out.push({ Icon: ShieldCheck, tone: run.overallScore >= 70 ? "text-good" : "text-warning", text: <>APIs: score <b className="text-ink">{run.overallScore}/100</b>{bad.length ? ` · atenção: ${bad.map((s) => s.name).slice(0, 3).join(", ")}` : " · todas as fontes OK"}.</> });
     }
     return out;
-  }, [br, fc, audit, nowTs]);
+  }, [br, fc, audit, alerts, nowTs]);
   if (!items.length) return <Empty label="Aguardando dados do PLD…" height={160} />;
   return (
     <ul className="flex flex-col gap-2">

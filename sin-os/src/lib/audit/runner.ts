@@ -8,12 +8,15 @@ import { fetchFx, type FxData } from "../sources/fx";
 import { fetchCmoHourly, fetchEarDaily, fetchEnaDaily, fetchLoadHourly } from "../sources/ons";
 import { fetchBalance, fetchCurtailment } from "../sources/ons-renewables";
 import { SOURCES } from "../sources/registry";
-import type { SourceId, SourceResult, SubPanel } from "../sources/types";
+import { SUBS, type SourceId, type SourceResult, type SubPanel } from "../sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "../sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "../sources/weather";
 import { getPld, PLD_FROM_CMO, panelToDays } from "../data";
-import { brtDate } from "../sources/time";
+import { brtDate, brtHour } from "../sources/time";
+import { curtailmentDailyPanel } from "../market/renewables";
+import { pickDay } from "../market/opportunities";
 import { postAlert } from "./alert";
+import { evaluateMarketAlerts, thresholdsFromEnv } from "./market-alerts";
 import { pldPublishedMessage } from "./pld-alert";
 import { pldFromCmo } from "../market/brazil";
 import { claimSlot, euZoneStore, listAuditRuns, saveAuditRun, savePldDays, storageKind } from "../store";
@@ -126,6 +129,7 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
     await savePldDays(panelToDays(pldFromCmo(results.ons_cmo.data as SubPanel), PLD_FROM_CMO)).catch(() => 0);
   }
   await notifyPldPublished().catch(() => 0);
+  await notifyMarketAlerts().catch(() => 0);
   // revisões retroativas dos dados abertos (no máx. 1 verificação a cada 5 h, para poupar leituras)
   if (await claimSlot("trust_check", 5 * 3600_000).catch(() => false)) await runTrustCheck(results).catch(() => undefined);
   return { run, previous, results, shouldInvokeAgent, reasons };
@@ -150,6 +154,49 @@ export async function notifyPldPublished(now = Date.now()): Promise<number> {
     if (!(await claimSlot(`pldpub_${d.date}_${official ? "oficial" : "cmo"}`, 400 * 86400_000, now))) continue;
     const msg = pldPublishedMessage({ date: d.date, values: d.values, official }, today, process.env.SIN_OS_URL ?? "https://sinos-iota.vercel.app", Number.isFinite(above) ? above : undefined);
     if (await postAlert(url, msg)) sent++;
+  }
+  return sent;
+}
+
+/**
+ * Alertas de mercado (pico de PLD, descolamento entre submercados, janela de bateria, corte de
+ * renováveis disparando), cada um enviado uma vez (trava global no Firestore). Opt-in por
+ * ALERT_WEBHOOK_URL; MARKET_ALERTS=off desliga; limiares em ALERT_PLD_MAX, ALERT_SPREAD,
+ * ALERT_INTRADAY, ALERT_CURTAIL_FACTOR e ALERT_CURTAIL_MIN_GWH.
+ */
+/** Alertas de mercado que valem agora (sem enviar nada). */
+export async function currentMarketAlerts(now = Date.now()) {
+  const [pld, curt] = await Promise.all([getPld(10), fetchCurtailment(10, now)]);
+  const today = brtDate(now);
+  const day = pld.ok && pld.data && !pld.simulated ? pickDay(pld.data.ts, pld.data.values, today, brtDate, brtHour) : null;
+  const panel = curt.ok && curt.data ? curtailmentDailyPanel(curt.data) : null;
+  const curtailDaily = panel
+    ? panel.dates.flatMap((d, i) => {
+        const v = SUBS.map((s) => panel.values[s][i]);
+        return v.every((x) => x !== null) && d < today ? [{ date: d, mwh: (v as number[]).reduce((a, b) => a + b, 0) }] : [];
+      })
+    : [];
+  const thresholds = thresholdsFromEnv();
+  const alerts = evaluateMarketAlerts(
+    {
+      day: day && day.published ? { date: day.date, values: day.values, official: !pld.fallback } : null,
+      today,
+      curtailDaily,
+      baseUrl: process.env.SIN_OS_URL ?? "https://sinos-iota.vercel.app",
+    },
+    thresholds,
+  );
+  return { alerts, thresholds, day: day?.published ? day.date : null, pldOfficial: !!pld.ok && !pld.fallback };
+}
+
+export async function notifyMarketAlerts(now = Date.now()): Promise<number> {
+  const url = process.env.ALERT_WEBHOOK_URL;
+  if (!url || process.env.MARKET_ALERTS === "off") return 0;
+  const { alerts } = await currentMarketAlerts(now);
+  let sent = 0;
+  for (const a of alerts) {
+    if (!(await claimSlot(`mkt_${a.id}`, 400 * 86400_000, now))) continue;
+    if (await postAlert(url, a.message)) sent++;
   }
   return sent;
 }

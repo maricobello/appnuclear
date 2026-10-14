@@ -25,9 +25,10 @@ export interface PldDay {
 }
 
 // persisted: data → fonte já gravada no Firestore (evita reler os mesmos dias a cada requisição)
-type Mem = { runs: AuditRun[]; reports: AgentReport[]; pld: Map<string, PldDay>; persisted: Map<string, string>; trust: Map<string, DayDigest>; revisions: Revision[] };
+type Mem = { runs: AuditRun[]; reports: AgentReport[]; pld: Map<string, PldDay>; persisted: Map<string, string>; trust: Map<string, DayDigest>; revisions: Revision[]; docs: Map<string, unknown> };
 const g = globalThis as typeof globalThis & { __sinMem?: Mem };
-g.__sinMem ??= { runs: [], reports: [], pld: new Map(), persisted: new Map(), trust: new Map(), revisions: [] };
+g.__sinMem ??= { runs: [], reports: [], pld: new Map(), persisted: new Map(), trust: new Map(), revisions: [], docs: new Map() };
+g.__sinMem.docs ??= new Map();
 g.__sinMem.persisted ??= new Map();
 g.__sinMem.trust ??= new Map();
 g.__sinMem.revisions ??= [];
@@ -248,4 +249,24 @@ export async function listRevisions(sinceMs: number, limit = 200): Promise<Revis
     },
     () => mem.revisions.filter((r) => r.detectedAt >= sinceMs).slice(0, limit),
   );
+}
+
+/** Documento genérico (cache persistente de agregados): Firestore quando há, memória senão. */
+export async function loadDoc<T>(collection: string, id: string): Promise<T | null> {
+  const local = () => (mem.docs.get(`${collection}/${id}`) as T | undefined) ?? null;
+  const hit = local();
+  if (hit) return hit;
+  return withDb(
+    async (db) => {
+      const v = ((await db.collection(collection).doc(id).get()).data() as T | undefined) ?? null;
+      if (v) mem.docs.set(`${collection}/${id}`, v);
+      return v;
+    },
+    () => null,
+  );
+}
+
+export async function saveDoc<T extends object>(collection: string, id: string, doc: T): Promise<void> {
+  mem.docs.set(`${collection}/${id}`, doc);
+  await withDb((db) => db.collection(collection).doc(id).set(doc).then(() => undefined), () => undefined);
 }

@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
 import { Empty, ErrorBox, Kpi, Loading, MetricRow, PageHeader, Panel, Segmented, SimBanner, SourceTag, sourceState, Table } from "@/components/ui";
-import type { RenovaveisResp } from "@/lib/apiTypes";
+import type { RenovaveisHistoricoResp, RenovaveisResp } from "@/lib/apiTypes";
 import { baseOption, C, categoryAxis, line, SUB_COLOR, valueAxis } from "@/lib/chart";
 import { brl, dayLabel, num } from "@/lib/fmt";
 import { SUB_NAMES, SUBS, type Sub } from "@/lib/sources/types";
@@ -33,11 +33,30 @@ export default function RenovaveisPage() {
   const [area, setArea] = useState<Area>("NE");
   const [tech, setTech] = useState<TechSel>("total");
   const { data, error, isValidating, mutate } = useApi<RenovaveisResp>(`/api/renovaveis?dias=${days}`, 15 * 60_000);
+  const hist = useApi<RenovaveisHistoricoResp>("/api/renovaveis/historico?meses=12", 60 * 60_000);
+  const histMonths = hist.data?.months ?? null;
   const c = data?.curtailment ?? null;
   const n = data?.netLoad ?? null;
   const pldProfile = data?.pldProfile ?? null;
   const pldOfficial = data?.pldOfficial ?? false;
   const state = sourceState(data?.meta.curtailment, STALE_MS);
+
+  const monthly = useMemo<ChartOption | null>(() => {
+    if (!histMonths?.length) return null;
+    const lbl = (m: string) => `${["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"][Number(m.slice(5, 7)) - 1]}/${m.slice(2, 4)}`;
+    const g = (v: number) => Math.round(v / 100) / 10;
+    return {
+      ...baseOption(),
+      tooltip: { ...baseOption().tooltip, axisPointer: { type: "shadow" }, valueFormatter: (v: number) => `${num(v, 1)} GWh` },
+      xAxis: categoryAxis(histMonths.map((m) => lbl(m.month) + (m === histMonths[histMonths.length - 1] ? "*" : ""))),
+      yAxis: valueAxis("GWh/mês", { scale: false }),
+      series: [
+        { name: "Eólica (oficial)", type: "bar", stack: "m", barMaxWidth: 26, itemStyle: { color: C.series[2] }, data: histMonths.map((m) => g(m.eolicaMWh)) },
+        { name: "Solar (oficial)", type: "bar", stack: "m", barMaxWidth: 26, itemStyle: { color: C.series[3] }, data: histMonths.map((m) => g(m.solarMWh)) },
+        { ...line("Piso (limitado à disponibilidade)", [], C.ink2, { lineStyle: { width: 1.5, type: [4, 3], color: C.ink2 } }), data: histMonths.map((m) => g(m.cappedMWh)) },
+      ],
+    };
+  }, [histMonths]);
 
   const daily = useMemo<ChartOption | null>(() => {
     if (!c?.daily.length) return null;
@@ -120,6 +139,31 @@ export default function RenovaveisPage() {
           {hourly ? <EChart option={hourly} height={280} label="Perfil horário do corte versus PLD" dim={isValidating} /> : <Loading height={280} />}
         </Panel>
       </div>
+
+      <Panel title="Corte por mês — 12 meses" subtitle="GWh de eólica + solar (oficial ONS) e o piso limitado à disponibilidade · * mês em curso, parcial" right={<SourceTag meta={data?.meta.curtailment} label="ONS" staleAfterMs={STALE_MS} />}>
+        {monthly ? (
+          <>
+            <EChart option={monthly} height={260} label="Corte mensal de eólica e solar" />
+            {histMonths?.some((m) => m.revision) ? (
+              <ul className="mt-2 flex flex-col gap-1 text-[11.5px] text-warning">
+                {histMonths
+                  .filter((m) => m.revision)
+                  .map((m) => (
+                    <li key={m.month}>
+                      ONS republicou {m.month.slice(5, 7)}/{m.month.slice(0, 4)}: o corte foi de {num(m.revision!.prevTotalMWh / 1000, 1)} para {num((m.eolicaMWh + m.solarMWh) / 1000, 1)} GWh.
+                    </li>
+                  ))}
+              </ul>
+            ) : (
+              <p className="mt-2 text-[11px] text-muted">Cada mês é recalculado quando o ONS republica o arquivo; mudanças nos totais aparecem aqui.</p>
+            )}
+          </>
+        ) : hist.error ? (
+          <ErrorBox error={hist.error} onRetry={() => hist.mutate()} />
+        ) : (
+          <Loading height={260} label="Lendo 12 meses de arquivos do ONS (a primeira leitura leva ~30 s)…" />
+        )}
+      </Panel>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
         <Panel className="xl:col-span-2" title={`Curva do pato — ${area}`} subtitle="Perfil médio por hora: carga e carga líquida (carga − eólica − solar). A rampa da noite é o que térmicas, hidrelétricas e baterias precisam cobrir." right={<SourceTag meta={data?.meta.balanco} label="ONS" staleAfterMs={STALE_MS} />}>
