@@ -1,6 +1,7 @@
 import { cached } from "../cache";
 import { errMsg, fetchJson, probesOf } from "./http";
 import { emptyQuality, type Probe, type SourceResult, type TimeSeries } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * U.S. EIA Open Data API v2 (chave gratuita: https://www.eia.gov/opendata/register.php).
@@ -37,7 +38,7 @@ export async function fetchEia(): Promise<SourceResult<{ henryHub: TimeSeries; b
     quality.points = henryHub.values.length + brent.values.length;
     quality.latestTs = Math.min(henryHub.ts[henryHub.ts.length - 1] ?? 0, brent.ts[brent.ts.length - 1] ?? 0);
     quality.values = [...henryHub.values.slice(-10), ...brent.values.slice(-10)];
-    quality.range = [0, 300];
+    quality.range = [...VALID_RANGES.eia.range];
     return { id: "eia", ok: true, data: { henryHub, brent }, probes, quality, simulated: false, fetchedAt: Date.now() };
   } catch (e) {
     probes.push(...probesOf(e));

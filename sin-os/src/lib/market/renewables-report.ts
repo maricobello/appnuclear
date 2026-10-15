@@ -3,7 +3,7 @@ import { getPld, publicMeta } from "../data";
 import { fetchBalance, fetchCurtailment } from "../sources/ons-renewables";
 import { SUBS } from "../sources/types";
 import { PLD_LIMITS } from "./brazil";
-import { curtailmentSummary, curtailmentVsFloor, hourConventionCheck, netLoadSummary, pldHourlyProfile, REASON_LABEL } from "./renewables";
+import { RENEWABLE_CHECKS, curtailmentSummary, curtailmentVsFloor, hourConventionCheck, netLoadSummary, pldHourlyProfile, REASON_LABEL } from "./renewables";
 
 /** Relatório de renováveis: corte (curtailment), carga líquida e PLD na mesma janela de dias fechados. */
 export async function buildRenewablesReport(days = 14, now = Date.now()) {
@@ -25,7 +25,7 @@ export async function buildRenewablesReport(days = 14, now = Date.now()) {
     );
   if (summary?.quality.methodMAE !== null && summary?.quality.methodMAE !== undefined)
     notes.push(
-      summary.quality.methodMAE < 1
+      summary.quality.methodMAE < RENEWABLE_CHECKS.methodMaeMax
         ? "A geração não realizada apurada do ONS bate com referência − geração em todas as meias horas restritas: o método está reproduzido."
         : `A apurada do ONS difere de referência − geração em ${f(summary.quality.methodMAE, 2)} MW em média: o método pode ter mudado.`,
     );

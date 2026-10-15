@@ -3,7 +3,7 @@
 import { useMemo, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
 import { ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, Stat, Table } from "@/components/ui";
-import type { PrevisaoResp } from "@/lib/apiTypes";
+import type { PrevisaoResp, RegimesResp } from "@/lib/apiTypes";
 import { band, baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, valueAxis } from "@/lib/chart";
 import { brl, dayLabel, num, pct } from "@/lib/fmt";
 import { SUBS, type Sub } from "@/lib/sources/types";
@@ -68,9 +68,13 @@ function garchBars(f: PrevisaoResp): ChartOption | null {
   };
 }
 
+/** AAAA-MM-DD → DD/MM/AAAA (o backtest cobre um ano: o dia/mês sozinho é ambíguo). */
+const isoBr = (iso: string) => `${iso.slice(8, 10)}/${iso.slice(5, 7)}/${iso.slice(0, 4)}`;
+
 export default function PrevisaoPage() {
   const [sub, setSub] = useState<Sub>("SE");
   const { data: f, error, isValidating } = useApi<PrevisaoResp>(`/api/previsao?sub=${sub}`, 600_000);
+  const reg365 = useApi<RegimesResp>(`/api/previsao/regimes?sub=${sub}`, 6 * 3600_000);
   const fanOpt = useMemo(() => (f ? fan(f) : null), [f]);
   const reg = useMemo(() => (f ? regimeBars(f) : null), [f]);
   const gar = useMemo(() => (f ? garchBars(f) : null), [f]);
@@ -130,6 +134,38 @@ export default function PrevisaoPage() {
             ))}
           </ul>
         ) : null}
+      </Panel>
+
+      <Panel
+        title={`Erro por regime — ${sub}`}
+        subtitle={
+          reg365.data
+            ? `${reg365.data.method} De ${isoBr(reg365.data.from)} a ${isoBr(reg365.data.to)} · ${reg365.data.pldSource} · faixa de PLD classificada hora a hora`
+            : "walk-forward de 365 dias contra o ingênuo · a primeira leitura do dia leva ~20 s"
+        }
+      >
+        {reg365.data ? (
+          <Table
+            head={["Regime", "Horas", "MAE modelo", "MAE ingênuo", "rMAE", "Leitura"]}
+            align={["left", "right", "right", "right", "right", "left"]}
+            rows={[reg365.data.overall, ...reg365.data.buckets].map((b) => {
+              const tone = b.rmae === null ? "text-muted" : b.rmae < 0.97 ? "text-good" : b.rmae <= 1.03 ? "text-ink-2" : "text-critical";
+              const read = b.rmae === null ? "—" : b.rmae < 0.97 ? `erra ${num(100 * (1 - b.rmae), 0)}% menos` : b.rmae <= 1.03 ? "empata" : `erra ${num(100 * (b.rmae - 1), 0)}% mais`;
+              return [
+                <span key="l" className={b === reg365.data!.overall ? "font-semibold text-ink" : undefined}>{b.label}</span>,
+                num(b.hours, 0),
+                brl(b.maeModel),
+                brl(b.maeNaive),
+                <span key="r" className={`font-mono ${tone}`}>{b.rmae === null ? "—" : num(b.rmae, 2)}</span>,
+                <span key="t" className={tone}>{read}{b.smallSample ? " (amostra pequena)" : ""}</span>,
+              ];
+            })}
+          />
+        ) : reg365.error ? (
+          <ErrorBox error={reg365.error} onRetry={() => reg365.mutate()} />
+        ) : (
+          <Loading height={200} label="Rodando 365 dias de backtest walk-forward…" />
+        )}
       </Panel>
 
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">

@@ -146,6 +146,17 @@ export function completeness(digests: DayDigest[], dates: string[], source: Trus
   return { source, days: dates.length, completeDays: dates.length - incomplete.length, incomplete };
 }
 
+/** Regras do selo de confiança (a página de metodologia lê daqui). */
+export const TRUST_RULES = {
+  /** Valores arredondados a 2 casas antes do hash: diferença menor que R$ 0,005 não conta. */
+  decimals: 2,
+  windowDays: 10,
+  /** Revisão "grande" (selo baixo): mudança relativa ≥ bigRevision em algum ponto... */
+  bigRevision: 0.1,
+  /** ...ou manyRevisions revisões ou mais em 30 dias. */
+  manyRevisions: 5,
+} as const;
+
 export interface TrustSeal {
   source: TrustSourceId;
   /** "alta" sem revisões e completo; "média" com lacunas ou revisões pequenas; "baixa" com revisões grandes. */
@@ -163,7 +174,7 @@ export function sealOf(source: TrustSourceId, revisions: Revision[], comp: Compl
   let level: TrustSeal["level"] = "alta";
   if (biggest) {
     reasons.push(`${mine.length} dia(s) republicado(s) com valores diferentes; maior mudança ${biggest.maxAbsDiff} (${Math.round(biggest.maxRelDiff * 100)}%) em ${biggest.date}`);
-    level = biggest.maxRelDiff >= 0.1 || mine.length >= 5 ? "baixa" : "média";
+    level = biggest.maxRelDiff >= TRUST_RULES.bigRevision || mine.length >= TRUST_RULES.manyRevisions ? "baixa" : "média";
   }
   if (comp && comp.incomplete.length) {
     reasons.push(`${comp.incomplete.length} dos últimos ${comp.days} dias fechados incompleto(s): ${comp.incomplete.slice(0, 4).join(", ")}${comp.incomplete.length > 4 ? "…" : ""}`);

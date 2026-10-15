@@ -1,10 +1,10 @@
 import "server-only";
 import { Agent, request } from "node:https";
-import { PLD_LIMITS } from "../market/brazil";
 import { listarPldEnvelope, parseListarPld, piDate, PiSoapFault, type PiCredentials, type PiPldItem } from "./ccee-pi-xml";
 import { errMsg, recordProbe } from "./http";
 import { addDays, brtDate } from "./time";
 import { emptyQuality, SUBS, type Probe, type SourceResult, type Sub, type SubPanel } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * CCEE — Plataforma de Integração (serviço oficial para agentes), operação `listarPLD`
@@ -120,7 +120,7 @@ export async function fetchPldPI(daysBack = 14, now = Date.now()): Promise<Sourc
     quality.expectedPoints = (Math.round((ts[ts.length - 1] - ts[0]) / 3600_000) + 1) * 4;
     quality.latestTs = ts[ts.length - 1];
     quality.values = SUBS.flatMap((s) => panel.values[s].slice(-168)).filter((v): v is number => v !== null);
-    quality.range = [PLD_LIMITS.min - 0.5, PLD_LIMITS.maxHourly + 0.5];
+    quality.range = [...VALID_RANGES.ccee_pi.range];
     return { id: "ccee_pi", ok: true, data: panel, probes, quality, simulated: false, fetchedAt: now };
   } catch (e) {
     const p = (e as { probes?: Probe[] }).probes;

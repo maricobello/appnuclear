@@ -125,3 +125,16 @@ export interface RenovaveisHistoricoResp {
     revision: { fromVersion: string; prevTotalMWh: number; detectedAt: number } | null;
   }[];
 }
+
+export type { RegimeBucket } from "./market/regime-backtest";
+export interface RegimesResp {
+  sub: Sub;
+  from: string;
+  to: string;
+  days: number;
+  overall: import("./market/regime-backtest").RegimeBucket;
+  buckets: import("./market/regime-backtest").RegimeBucket[];
+  method: string;
+  pldSource: string;
+  computedAt: number;
+}

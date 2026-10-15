@@ -2,6 +2,7 @@ import { cached } from "../cache";
 import { errMsg, fetchJson, probesOf } from "./http";
 import { isoDay } from "./time";
 import { emptyQuality, type Probe, type SourceResult, type TimeSeries } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * Elexon BMRS Insights API (Reino Unido) — sem chave.
@@ -57,7 +58,7 @@ export async function fetchUkMid(daysBack = 7): Promise<SourceResult<TimeSeries>
     quality.points = ts.length;
     quality.latestTs = ts[ts.length - 1] ?? null;
     quality.values = values.slice(-96);
-    quality.range = [-1000, 6000];
+    quality.range = [...VALID_RANGES.elexon_mid.range];
     return { id: "elexon_mid", ok: ts.length > 0, data: { ts, values, unit: "GBP/MWh" }, probes, quality, simulated: false, fetchedAt: Date.now(), error: ts.length ? undefined : "sem períodos com preço" };
   } catch (e) {
     probes.push(...probesOf(e));
@@ -98,7 +99,7 @@ export async function fetchUkSystemPrices(): Promise<SourceResult<SystemPrices>>
     quality.points = ts.length;
     quality.latestTs = ts[ts.length - 1] ?? null;
     quality.values = data.sbp.slice(-48);
-    quality.range = [-1000, 10000];
+    quality.range = [...VALID_RANGES.elexon_sysprice.range];
     return { id: "elexon_sysprice", ok: ts.length > 0, data, probes, quality, simulated: false, fetchedAt: Date.now() };
   } catch (e) {
     probes.push(...probesOf(e));
@@ -132,7 +133,7 @@ export async function fetchUkCarbon(): Promise<SourceResult<CarbonNow>> {
     quality.points = 1;
     quality.latestTs = Date.parse(row.from);
     quality.values = [row.intensity.forecast];
-    quality.range = [0, 800];
+    quality.range = [...VALID_RANGES.uk_carbon.range];
     return {
       id: "uk_carbon",
       ok: true,

@@ -2,8 +2,8 @@ import { byYearDesc, ckanPackage, datastoreSearch, pickKey, subOf } from "./ckan
 import { num } from "./csv";
 import { errMsg, probesOf } from "./http";
 import { brtToUtc } from "./time";
-import { PLD_LIMITS } from "../market/brazil";
 import { emptyQuality, SUBS, type Probe, type SourceResult, type Sub, type SubPanel } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * CCEE — Portal de Dados Abertos (CKAN): conjunto PLD_HORARIO.
@@ -96,6 +96,6 @@ export function parsePldRecords(records: Record<string, unknown>[], daysBack = 1
   quality.expectedPoints = (Math.round((keep[keep.length - 1] - keep[0]) / 3600_000) + 1) * 4;
   quality.latestTs = keep[keep.length - 1];
   quality.values = SUBS.flatMap((s) => panel.values[s].slice(-168)).filter((v): v is number => v !== null);
-  quality.range = [PLD_LIMITS.min - 0.5, PLD_LIMITS.maxHourly + 0.5];
+  quality.range = [...VALID_RANGES.ccee_pld.range];
   return { panel, quality };
 }

@@ -13,6 +13,7 @@ import {
   Gauge,
   Globe,
   Menu,
+  ScrollText,
   ShieldCheck,
   TrendingUp,
   Wallet,
@@ -57,6 +58,7 @@ const NAV: { group: string; items: { href: string; label: string; Icon: typeof G
     items: [
       { href: "/auditoria", label: "Agente auditor", Icon: ShieldCheck },
       { href: "/modelos", label: "Modelos & APIs", Icon: BookOpen },
+      { href: "/metodologia", label: "Metodologia", Icon: ScrollText },
     ],
   },
 ];

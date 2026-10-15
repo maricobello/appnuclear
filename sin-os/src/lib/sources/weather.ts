@@ -3,6 +3,7 @@ import { quantile } from "../quant/stats";
 import { errMsg, fetchJson, probesOf } from "./http";
 import { parseBrtDateTime } from "./time";
 import { emptyQuality, type SourceResult, type Sub } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * Open-Meteo (sem chave, CC BY 4.0): previsão determinística (modelos "best match")
@@ -96,7 +97,7 @@ export async function fetchWeather(): Promise<SourceResult<HubForecast[]>> {
     quality.points = out.reduce((s, h) => s + h.ts.length, 0);
     quality.latestTs = Date.now(); // previsão: frescor medido pela emissão (sempre atual quando responde)
     quality.values = out.flatMap((h) => h.temp.slice(0, 24));
-    quality.range = [-20, 55];
+    quality.range = [...VALID_RANGES.open_meteo.range];
     return { id: "open_meteo", ok: true, data: out, probes: value.probes, quality, simulated: false, fetchedAt: Date.now() };
   } catch (e) {
     return { id: "open_meteo", ok: false, data: null, error: errMsg(e), probes: probesOf(e), quality, simulated: false, fetchedAt: Date.now() };
@@ -150,7 +151,7 @@ export async function fetchBasinEnsemble(): Promise<SourceResult<BasinEnsemble[]
     quality.points = out.length;
     quality.latestTs = Date.now();
     quality.values = out.map((b) => b.p50);
-    quality.range = [0, 1500];
+    quality.range = [...VALID_RANGES.open_meteo_ens.range];
     return { id: "open_meteo_ens", ok: true, data: out, probes: value.probes, quality, simulated: false, fetchedAt: Date.now() };
   } catch (e) {
     return { id: "open_meteo_ens", ok: false, data: null, error: errMsg(e), probes: probesOf(e), quality, simulated: false, fetchedAt: Date.now() };

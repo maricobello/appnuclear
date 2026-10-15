@@ -18,8 +18,10 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Mercados globais** | Europa (SDAC, 15 min), Reino Unido (Elexon, NESO), câmbio (BCB), combustíveis (EIA) |
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
-| **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), alertas push + relatório do Claude com causa provável e ação |
+| **Renováveis & corte** | Corte de eólica e solar do ONS por dia, hora, submercado e motivo, cruzado com o PLD; histórico de 12 meses com revisões; curva do pato |
+| **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
+| **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão) e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
 | **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
@@ -260,6 +262,24 @@ Checagens feitas a cada leitura (e testadas com amostra real em `tests/fixtures/
 - **Identidade do balanço:** hidro + térmica + eólica + solar − intercâmbio = carga em todas as horas.
 - A flag de dado inválido do ONS não é usada (não é atualizada depois da contestação do agente).
 
+## Metodologia pública
+
+Tela `/metodologia` e `GET /api/metodologia` (JSON): para cada fonte, o arquivo ou rota lido, as colunas
+com nome no app e unidade, como o instante é interpretado (fuso), as transformações, o SLA, a faixa válida
+e como a versão é rastreada; e as regras do auditor (pesos, limites de passa/alerta/reprova, checagens
+cruzadas, selo de confiança, checagens do corte, alertas de mercado e o método do backtest por regime).
+Os números vêm das mesmas constantes que o código aplica (`AUDIT_THRESHOLDS`, `CHECK_WEIGHTS`,
+`VALID_RANGES`, `TRUST_RULES`, `RENEWABLE_CHECKS`), então o publicado é o que roda, e a página mostra o
+commit da versão.
+
+## Previsão por regime
+
+`GET /api/previsao/regimes?sub=SE` (painel "Erro por regime" na tela Previsão): walk-forward de 365 dias,
+cada dia previsto só com o histórico anterior, comparando a previsão publicada (LEAR ⊕ ingênuo) com o
+ingênuo por período hidrológico (úmido dez–abr, seco mai–nov), nível do reservatório do submercado (EAR
+abaixo de 40%, 40–60%, acima de 60%) e faixa do PLD realizado (piso, até R$ 150, R$ 150–300, acima de
+R$ 300). Calculado uma vez por dia e guardado no Firestore.
+
 ## Agente auditor
 
 1. **Camada determinística** (sempre ativa): para cada API mede disponibilidade, latência, frescor vs SLA,
@@ -389,9 +409,10 @@ DATA_MODE=demo npm run dev   # tudo simulado (sem internet)
 src/lib/quant/      modelos (LARS/LASSO, LEAR, conformal, QRA, MRJD, HMM, GARCH, ADF/EG, DP/LSMC, risco)
 src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinalizado
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
-src/lib/audit/      checagens, execução e agente Claude
+src/lib/audit/      checagens, execução e agente (Groq)
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, confianca, renovaveis, brasil, previsao, arbitragem, pld-mensal, global, clima, auditoria (+run, selfeval, alert-test), health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, renovaveis (+historico), brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test), metodologia, health, status, assistente (+voz)
+src/lib/methodology.ts  dicionário de dados e regras publicadas em /metodologia
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```

@@ -8,7 +8,29 @@ import type { Check, CheckStatus, CrossCheck, SourceAudit } from "./types";
  * Checagens determinísticas por fonte. Pesos somam 100:
  * disponibilidade 30 · frescor 20 · schema 15 · completude 15 · validade 10 · latência 5 · outliers 5
  */
-const W = { availability: 30, freshness: 20, schema: 15, completeness: 15, validity: 10, latency: 5, outliers: 5 } as const;
+export const CHECK_WEIGHTS = { availability: 30, freshness: 20, schema: 15, completeness: 15, validity: 10, latency: 5, outliers: 5 } as const;
+const W = CHECK_WEIGHTS;
+
+/** Limites de cada checagem (a página de metodologia lê daqui: o publicado é o aplicado). */
+export const AUDIT_THRESHOLDS = {
+  /** Latência: passa abaixo de passMs, alerta abaixo de warnMs; downloads acima de bigBytes toleram bigFactor×. */
+  latency: { passMs: 2000, warnMs: 8000, bigBytes: 1_000_000, bigFactor: 3 },
+  /** Frescor: passa até 1× o SLA da fonte, alerta até warnSlaFactor× o SLA. */
+  freshness: { warnSlaFactor: 2 },
+  /** Completude: fração da janela esperada e fração de registros inválidos. */
+  completeness: { passRatio: 0.98, warnRatio: 0.9, passInvalid: 0.01, warnInvalid: 0.05 },
+  /** Validade: fração de valores fora da faixa plausível/regulatória que ainda é só alerta. */
+  validity: { warnOutside: 0.01 },
+  /** Outliers (Hampel): janela, k (desvios MAD), fração máxima para passar e amostra mínima. */
+  outliers: { window: 12, k: 5, passShare: 0.02, minSample: 48 },
+  /** Fonte "ok" com score ≥ okScore e nenhuma checagem reprovada. */
+  okScore: 85,
+  /** PLD (CCEE) × CMO limitado (ONS): MAE e fração de horas com |Δ| ≤ R$ 1. */
+  pldVsCmo: { passMae: 5, passWithin1: 0.9, warnMae: 25, minPairs: 24, days: 7 },
+  /** Triangulação cambial: faixas plausíveis de EUR/USD e GBP/USD implícitos. */
+  fx: { eurusd: [0.85, 1.45] as [number, number], gbpusd: [1, 1.7] as [number, number] },
+} as const;
+const T = AUDIT_THRESHOLDS;
 
 const mk = (id: Check["id"], label: string, status: CheckStatus, score: number, detail: string): Check => ({
   id,
@@ -57,11 +79,11 @@ export function auditSource(meta: SourceMeta, r: SourceResult<unknown>, now = Da
   // latência (downloads grandes toleram mais)
   const bytes = probes.reduce((s, p) => s + p.bytes, 0);
   const lat = base.latencyMs ?? 0;
-  const k = bytes > 1_000_000 ? 3 : 1;
+  const k = bytes > T.latency.bigBytes ? T.latency.bigFactor : 1;
   checks.push(
-    lat < 2000 * k
+    lat < T.latency.passMs * k
       ? mk("latency", "Latência", "pass", 1, `${lat} ms (${(bytes / 1024).toFixed(0)} KB)`)
-      : lat < 8000 * k
+      : lat < T.latency.warnMs * k
         ? mk("latency", "Latência", "warn", 0.5, `${lat} ms — lenta`)
         : mk("latency", "Latência", "fail", 0.1, `${lat} ms — muito lenta`),
   );
@@ -71,7 +93,7 @@ export function auditSource(meta: SourceMeta, r: SourceResult<unknown>, now = Da
   if (age === null) checks.push(mk("freshness", "Frescor", "fail", 0, "sem timestamp de observação"));
   else if (age <= meta.freshnessSlaHours)
     checks.push(mk("freshness", "Frescor", "pass", 1, age < 0 ? `inclui dados futuros (+${(-age).toFixed(1)} h — programação)` : `${age.toFixed(1)} h (SLA ${meta.freshnessSlaHours} h)`));
-  else if (age <= 2 * meta.freshnessSlaHours)
+  else if (age <= T.freshness.warnSlaFactor * meta.freshnessSlaHours)
     checks.push(mk("freshness", "Frescor", "warn", 0.5, `${age.toFixed(1)} h — acima do SLA de ${meta.freshnessSlaHours} h`));
   else checks.push(mk("freshness", "Frescor", "fail", 0, `${age.toFixed(1)} h — dado defasado (SLA ${meta.freshnessSlaHours} h)`));
 
@@ -88,8 +110,8 @@ export function auditSource(meta: SourceMeta, r: SourceResult<unknown>, now = Da
     duplicates ? `${duplicates} duplicados` : null,
     invalid ? `${invalid} registros inválidos` : null,
   ].filter(Boolean).join(" · ");
-  if ((ratio === null || ratio >= 0.98) && duplicates === 0 && invalidPct < 0.01) checks.push(mk("completeness", "Completude", "pass", 1, parts));
-  else if ((ratio === null || ratio >= 0.9) && invalidPct < 0.05) checks.push(mk("completeness", "Completude", "warn", 0.6, parts));
+  if ((ratio === null || ratio >= T.completeness.passRatio) && duplicates === 0 && invalidPct < T.completeness.passInvalid) checks.push(mk("completeness", "Completude", "pass", 1, parts));
+  else if ((ratio === null || ratio >= T.completeness.warnRatio) && invalidPct < T.completeness.warnInvalid) checks.push(mk("completeness", "Completude", "warn", 0.6, parts));
   else checks.push(mk("completeness", "Completude", "fail", 0.2, parts));
 
   // validade (faixa plausível / regulatória)
@@ -102,22 +124,22 @@ export function auditSource(meta: SourceMeta, r: SourceResult<unknown>, now = Da
     checks.push(
       out === 0
         ? mk("validity", "Validade", "pass", 1, `100% em [${range[0]}, ${range[1]}]`)
-        : pct <= 0.01
+        : pct <= T.validity.warnOutside
           ? mk("validity", "Validade", "warn", 0.5, `${out} valor(es) fora de [${range[0]}, ${range[1]}]`)
           : mk("validity", "Validade", "fail", 0, `${(100 * pct).toFixed(1)}% fora de [${range[0]}, ${range[1]}]`),
     );
   }
 
   // outliers (Hampel) — informativo: picos reais de preço existem
-  if (vals.length >= 48) {
-    const o = hampelOutliers(vals, 12, 5).length;
+  if (vals.length >= T.outliers.minSample) {
+    const o = hampelOutliers(vals, T.outliers.window, T.outliers.k).length;
     const pct = o / vals.length;
-    checks.push(pct <= 0.02 ? mk("outliers", "Outliers (Hampel)", "pass", 1, `${o} ponto(s) atípico(s)`) : mk("outliers", "Outliers (Hampel)", "warn", 0.5, `${o} pontos atípicos (${(100 * pct).toFixed(1)}%) — verificar picos`));
+    checks.push(pct <= T.outliers.passShare ? mk("outliers", "Outliers (Hampel)", "pass", 1, `${o} ponto(s) atípico(s)`) : mk("outliers", "Outliers (Hampel)", "warn", 0.5, `${o} pontos atípicos (${(100 * pct).toFixed(1)}%) — verificar picos`));
   } else checks.push(mk("outliers", "Outliers (Hampel)", "skip", 1, "amostra curta"));
 
   const score = Math.round((100 * checks.reduce((s, c) => s + c.weight * c.score, 0)) / checks.reduce((s, c) => s + c.weight, 0));
   const anyFail = checks.some((c) => c.status === "fail");
-  return { ...base, status: score >= 85 && !anyFail ? "ok" : "degraded", score, checks };
+  return { ...base, status: score >= T.okScore && !anyFail ? "ok" : "degraded", score, checks };
 }
 
 /** Integridade cruzada: PLD (CCEE) deve ser o CMO do DESSEM (ONS) limitado ao piso/teto. */
@@ -129,7 +151,7 @@ export function crossPldCmo(pld: SubPanel | null, cmo: SubPanel | null): CrossCh
   const diffs: number[] = [];
   const a: number[] = [];
   const b: number[] = [];
-  const cut = Date.now() - 7 * 86400_000;
+  const cut = Date.now() - T.pldVsCmo.days * 86400_000;
   pld.ts.forEach((t, i) => {
     const j = cmoMap.get(t);
     if (j === undefined || t < cut) return;
@@ -143,11 +165,11 @@ export function crossPldCmo(pld: SubPanel | null, cmo: SubPanel | null): CrossCh
       b.push(cc);
     }
   });
-  if (diffs.length < 24) return { id: "pld_vs_cmo", label: "PLD (CCEE) × CMO limitado (ONS)", status: "skip", detail: "sobreposição insuficiente", metrics: { n: diffs.length } };
+  if (diffs.length < T.pldVsCmo.minPairs) return { id: "pld_vs_cmo", label: "PLD (CCEE) × CMO limitado (ONS)", status: "skip", detail: "sobreposição insuficiente", metrics: { n: diffs.length } };
   const maeV = mean(diffs);
   const within = diffs.filter((d) => d <= 1).length / diffs.length;
   const corr = pearson(a, b);
-  const status: CheckStatus = maeV < 5 && within > 0.9 ? "pass" : maeV < 25 ? "warn" : "fail";
+  const status: CheckStatus = maeV < T.pldVsCmo.passMae && within > T.pldVsCmo.passWithin1 ? "pass" : maeV < T.pldVsCmo.warnMae ? "warn" : "fail";
   return {
     id: "pld_vs_cmo",
     label: "PLD (CCEE) × CMO limitado (ONS)",
@@ -161,7 +183,7 @@ export function crossFx(fx: FxData | null): CrossCheck {
   if (!fx) return { id: "fx_triangle", label: "Triangulação cambial EUR/USD", status: "skip", detail: "BCB indisponível", metrics: {} };
   const eurusd = fx.EUR.rate / fx.USD.rate;
   const gbpusd = fx.GBP.rate / fx.USD.rate;
-  const ok = eurusd > 0.85 && eurusd < 1.45 && gbpusd > 1 && gbpusd < 1.7;
+  const ok = eurusd > T.fx.eurusd[0] && eurusd < T.fx.eurusd[1] && gbpusd > T.fx.gbpusd[0] && gbpusd < T.fx.gbpusd[1];
   return {
     id: "fx_triangle",
     label: "Triangulação cambial EUR/USD",

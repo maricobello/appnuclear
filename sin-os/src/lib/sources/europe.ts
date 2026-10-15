@@ -1,6 +1,7 @@
 import { errMsg, fetchJson, probesOf } from "./http";
 import { isoDay } from "./time";
 import { emptyQuality, type Probe, type SourceResult, type TimeSeries } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * Energy-Charts API (Fraunhofer ISE) — preços day-ahead das zonas de licitação
@@ -164,7 +165,7 @@ export async function fetchEuPrices(daysBack = 7, opts: EuFetchOpts = {}): Promi
   quality.points = zones.reduce((s, z) => s + z.values.length, 0);
   quality.latestTs = Math.max(...zones.map((z) => z.ts[z.ts.length - 1] ?? 0));
   quality.values = zones.flatMap((z) => z.values.slice(-96));
-  quality.range = [-500, 4000]; // harmonised min/max clearing price SDAC
+  quality.range = [...VALID_RANGES.energy_charts.range]; // harmonised min/max clearing price SDAC
   if (errors.length) quality.schemaIssues.push(...errors.map((e) => `zona não atualizada — ${e}`));
   const missing = EU_ZONES.filter((z) => !out[z.bzn]).map((z) => z.bzn);
   if (missing.length) quality.schemaIssues.push(`${missing.length} zona(s) aguardando carga (2 req/min): ${missing.join(", ")}`);

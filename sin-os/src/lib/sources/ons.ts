@@ -14,6 +14,7 @@ import {
   type Sub,
   type SubPanel,
 } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * ONS — Portal de Dados Abertos (CKAN + S3 ons-aws-prod-opendata).
@@ -181,7 +182,7 @@ export const fetchCmoHourly = (daysBack = 120) =>
       { prefix: "cmo_tm", file: "CMO_SEMIHORARIO" },
     );
     const p = hourlyPanel(rows, daysBack, "R$/MWh", quality);
-    p.quality.range = [-1, 5000];
+    p.quality.range = [...VALID_RANGES.ons_cmo.range];
     return { ...p, probes };
   });
 
@@ -196,7 +197,7 @@ export const fetchEarDaily = (daysBack = 365) =>
       { prefix: "ear_subsistema_di", file: "EAR_DIARIO_SUBSISTEMA" },
     );
     const p = dailyPanel(rows, daysBack, "% EARmax", quality);
-    p.quality.range = [0, 100.5];
+    p.quality.range = [...VALID_RANGES.ons_ear.range];
     return { ...p, probes };
   });
 
@@ -211,7 +212,7 @@ export const fetchEnaDaily = (daysBack = 365) =>
       { prefix: "ena_subsistema_di", file: "ENA_DIARIO_SUBSISTEMA" },
     );
     const p = dailyPanel(rows, daysBack, "% MLT", quality);
-    p.quality.range = [0, 1000];
+    p.quality.range = [...VALID_RANGES.ons_ena.range];
     return { ...p, probes };
   });
 
@@ -226,6 +227,6 @@ export const fetchLoadHourly = (daysBack = 60) =>
       { prefix: "curva-carga-ho", file: "CURVA_CARGA" },
     );
     const p = hourlyPanel(rows, daysBack, "MWmed", quality);
-    p.quality.range = [0, 120_000];
+    p.quality.range = [...VALID_RANGES.ons_carga.range];
     return { ...p, probes };
   });

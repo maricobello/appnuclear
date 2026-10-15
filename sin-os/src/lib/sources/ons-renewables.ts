@@ -5,6 +5,7 @@ import { errMsg, fetchBuffer, HttpError, probesOf } from "./http";
 import { ONS_S3 } from "./ons";
 import { brtDate } from "./time";
 import { emptyQuality, type Probe, type Quality, type SourceId, type SourceResult } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * ONS — restrição de operação por constrained-off de eólicas e fotovoltaicas (por conjunto, meia
@@ -109,7 +110,7 @@ export const fetchCurtailment = (days = 14, now = Date.now()) =>
     // totais diários cortados (MWh) alimentam a checagem de faixa do auditor
     const daily = new Map<string, number>();
     for (const r of rows) if (r.razao) daily.set(brtDate(r.ts), (daily.get(brtDate(r.ts)) ?? 0) + Math.max(0, r.apurada ?? 0) * 0.5);
-    return { data: rows, probes, quality: qualityOf(rows, invalid, [...daily.values()], [0, 1_000_000]) };
+    return { data: rows, probes, quality: qualityOf(rows, invalid, [...daily.values()], [...VALID_RANGES.ons_curtailment.range]) };
   });
 
 /** Balanço horário por subsistema (geração por fonte, carga e intercâmbio), últimos `days` dias. */
@@ -122,5 +123,5 @@ export const fetchBalance = (days = 14, now = Date.now()) =>
     const r = await loadFiles(urls, (o) => (String(o.id_subsistema ?? "").trim().toUpperCase() === "SIN" ? undefined : balanceRowFrom(o)), `parquet:${urls.join("|")}`);
     const rows = r.rows.filter((x) => x.ts >= from);
     if (!rows.length) throw new HttpError("balanço do ONS sem linhas na janela", r.probes);
-    return { data: rows, probes: r.probes, quality: qualityOf(rows, r.invalid, rows.map((x) => x.carga ?? 0), [0, 120_000]) };
+    return { data: rows, probes: r.probes, quality: qualityOf(rows, r.invalid, rows.map((x) => x.carga ?? 0), [...VALID_RANGES.ons_balanco.range]) };
   });

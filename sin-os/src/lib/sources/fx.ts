@@ -3,6 +3,7 @@ import { num } from "./csv";
 import { errMsg, fetchJson, probesOf } from "./http";
 import { parseBrtDateTime } from "./time";
 import { emptyQuality, type Probe, type SourceResult } from "./types";
+import { VALID_RANGES } from "./ranges";
 
 /**
  * Banco Central do Brasil — SGS (Sistema Gerenciador de Séries Temporais), sem chave.
@@ -40,7 +41,7 @@ export async function fetchFx(): Promise<SourceResult<FxData>> {
     quality.points = Object.values(data).reduce((s, q) => s + q.history.length, 0);
     quality.latestTs = Math.min(...Object.values(data).map((q) => q.ts));
     quality.values = Object.values(data).map((q) => q.rate);
-    quality.range = [0.5, 20];
+    quality.range = [...VALID_RANGES.bcb_fx.range];
     return { id: "bcb_fx", ok: true, data, probes, quality, simulated: false, fetchedAt: Date.now() };
   } catch (e) {
     probes.push(...probesOf(e));

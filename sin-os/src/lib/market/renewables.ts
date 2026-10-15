@@ -16,6 +16,18 @@ import { SUBS, type DailySubPanel, type Sub } from "../sources/types";
  *    alinhamento 0 e ≈ 0,95 deslocando 1 h);
  *  - no parquet do ONS o horário é de Brasília gravado "sem fuso": ler como UTC desloca 3 h.
  */
+/** Limites das checagens de qualidade do corte e do balanço (a página de metodologia lê daqui). */
+export const RENEWABLE_CHECKS = {
+  /** Referência acima deste múltiplo da disponibilidade conta como "acima da disponibilidade". */
+  refAboveAvail: 1.02,
+  /** Convenção de hora validada se a correlação sem defasagem passar disto e for a melhor. */
+  hourCorrMin: 0.98,
+  /** Balanço "não fecha" quando geração − intercâmbio difere da carga em mais desta fração. */
+  identityTol: 0.01,
+  /** Método da apurada reproduzido se o erro médio ficar abaixo disto (MW). */
+  methodMaeMax: 1,
+} as const;
+
 export type Tech = "eolica" | "solar";
 export type Reason = "REL" | "CNF" | "ENE";
 export const REASONS: Reason[] = ["REL", "CNF", "ENE"];
@@ -202,7 +214,7 @@ export function curtailmentSummary(rows: CurtRow[], now: number, days = 14): Cur
     const cap = r.ref !== null && r.disp !== null && r.geracao !== null ? Math.min(mwh, Math.max(0, Math.min(r.ref, r.disp) - r.geracao) * 0.5) : mwh;
     capped += cap;
     inflated += mwh - cap;
-    if (r.ref !== null && r.disp !== null && r.disp > 0 && r.ref > r.disp * 1.02) refAbove++;
+    if (r.ref !== null && r.disp !== null && r.disp > 0 && r.ref > r.disp * RENEWABLE_CHECKS.refAboveAvail) refAbove++;
     if (r.ref !== null && r.geracao !== null && r.apurada !== null) {
       maeSum += Math.abs(r.apurada - Math.max(0, r.ref - r.geracao));
       maeN++;
@@ -289,7 +301,7 @@ export function netLoadSummary(rows: BalanceRow[], now: number, days = 14): NetL
     s.subs++;
     sinByTs.set(r.ts, s);
     const g = (r.hidro ?? 0) + (r.termica ?? 0) + (r.eolica ?? 0) + (r.solar ?? 0);
-    if (r.intercambio !== null && r.carga > 0 && Math.abs(g - r.intercambio - r.carga) > 0.01 * r.carga) breaks++;
+    if (r.intercambio !== null && r.carga > 0 && Math.abs(g - r.intercambio - r.carga) > RENEWABLE_CHECKS.identityTol * r.carga) breaks++;
   }
   // SIN: só horas com os 4 submercados
   const byDay = new Map<string, number[]>();
@@ -394,7 +406,7 @@ export function hourConventionCheck(curt: CurtRow[], bal: BalanceRow[], sub: Sub
   const entries = (Object.entries(out) as [string, number | null][]).filter((e): e is [string, number] => e[1] !== null);
   const best = entries.sort((x, y) => y[1] - x[1])[0];
   const bestLag = best ? Number(best[0]) : null;
-  return { sub, n, corrByLag: out, bestLag, ok: bestLag === 0 && (out["0"] ?? 0) > 0.98 };
+  return { sub, n, corrByLag: out, bestLag, ok: bestLag === 0 && (out["0"] ?? 0) > RENEWABLE_CHECKS.hourCorrMin };
 }
 
 type PldPanel = { ts: number[]; values: Record<Sub, (number | null)[]> };
