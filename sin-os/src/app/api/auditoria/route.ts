@@ -11,15 +11,36 @@ import { listAgentReports, listAuditRuns, storageKind } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
 
+/**
+ * Todas as abas abertas consultam esta rota (o menu lateral a cada 5 min, a tela do auditor a
+ * cada 30 s): a CDN responde por 60 s, então o Firestore é lido no máximo uma vez por minuto por
+ * variante, e não uma vez por aba.
+ */
+const CDN_CACHE = { "Cache-Control": "public, s-maxage=60, stale-while-revalidate=300" };
+
 export async function GET(req: Request) {
   try {
     const lite = new URL(req.url).searchParams.get("lite") === "1";
     const runs = await listAuditRuns(lite ? 1 : 48);
     const latest = runs[0] ?? null;
     if (lite) {
+      const fb = firebaseStatus();
       return Response.json(
-        { latest: latest ? { id: latest.id, startedAt: latest.startedAt, overallScore: latest.overallScore, counts: latest.counts } : null, dataMode: dataMode() },
-        { headers: { "Cache-Control": "no-store" } },
+        {
+          latest: latest
+            ? {
+                id: latest.id,
+                startedAt: latest.startedAt,
+                overallScore: latest.overallScore,
+                counts: latest.counts,
+                attention: latest.sources.filter((s) => s.status === "down" || s.status === "degraded").map((s) => s.name),
+              }
+            : null,
+          dataMode: dataMode(),
+          storage: storageKind(),
+          storageError: fb.configured ? fb.error : null,
+        },
+        { headers: CDN_CACHE },
       );
     }
     const reports = await listAgentReports(3);
@@ -54,7 +75,7 @@ export async function GET(req: Request) {
         auth: { required: !!(process.env.CRON_SECRET || process.env.ADMIN_KEY) },
         dataMode: dataMode(),
       },
-      { headers: { "Cache-Control": "no-store" } },
+      { headers: CDN_CACHE },
     );
   } catch (e) {
     return errorResponse(e, 500);

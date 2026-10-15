@@ -81,6 +81,15 @@ export interface AuditoriaResp {
   dataMode: string;
 }
 
+/** /api/auditoria?lite=1 — o resumo que o menu lateral e a home usam. */
+export interface AuditoriaLite {
+  latest: { id: string; startedAt: number; overallScore: number; counts: AuditRun["counts"]; attention: string[] } | null;
+  dataMode: string;
+  storage: "firestore" | "memory";
+  /** Erro do Firestore (ex.: cota diária esgotada); nulo quando saudável ou não configurado. */
+  storageError: string | null;
+}
+
 export type BessResp = BessStudy & { meta: SourceMetaView; simulated: boolean; generatedAt: number };
 
 export interface ConfiancaResp {
@@ -124,6 +133,8 @@ export interface RenovaveisHistoricoResp {
     computedAt: number;
     revision: { fromVersion: string; prevTotalMWh: number; detectedAt: number } | null;
   }[];
+  /** Meses que não couberam no prazo desta resposta (calculados nas próximas). */
+  missing?: number;
 }
 
 export type { RegimeBucket } from "./market/regime-backtest";

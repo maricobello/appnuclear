@@ -12,7 +12,7 @@ import { useApi } from "@/lib/useApi";
 const KEY_STORE = "sinos.adminKey";
 
 export default function AuditoriaPage() {
-  const { data, error, mutate, isValidating } = useApi<AuditoriaResp>("/api/auditoria", 30_000);
+  const { data, error, mutate, isValidating } = useApi<AuditoriaResp>("/api/auditoria", 60_000);
   const trust = useApi<ConfiancaResp>("/api/confianca", 300_000).data;
   const [running, setRunning] = useState(false);
   const [runMsg, setRunMsg] = useState<string | null>(null);
@@ -42,7 +42,20 @@ export default function AuditoriaPage() {
           : `Auditoria concluída em ${num(body.run.durationMs / 1000, 1)} s · score ${body.run.overallScore}/100.` +
               (body.report ? " Agente IA gerou relatório." : body.agentError ? ` Agente IA falhou: ${body.agentError}` : body.agentEligible ? "" : " (agente IA não acionado: sem credencial ou sem GROQ_API_KEY)"),
       );
-      await mutate();
+      // a rota de leitura fica 60 s na CDN: a execução nova entra direto na tela
+      const r = body.run as AuditoriaResp["latest"];
+      if (r && !body.throttled) {
+        await mutate(
+          (cur) =>
+            cur && {
+              ...cur,
+              latest: r,
+              history: [...cur.history.filter((h) => h.id !== r.id), { id: r.id, startedAt: r.startedAt, overallScore: r.overallScore, counts: r.counts, trigger: r.trigger }],
+              reports: body.report ? [body.report, ...cur.reports] : cur.reports,
+            },
+          { revalidate: false },
+        );
+      }
     } catch (e) {
       setRunMsg(e instanceof Error ? e.message : String(e));
     } finally {

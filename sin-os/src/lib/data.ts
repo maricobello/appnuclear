@@ -13,7 +13,7 @@ import { brtDate, brtHour } from "./sources/time";
 import { SUBS, type SourceResult, type Sub, type SubPanel } from "./sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "./sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "./sources/weather";
-import { euZoneStore, isCompleteDay, loadPldDays, savePldDays, type PldDay } from "./store";
+import { euZoneStore, isCompleteDay, loadPldDays, PLD_OFFICIAL_MARK, readDoc, savePldDays, type PldDay } from "./store";
 
 /**
  * Orquestra as fontes com a política de fallback definida por DATA_MODE:
@@ -53,6 +53,12 @@ async function withFallback<T>(id: SourceResult<T>["id"], live: () => Promise<So
 /** Fonte gravada em pld_days quando o PLD vem do CMO do ONS (CCEE indisponível). */
 export const PLD_FROM_CMO = "ons-cmo";
 
+/**
+ * Só os dias mais recentes vão para a gravação a cada requisição: os anteriores já foram gravados
+ * por execuções passadas, e conferir 120 dias custaria 120 leituras do Firestore por instância nova.
+ */
+export const recentDays = (days: PldDay[], n = 14) => days.slice(-n);
+
 export function panelToDays(panel: SubPanel, source: string): PldDay[] {
   const byDay = new Map<string, Record<Sub, (number | null)[]>>();
   panel.ts.forEach((t, i) => {
@@ -89,12 +95,12 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
   if (mode === "demo") return simulated("ccee_pld", sim.simPld(daysBack), "DATA_MODE=demo");
   const primary = await fetchPldHourly(daysBack);
   if (primary.ok && primary.data) {
-    savePldDays(panelToDays(primary.data, "ccee")).catch(() => undefined);
+    savePldDays(recentDays(panelToDays(primary.data, "ccee"))).catch(() => undefined);
     return primary;
   }
   // PLD oficial pela Plataforma de Integração (se configurada): últimos 14 dias + D+1
   const pi = ccePiConfigured() ? await cached("pld:pi", 10 * 60_000, () => fetchPldPI(14)).then((r) => r.value) : null;
-  if (pi?.ok && pi.data) savePldDays(panelToDays(pi.data, "ccee")).catch(() => undefined);
+  if (pi?.ok && pi.data) savePldDays(recentDays(panelToDays(pi.data, "ccee"))).catch(() => undefined);
   const cmo = await fetchCmoHourly(daysBack);
   if (cmo.ok && cmo.data) {
     const est = pldFromCmo(cmo.data);
@@ -109,7 +115,7 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
       };
     }
     // guarda o estimado no histórico; a CCEE sobrescreve quando voltar
-    savePldDays(panelToDays(est, PLD_FROM_CMO)).catch(() => undefined);
+    savePldDays(recentDays(panelToDays(est, PLD_FROM_CMO))).catch(() => undefined);
     const blocked = `CCEE indisponível: ${(primary.error ?? "erro").split(" — ")[0]}`;
     // dias oficiais já gravados (coletor ou execuções anteriores) valem sobre a estimativa
     const official = await recentOfficialDays();
@@ -138,10 +144,15 @@ export async function getPld(daysBack = 120): Promise<SourceResult<SubPanel>> {
   return simulated("ccee_pld", sim.simPld(daysBack), `simulação — CCEE e ONS indisponíveis: ${primary.error}`, primary);
 }
 
-/** Dias oficiais (source "ccee") dos últimos 45 dias no Firestore, em cache de 15 min (poupa leituras). */
+/**
+ * Dias oficiais (source "ccee") dos últimos 45 dias no Firestore. O coletor grava no máximo 1–2
+ * vezes por dia e muda a marca meta/pld_official; a lista só é relida quando a marca muda
+ * (1 leitura a cada 5 min em vez de 45 a cada 15 min).
+ */
 export const OFFICIAL_CACHE_KEY = "pld:official";
 async function recentOfficialDays() {
-  const { value } = await cached(OFFICIAL_CACHE_KEY, 15 * 60_000, async () => (await loadPldDays(45).catch(() => [])).filter((d) => d.source === "ccee"));
+  const { value: mark } = await cached(`${OFFICIAL_CACHE_KEY}:mark`, 5 * 60_000, async () => (await readDoc<{ updatedAt: number }>("meta", PLD_OFFICIAL_MARK).catch(() => null))?.updatedAt ?? 0);
+  const { value } = await cached(`${OFFICIAL_CACHE_KEY}:days:${mark}`, 6 * 3600_000, async () => (await loadPldDays(45).catch(() => [])).filter((d) => d.source === "ccee"));
   return value;
 }
 

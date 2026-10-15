@@ -8,7 +8,7 @@ import type { ChartOption } from "@/components/EChart";
 import { ChartFrame } from "@/components/EChart";
 import { Appear, EASE } from "@/components/motion";
 import { ConfidenceBar, Delta, Empty, MetricRow, ScrollX, sourceState, type DataState } from "@/components/ui";
-import type { AlertasResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
+import type { AlertasResp, AuditoriaLite, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
 import type { BessAsset } from "@/lib/asset";
 import { band, baseOption, C, categoryAxis, line, SUB_COLOR, SUB_CSS, timeAxis, tooltipTime, valueAxis } from "@/lib/chart";
 import { brl, compact, nf, num, pct } from "@/lib/fmt";
@@ -452,7 +452,7 @@ export function SystemStats({ items }: { items: KpiSpec[] }) {
 
 /* ========================================================= resumo do dia */
 
-export function DaySummary({ br, fc, audit, alerts, now: nowTs }: { br?: BrasilResp; fc?: PrevisaoResp; audit?: AuditoriaResp; alerts?: AlertasResp; now: number }) {
+export function DaySummary({ br, fc, audit, alerts, now: nowTs }: { br?: BrasilResp; fc?: PrevisaoResp; audit?: AuditoriaLite; alerts?: AlertasResp; now: number }) {
   const items = useMemo(() => {
     const out: { Icon: typeof Zap; tone: string; text: React.ReactNode }[] = [];
     if (!br?.kpis || !br.pld || !nowTs) return out;
@@ -508,8 +508,8 @@ export function DaySummary({ br, fc, audit, alerts, now: nowTs }: { br?: BrasilR
     }
     const run = audit?.latest;
     if (run) {
-      const bad = run.sources.filter((s) => s.status === "down" || s.status === "degraded");
-      out.push({ Icon: ShieldCheck, tone: run.overallScore >= 70 ? "text-good" : "text-warning", text: <>APIs: score <b className="text-ink">{run.overallScore}/100</b>{bad.length ? ` · atenção: ${bad.map((s) => s.name).slice(0, 3).join(", ")}` : " · todas as fontes OK"}.</> });
+      const bad = run.attention;
+      out.push({ Icon: ShieldCheck, tone: run.overallScore >= 70 ? "text-good" : "text-warning", text: <>APIs: score <b className="text-ink">{run.overallScore}/100</b>{bad.length ? ` · atenção: ${bad.slice(0, 3).join(", ")}` : " · todas as fontes OK"}.</> });
     }
     return out;
   }, [br, fc, audit, alerts, nowTs]);

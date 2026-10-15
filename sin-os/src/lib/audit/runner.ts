@@ -11,7 +11,7 @@ import { SOURCES } from "../sources/registry";
 import { SUBS, type SourceId, type SourceResult, type SubPanel } from "../sources/types";
 import { fetchUkCarbon, fetchUkMid, fetchUkSystemPrices } from "../sources/uk";
 import { fetchBasinEnsemble, fetchWeather } from "../sources/weather";
-import { getPld, PLD_FROM_CMO, panelToDays } from "../data";
+import { getPld, PLD_FROM_CMO, panelToDays, recentDays } from "../data";
 import { brtDate, brtHour } from "../sources/time";
 import { curtailmentDailyPanel } from "../market/renewables";
 import { pickDay } from "../market/opportunities";
@@ -124,9 +124,9 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
   await notifyHealthChange(run, previous).catch(() => false);
   // cada auditoria também alimenta o histórico próprio de PLD (Firestore) — base do fallback "last known good"
   if (results.ccee_pld.ok && results.ccee_pld.data) {
-    await savePldDays(panelToDays(results.ccee_pld.data as SubPanel, "ccee")).catch(() => 0);
+    await savePldDays(recentDays(panelToDays(results.ccee_pld.data as SubPanel, "ccee"), 30)).catch(() => 0);
   } else if (results.ons_cmo.ok && results.ons_cmo.data) {
-    await savePldDays(panelToDays(pldFromCmo(results.ons_cmo.data as SubPanel), PLD_FROM_CMO)).catch(() => 0);
+    await savePldDays(recentDays(panelToDays(pldFromCmo(results.ons_cmo.data as SubPanel), PLD_FROM_CMO), 30)).catch(() => 0);
   }
   await notifyPldPublished().catch(() => 0);
   await notifyMarketAlerts().catch(() => 0);

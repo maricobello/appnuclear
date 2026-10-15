@@ -33,7 +33,8 @@ export default function RenovaveisPage() {
   const [area, setArea] = useState<Area>("NE");
   const [tech, setTech] = useState<TechSel>("total");
   const { data, error, isValidating, mutate } = useApi<RenovaveisResp>(`/api/renovaveis?dias=${days}`, 15 * 60_000);
-  const hist = useApi<RenovaveisHistoricoResp>("/api/renovaveis/historico?meses=12", 60 * 60_000);
+  // incompleta (prazo da função), a resposta volta em 2 min com os meses que faltavam
+  const hist = useApi<RenovaveisHistoricoResp>("/api/renovaveis/historico?meses=12", (d) => (d?.missing ? 2 * 60_000 : 60 * 60_000));
   const histMonths = hist.data?.months ?? null;
   const c = data?.curtailment ?? null;
   const n = data?.netLoad ?? null;
@@ -144,6 +145,11 @@ export default function RenovaveisPage() {
         {monthly ? (
           <>
             <EChart option={monthly} height={260} label="Corte mensal de eólica e solar" />
+            {hist.data?.missing ? (
+              <p className="mt-2 text-[12px] text-muted">
+                Faltam {hist.data.missing} {hist.data.missing > 1 ? "meses mais antigos" : "mês mais antigo"}: os arquivos do ONS ainda estão sendo lidos e entram na próxima atualização.
+              </p>
+            ) : null}
             {histMonths?.some((m) => m.revision) ? (
               <ul className="mt-2 flex flex-col gap-1 text-[13px] text-warning">
                 {histMonths

@@ -18,7 +18,7 @@ import {
 } from "@/components/home/panels";
 import { Appear } from "@/components/motion";
 import { Kpi, PageHeader, Panel, Segmented, SimBanner } from "@/components/ui";
-import type { ArbitragemResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp, AlertasResp } from "@/lib/apiTypes";
+import type { ArbitragemResp, AuditoriaLite, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp, AlertasResp } from "@/lib/apiTypes";
 import { assetQuery, useAsset } from "@/lib/asset";
 import { buildOpportunities, pickDay } from "@/lib/market/opportunities";
 import { brtDate, brtHour } from "@/lib/sources/time";
@@ -50,7 +50,8 @@ export default function Home() {
   const now = useNow();
   const br = useApi<BrasilResp>("/api/brasil", 60_000);
   const arb = useApi<ArbitragemResp>("/api/arbitragem?sub=SE", 300_000);
-  const audit = useApi<AuditoriaResp>("/api/auditoria", 60_000);
+  // mesma chave do menu lateral: o SWR faz uma requisição só para os dois
+  const audit = useApi<AuditoriaLite>("/api/auditoria?lite=1", 300_000);
   const clima = useApi<ClimaResp>("/api/clima", 600_000);
   const bess = useApi<BessResp>(`/api/bess?${assetQuery(asset)}`, 900_000);
   const [range, setRange] = useState<Range>("7D");

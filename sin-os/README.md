@@ -381,8 +381,21 @@ radares e as exportações ficam fora do git porque o repositório é público. 
 6. Redeploy. A tela do auditor mostra "Firestore <projeto>" quando está conectado.
 
 Coleções criadas: `audit_runs`, `agent_reports`, `pld_days` (histórico próprio de PLD por dia —
-também usado como fallback se a CCEE cair) e `eu_prices` (último download de cada zona europeia). O plano gratuito (Spark) cobre com folga: 50 mil leituras e
-20 mil gravações por dia, 1 GiB de armazenamento; auditoria a cada 15 min grava ~100 documentos/dia.
+também usado como fallback se a CCEE cair) e `eu_prices` (último download de cada zona europeia). O plano gratuito (Spark) tem
+cota diária de 50 mil leituras e 20 mil gravações, que zera à meia-noite do Pacífico (4h–5h de Brasília).
+
+**Cota de leituras.** Cada aba aberta consulta as rotas a cada minuto, então nenhuma rota pode ler o
+Firestore por requisição. As regras que mantêm o app dentro da cota:
+
+- toda rota GET pública responde com `s-maxage` (a CDN da Vercel atende as abas; a função roda no
+  máximo uma vez por minuto por URL), inclusive `/api/auditoria` e `/api/health`;
+- o que se lê com frequência fica na memória da instância (`src/lib/store.ts`): execuções do auditor
+  (2–10 min), relatórios, revisões (30 min), preços europeus (relidos a cada 15 min) e dias oficiais do
+  PLD (só relidos quando a marca `meta/pld_official` muda, ou seja, quando o coletor grava);
+- a gravação do PLD confere só os últimos 14 dias (30 no auditor), não os 120;
+- se o Firestore responder **RESOURCE_EXHAUSTED** (cota esgotada), um disjuntor manda tudo para a memória
+  por 10 min, as listas devolvem a última versão conhecida e o menu lateral diz "Firebase sem cota hoje"
+  em vez de "Sem auditoria ainda". Os dados de mercado não dependem do Firestore e seguem ao vivo.
 
 ### Firebase MCP (Claude Code)
 

@@ -9,8 +9,11 @@ async function fetcher<T>(url: string): Promise<T> {
   return body as T;
 }
 
-/** SWR com polling ("tempo real") e manutenção do render anterior durante refetch. */
-export function useApi<T>(url: string | null, refreshMs = 60_000) {
+/**
+ * SWR com polling ("tempo real") e manutenção do render anterior durante refetch. O intervalo
+ * pode depender da última resposta (ex.: voltar logo quando ela veio incompleta).
+ */
+export function useApi<T>(url: string | null, refreshMs: number | ((data: T | undefined) => number) = 60_000) {
   return useSWR<T>(url, fetcher, {
     refreshInterval: refreshMs,
     revalidateOnFocus: true,

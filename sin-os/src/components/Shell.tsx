@@ -23,6 +23,7 @@ import {
   X,
   Zap,
 } from "lucide-react";
+import type { AuditoriaLite } from "@/lib/apiTypes";
 import { setAppearance, useAppearance, type Appearance } from "@/lib/theme";
 import { useApi } from "@/lib/useApi";
 import { IaraButton, IaraPanel } from "./assistant/Iara";
@@ -64,19 +65,33 @@ const NAV: { group: string; items: { href: string; label: string; Icon: typeof G
 ];
 const ALL = NAV.flatMap((g) => g.items);
 
-interface Lite {
-  latest: { overallScore: number; startedAt: number; counts: { ok: number; degraded: number; down: number } } | null;
-  dataMode: string;
-}
-
 /** Saúde das fontes em uma linha (o detalhe fica no Agente auditor). */
 function SystemStatus({ onNavigate }: { onNavigate?: () => void }) {
-  const { data } = useApi<Lite>("/api/auditoria?lite=1", 60_000);
+  // a auditoria roda 1x por dia (e quando alguém pede): consultar a cada 5 min basta
+  const { data } = useApi<AuditoriaLite>("/api/auditoria?lite=1", 300_000);
   const l = data?.latest;
-  const tone = !l ? "bg-muted" : l.overallScore >= 85 ? "bg-good" : l.overallScore >= 60 ? "bg-warning" : "bg-critical";
-  const text = !l ? "Sem auditoria ainda" : l.counts.down ? `${l.counts.down} fonte${l.counts.down > 1 ? "s" : ""} fora do ar` : l.counts.degraded ? `${l.counts.degraded} fonte${l.counts.degraded > 1 ? "s" : ""} com atenção` : "Todas as fontes OK";
+  // sem execução para mostrar porque o banco recusou a leitura: dizer isso, não "sem auditoria"
+  const dbError = !l ? (data?.storageError ?? null) : null;
+  const quota = !!dbError && /RESOURCE_EXHAUSTED|quota/i.test(dbError);
+  const tone = !l ? (dbError ? "bg-warning" : "bg-muted") : l.overallScore >= 85 ? "bg-good" : l.overallScore >= 60 ? "bg-warning" : "bg-critical";
+  const text = !l
+    ? quota
+      ? "Firebase sem cota hoje"
+      : dbError
+        ? "Firebase indisponível"
+        : "Sem auditoria ainda"
+    : l.counts.down
+      ? `${l.counts.down} fonte${l.counts.down > 1 ? "s" : ""} fora do ar`
+      : l.counts.degraded
+        ? `${l.counts.degraded} fonte${l.counts.degraded > 1 ? "s" : ""} com atenção`
+        : "Todas as fontes OK";
+  const title = quota
+    ? "O histórico do auditor fica no Firebase, que recusou a leitura: a cota diária do plano gratuito acabou. Os dados de mercado seguem ao vivo; o histórico volta quando a cota renovar (por volta das 4h–5h de Brasília)."
+    : dbError
+      ? `O histórico do auditor fica no Firebase, que não respondeu: ${dbError}`
+      : "Score do agente auditor das APIs públicas";
   return (
-    <Link href="/auditoria" onClick={onNavigate} className="flex min-h-11 sm:min-h-9 items-center gap-2 rounded-[10px] px-3 text-[13px] text-muted transition-colors hover:bg-surface-2 hover:text-ink" title="Score do agente auditor das APIs públicas">
+    <Link href="/auditoria" onClick={onNavigate} className="flex min-h-11 sm:min-h-9 items-center gap-2 rounded-[10px] px-3 text-[13px] text-muted transition-colors hover:bg-surface-2 hover:text-ink" title={title}>
       <span className={`inline-block h-2 w-2 shrink-0 rounded-full ${tone}`} aria-hidden />
       <span className="min-w-0 flex-1 truncate">{text}</span>
       {l ? <span className="tnum font-medium text-ink-2">{l.overallScore}</span> : null}

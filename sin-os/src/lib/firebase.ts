@@ -31,9 +31,9 @@ let cachedDb: Firestore | null | undefined;
 let initError: string | null = null;
 let opError: { message: string; at: number } | null = null;
 
-/** Registra falha de operação (ex.: API do Firestore desativada, banco inexistente). */
-export function reportFirestoreError(e: unknown) {
-  opError = { message: e instanceof Error ? e.message.slice(0, 300) : String(e), at: Date.now() };
+/** Registra falha de operação (ex.: API do Firestore desativada, banco inexistente, cota). */
+export function reportFirestoreError(e: unknown, now = Date.now()) {
+  opError = { message: e instanceof Error ? e.message.slice(0, 300) : String(e), at: now };
 }
 
 export function clearFirestoreError() {
@@ -41,6 +41,26 @@ export function clearFirestoreError() {
 }
 
 export const firestoreHealthy = () => !!firestore() && !opError;
+
+/** Cota diária do plano gratuito esgotada (gRPC 8 RESOURCE_EXHAUSTED). */
+export const isQuotaError = (message: string | null | undefined) => !!message && /RESOURCE_EXHAUSTED|quota exceeded/i.test(message);
+
+/**
+ * Disjuntor: depois de um erro de cota, as operações vão direto para a memória por 10 min, sem
+ * chamar o Firestore (cada tentativa só somaria latência). Passado o intervalo, uma operação testa
+ * de novo; se a cota já renovou, o sucesso limpa o erro.
+ */
+export const QUOTA_COOLDOWN_MS = 10 * 60_000;
+export function firestoreCoolingDown(now = Date.now()) {
+  return !!opError && isQuotaError(opError.message) && now - opError.at < QUOTA_COOLDOWN_MS;
+}
+
+/** Só para testes: injeta um banco falso (ou volta a ler as credenciais com `undefined`). */
+export function setFirestoreForTests(db: Firestore | null | undefined) {
+  cachedDb = db;
+  initError = null;
+  opError = null;
+}
 
 export function firestore(): Firestore | null {
   if (cachedDb !== undefined) return cachedDb;
