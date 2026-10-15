@@ -37,6 +37,8 @@ export interface DictEntry {
   version: string;
 }
 
+const br = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
+const pct = (x: number) => `${br(Math.round(x * 1000) / 10)}%`;
 const S3 = "ons-aws-prod-opendata.s3.amazonaws.com/dataset";
 const SUB_COL: DictField = { col: "id_subsistema", as: "sub", unit: "SE · S · NE · N", note: "SE inclui o Centro-Oeste" };
 const DIGEST = `impressão digital diária (seção Confiança): o dia fechado que volta diferente vira revisão registrada`;
@@ -57,7 +59,7 @@ export const DATA_DICTIONARY: Record<SourceId, DictEntry> = {
     steps: [
       "nomes de coluna resolvidos por padrão (aceita DATA no lugar de MES_REFERENCIA + DIA); campo ausente reprova o schema",
       "registro sem submercado, data ou valor numérico conta como inválido; o mesmo submercado e hora repetido conta como duplicado",
-      `se a CCEE não responde: Plataforma de Integração (se configurada) → dias oficiais já gravados pelo coletor → CMO do DESSEM limitado ao piso de R$ ${PLD_LIMITS.min} e ao teto horário de R$ ${PLD_LIMITS.maxHourly} → último dado bom persistido`,
+      `se a CCEE não responde: Plataforma de Integração (se configurada) → dias oficiais já gravados pelo coletor → CMO do DESSEM limitado ao piso de R$ ${br(PLD_LIMITS.min)} e ao teto horário de R$ ${br(PLD_LIMITS.maxHourly)} → último dado bom persistido`,
       "a resposta sempre diz de onde veio cada trecho (campos note e fallback); estimativa nunca aparece como oficial",
     ],
     version: `${DIGEST}; dias gravados no Firestore com a origem (ccee ou ons-cmo)`,
@@ -224,8 +226,6 @@ export const DATA_DICTIONARY: Record<SourceId, DictEntry> = {
   },
 };
 
-const br = (x: number) => x.toLocaleString("pt-BR", { maximumFractionDigits: 3 });
-const pct = (x: number) => `${br(Math.round(x * 1000) / 10)}%`;
 const T = AUDIT_THRESHOLDS;
 
 export interface CheckRule {
