@@ -3,7 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { Bell, Bot, Database, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { Badge, ErrorBox, Loading, PageHeader, Panel, statusLabel, statusLevel, Table } from "@/components/ui";
+import { Badge, Disclosure, ErrorBox, Loading, PageHeader, Panel, ScrollX, statusLabel, statusLevel, Table } from "@/components/ui";
 import type { AuditoriaResp, ConfiancaResp } from "@/lib/apiTypes";
 import { baseOption, C, line, timeAxis, valueAxis } from "@/lib/chart";
 import { ago, dateTime, num } from "@/lib/fmt";
@@ -83,10 +83,10 @@ export default function AuditoriaPage() {
   const report = data?.reports[0];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <PageHeader
-        title="Agente auditor de APIs"
-        subtitle="Camada 1 (determinística): disponibilidade, latência, frescor vs SLA, schema, completude, validade (faixas regulatórias), outliers de Hampel e integridade cruzada PLD×CMO. Camada 2 (IA): Claude investiga degradações com ferramentas e registra causa provável e ação."
+        title="Agente auditor"
+        subtitle="Verifica as fontes públicas a cada 15 minutos; quando algo degrada, o agente de IA investiga e diz a causa provável."
         right={
           <div className="flex flex-wrap items-center gap-2">
             {data?.auth.required ? (
@@ -96,13 +96,13 @@ export default function AuditoriaPage() {
                 onChange={(e) => setKey(e.target.value)}
                 placeholder="ADMIN_KEY (fica na sessão)"
                 aria-label="Chave de administrador"
-                className="w-48 rounded border border-line bg-surface px-2 py-1 text-xs text-ink focus:border-accent focus:outline-none"
+                className="h-11 w-52 rounded-[10px] bg-surface-2 sm:h-9 px-3 text-[14px] text-ink outline-none focus:ring-2 focus:ring-accent/50"
               />
             ) : null}
             <button
               onClick={run}
               disabled={running}
-              className="inline-flex items-center gap-1.5 rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-50"
+              className="inline-flex min-h-11 sm:min-h-9 items-center gap-1.5 rounded-full bg-accent-fill px-4 text-[13px] font-semibold text-on-accent hover:brightness-110 disabled:opacity-50"
             >
               {running ? <RefreshCw size={14} className="animate-spin" aria-hidden /> : <Play size={14} aria-hidden />}
               {running ? "Auditando…" : "Rodar auditoria"}
@@ -110,16 +110,16 @@ export default function AuditoriaPage() {
           </div>
         }
       />
-      {runMsg ? <div className="rounded-md border border-line bg-surface-2 px-3 py-2 text-xs text-ink-2">{runMsg}</div> : null}
+      {runMsg ? <div className="rounded-2xl bg-surface-2 px-4 py-3 text-[13px] text-ink-2">{runMsg}</div> : null}
       {error && !data ? <ErrorBox error={error} /> : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel title="Saúde geral" subtitle={l ? `${dateTime(l.startedAt)} (${ago(l.startedAt)}) · gatilho: ${l.trigger} · ${num(l.durationMs / 1000, 1)} s` : "nenhuma execução"}>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Panel title="Saúde geral" subtitle={l ? `Última verificação ${ago(l.startedAt)} · ${num(l.durationMs / 1000, 1)} s` : "Nenhuma execução"}>
           {l ? (
             <div className="flex flex-col gap-3">
               <div className="flex items-baseline gap-2">
-                <span className="text-5xl font-semibold text-ink">{l.overallScore}</span>
-                <span className="text-sm text-muted">/100</span>
+                <span className="tnum text-[56px] font-semibold leading-none tracking-[-0.03em] text-ink">{l.overallScore}</span>
+                <span className="text-[15px] text-muted">de 100</span>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Badge level="good">{l.counts.ok} OK</Badge>
@@ -129,9 +129,9 @@ export default function AuditoriaPage() {
               </div>
             </div>
           ) : (
-            <p className="text-xs text-muted">Clique em “Rodar auditoria”. Em produção, o Vercel Cron (diário) e o workflow do GitHub Actions (a cada 15 min) executam automaticamente.</p>
+            <p className="text-[13px] text-muted">Clique em “Rodar auditoria”. Em produção, o agendamento roda sozinho a cada 15 minutos.</p>
           )}
-          <div className="mt-4 flex flex-col gap-1.5 text-xs text-muted">
+          <div className="mt-5 flex flex-col gap-2 text-[13px] text-muted">
             <span className="flex items-center gap-1.5">
               <Database size={13} aria-hidden /> Persistência:{" "}
               {data ? (data.storage === "firestore" ? <Badge level="good">Firestore {data.firebase.projectId}</Badge> : <Badge level="warning">memória (configure Firebase)</Badge>) : "—"}
@@ -156,97 +156,43 @@ export default function AuditoriaPage() {
             {data?.firebase.error ? <span className="text-critical">Firebase: {data.firebase.error}</span> : null}
           </div>
         </Panel>
-        <Panel className="xl:col-span-2" title="Histórico do score" subtitle="Execuções persistidas">
-          {hist ? <EChart option={hist} height={210} label="Histórico do score de auditoria" dim={isValidating} /> : <p className="text-xs text-muted">Sem histórico ainda.</p>}
+        <Panel className="xl:col-span-2" title="Histórico do score" subtitle="Execuções guardadas">
+          {hist ? <EChart option={hist} height={220} label="Histórico do score de auditoria" dim={isValidating} /> : <p className="text-[13px] text-muted">Sem histórico ainda.</p>}
         </Panel>
       </div>
 
-      {data?.slo?.samples ? (
-        <Panel
-          title="SLO das fontes"
-          subtitle={`Amostra das últimas ${data.slo.samples} execuções (${data.slo.fromTs ? dateTime(data.slo.fromTs) : "—"} → ${data.slo.toTs ? dateTime(data.slo.toTs) : "—"}). Disponibilidade = fora de “fora do ar”; conformidade = “OK” em todas as checagens.`}
-        >
-          <div className="mb-3 flex flex-wrap gap-2 text-xs">
-            <Badge level={data.slo.healthyPct >= 95 ? "good" : data.slo.healthyPct >= 80 ? "warning" : "critical"}>saudável em {num(data.slo.healthyPct, 1)}% dos runs</Badge>
-            {data.slo.meanScore !== null ? <Badge level="neutral">score médio {num(data.slo.meanScore, 1)}</Badge> : null}
-          </div>
-          <Table
-            head={["Fonte", "Amostras", "Disponibilidade", "Conformidade", "Latência p50", "Latência p95"]}
-            align={["left", "right", "right", "right", "right", "right"]}
-            rows={data.slo.sources.map((s) => [
-              s.expectedDown ? `${s.name} (bloqueio esperado; coberto pelo CMO)` : s.name,
-              s.samples,
-              <Badge key="a" level={s.expectedDown ? "neutral" : s.availabilityPct >= 99 ? "good" : s.availabilityPct >= 95 ? "warning" : "critical"}>{num(s.availabilityPct, 1)}%</Badge>,
-              `${num(s.okPct, 1)}%`,
-              s.latencyP50 !== null ? `${num(s.latencyP50)} ms` : "—",
-              s.latencyP95 !== null ? `${num(s.latencyP95)} ms` : "—",
-            ])}
-          />
-        </Panel>
-      ) : null}
-
-      {trust ? (
-        <Panel
-          title="Confiança nos dados abertos"
-          subtitle={`Guardamos uma impressão digital de cada dia fechado (últimos ${trust.windowDays} dias) e avisamos quando a fonte republica o passado com valores diferentes, ou entrega dias incompletos. Não diz qual versão está certa: mostra que o dado mudou.`}
-        >
-          <div className="mb-3 flex flex-wrap gap-2 text-xs">
-            <Badge level={trust.totalRevisions30d === 0 ? "good" : "warning"}>{trust.totalRevisions30d} revisão(ões) retroativa(s) em 30 dias</Badge>
-          </div>
-          <Table
-            head={["Fonte", "Selo", "Completude (10 dias)", "Revisões (30 d)", "Observações"]}
-            align={["left", "left", "right", "right", "left"]}
-            rows={trust.seals.map((s) => [
-              s.name,
-              s.monitored ? <Badge key="l" level={s.level === "alta" ? "good" : s.level === "média" ? "warning" : "critical"}>{s.level}</Badge> : <Badge key="l" level="neutral">sem dado real</Badge>,
-              s.completeness ? `${s.completeness.completeDays}/${s.completeness.days}` : "—",
-              s.revisions30d,
-              s.reasons.length ? s.reasons.join(" · ") : s.monitored ? "nenhuma revisão nem lacuna detectada" : "fonte indisponível ou estimada nesta leitura",
-            ])}
-          />
-          {trust.recentRevisions.length ? (
-            <div className="mt-3">
-              <p className="mb-1 text-[11px] font-semibold text-ink-2">Últimas revisões detectadas</p>
-              <Table
-                head={["Detectada", "Fonte", "Dia revisado", "Pontos alterados", "Maior mudança", "Δ da média"]}
-                align={["left", "left", "left", "right", "right", "right"]}
-                rows={trust.recentRevisions.slice(0, 8).map((r) => [dateTime(r.detectedAt), r.source, r.date, r.changedPoints, `${num(r.maxAbsDiff, 2)} (${num(100 * r.maxRelDiff, 0)}%)`, num(r.meanShift, 2)])}
-              />
-            </div>
-          ) : null}
-        </Panel>
-      ) : null}
-
-      <Panel title="Fontes auditadas" subtitle="Clique numa linha para ver as checagens">
+      <Panel title="Fontes" subtitle="Toque numa linha para ver as checagens" bodyClassName="px-2 pb-3 pt-1">
         {l ? (
-          <div className="scrollbar-thin overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
+          <ScrollX label="Fontes auditadas">
+            <table className="w-full border-collapse text-[13px]">
               <thead>
-                <tr className="border-b border-line text-left text-muted">
-                  {["Fonte", "Provedor", "Status", "Score", "HTTP", "Latência", "Tentativas", "Último dado", "Pontos", "Erro"].map((h) => (
-                    <th key={h} className="whitespace-nowrap px-2 py-2 font-medium">{h}</th>
+                <tr className="border-b border-line text-left">
+                  {["Fonte", "Status", "Score", "Latência", "Último dado"].map((h, i) => (
+                    <th key={h} className={`whitespace-nowrap px-3 py-2 text-[12px] font-medium text-muted ${i >= 2 && i <= 3 ? "text-right" : ""}`}>{h}</th>
                   ))}
                 </tr>
               </thead>
               <tbody className="tnum">
                 {l.sources.map((s) => (
                   <Fragment key={s.id}>
-                    <tr className="cursor-pointer border-b border-line/60 hover:bg-surface-2" onClick={() => setOpen(open === s.id ? null : s.id)} aria-expanded={open === s.id}>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-ink">{s.name}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-muted">{s.provider}</td>
-                      <td className="px-2 py-1.5"><Badge level={statusLevel(s.status)}>{statusLabel[s.status]}</Badge></td>
-                      <td className="px-2 py-1.5 text-right text-ink-2">{s.status === "disabled" ? "—" : s.score}</td>
-                      <td className="px-2 py-1.5 text-right text-ink-2">{s.httpStatus ?? "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-ink-2">{s.latencyMs !== null ? `${s.latencyMs} ms` : "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-ink-2">{s.attempts}</td>
-                      <td className="whitespace-nowrap px-2 py-1.5 text-ink-2">{s.latestTs ? ago(s.latestTs) : "—"}</td>
-                      <td className="px-2 py-1.5 text-right text-ink-2">{num(s.points)}</td>
-                      <td className="max-w-[320px] truncate px-2 py-1.5 text-critical" title={s.error}>{s.error ?? ""}</td>
+                    <tr className="cursor-pointer border-b border-line hover:bg-surface-2/60" onClick={() => setOpen(open === s.id ? null : s.id)} aria-expanded={open === s.id}>
+                      <td className="px-3 py-2.5">
+                        <span className="block text-ink">{s.name}</span>
+                        <span className="block text-[12px] text-muted">{s.provider}</span>
+                      </td>
+                      <td className="px-3 py-2.5"><Badge level={statusLevel(s.status)}>{statusLabel[s.status]}</Badge></td>
+                      <td className="px-3 py-2.5 text-right text-ink-2">{s.status === "disabled" ? "—" : s.score}</td>
+                      <td className="px-3 py-2.5 text-right text-ink-2">{s.latencyMs !== null ? `${s.latencyMs} ms` : "—"}</td>
+                      <td className="whitespace-nowrap px-3 py-2.5 text-ink-2">{s.latestTs ? ago(s.latestTs) : "—"}</td>
                     </tr>
                     {open === s.id ? (
-                      <tr className="border-b border-line/60 bg-surface-2">
-                        <td colSpan={10} className="px-3 py-2">
-                          <ul className="grid grid-cols-1 gap-1 md:grid-cols-2">
+                      <tr className="border-b border-line bg-surface-2/60">
+                        <td colSpan={5} className="px-4 py-3">
+                          <p className="mb-2 text-[12px] text-muted">
+                            HTTP {s.httpStatus ?? "—"} · {s.attempts} tentativa(s) · {num(s.points)} pontos
+                          </p>
+                          {s.error ? <p className="mb-2 break-words text-[13px] text-critical">{s.error}</p> : null}
+                          <ul className="grid grid-cols-1 gap-1.5 md:grid-cols-2">
                             {s.checks.map((c) => (
                               <li key={c.id} className="flex items-start gap-2">
                                 <Badge level={statusLevel(c.status)}>{c.label}</Badge>
@@ -261,16 +207,16 @@ export default function AuditoriaPage() {
                 ))}
               </tbody>
             </table>
-          </div>
+          </ScrollX>
         ) : data ? (
-          <p className="text-xs text-muted">Sem execuções registradas.</p>
+          <p className="px-3 text-[13px] text-muted">Sem execuções registradas.</p>
         ) : (
           <Loading height={200} />
         )}
         {l?.cross.length ? (
-          <div className="mt-4 border-t border-line pt-3">
-            <h3 className="mb-2 text-xs font-medium text-ink-2">Integridade cruzada</h3>
-            <ul className="flex flex-col gap-1.5 text-xs">
+          <div className="mt-4 px-3">
+            <h3 className="mb-2 text-[13px] font-semibold text-ink">Checagens cruzadas</h3>
+            <ul className="flex flex-col gap-2 text-[13px]">
               {l.cross.map((c) => (
                 <li key={c.id} className="flex items-start gap-2">
                   <Badge level={statusLevel(c.status)}>{statusLabel[c.status]}</Badge>
@@ -283,73 +229,130 @@ export default function AuditoriaPage() {
         ) : null}
       </Panel>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Relatório do agente IA" subtitle={report ? `${report.model} · ${dateTime(report.createdAt)} · ${report.toolCalls.length} chamadas de ferramenta · ${num(report.usage.inputTokens + report.usage.outputTokens)} tokens (${num(report.usage.cacheReadTokens)} em cache)` : "acionado quando a auditoria detecta degradação, na execução diária agendada ou manualmente com credencial"}>
-          {report ? (
-            <div className="flex flex-col gap-3 text-xs">
-              <div className="flex items-center gap-2">
-                <Badge level={report.severity === "critical" ? "critical" : report.severity === "warning" ? "warning" : "good"}>{report.severity}</Badge>
-                <span className="text-ink-2">{report.summary}</span>
-              </div>
-              <ul className="flex flex-col gap-2">
-                {report.findings.map((f, i) => (
-                  <li key={i} className="rounded-md border border-line bg-surface-2 p-2.5">
-                    <div className="flex items-center gap-2">
-                      <Badge level={f.severity === "critical" ? "critical" : f.severity === "warning" ? "warning" : "neutral"}>{f.severity}</Badge>
-                      <span className="font-medium text-ink">{f.sourceId} — {f.title}</span>
-                    </div>
-                    <dl className="mt-1.5 grid grid-cols-[88px_1fr] gap-x-2 gap-y-0.5 text-muted">
-                      <dt>Evidência</dt><dd className="text-ink-2">{f.evidence}</dd>
-                      <dt>Hipótese</dt><dd className="text-ink-2">{f.hypothesis}</dd>
-                      <dt>Ação</dt><dd className="text-ink-2">{f.action}</dd>
-                    </dl>
-                  </li>
-                ))}
-              </ul>
-              {report.toolCalls.length ? (
-                <p className="text-[11px] text-muted">Ferramentas: {report.toolCalls.map((t) => `${t.name}(${t.ms} ms)`).join(" · ")}</p>
-              ) : null}
+      <Panel title="Relatório do agente de IA" subtitle={report ? `${report.model} · ${dateTime(report.createdAt)} · ${report.toolCalls.length} chamadas de ferramenta` : "Roda quando a auditoria detecta degradação, uma vez por dia ou manualmente com credencial"}>
+        {report ? (
+          <div className="flex flex-col gap-3 text-[13px]">
+            <div className="flex items-center gap-2">
+              <Badge level={report.severity === "critical" ? "critical" : report.severity === "warning" ? "warning" : "good"}>{report.severity}</Badge>
+              <span className="text-ink-2">{report.summary}</span>
             </div>
-          ) : (
-            <p className="text-xs leading-relaxed text-muted">
-              Nenhum relatório ainda. Configure <code className="text-ink-2">ADMIN_KEY</code> na Vercel (a <code className="text-ink-2">GROQ_API_KEY</code> da Iara já serve ao agente) e rode a auditoria com a chave. O agente re-sonda as fontes com problema, consulta o histórico no Firestore, inspeciona amostras e checa PLD×CMO antes de concluir.
-            </p>
-          )}
-        </Panel>
-        <Panel title="Telemetria observada" subtitle="Chamadas reais desta instância (tráfego + auditorias)">
-          {data?.telemetry.length ? (
-            <Table
-              head={["Host", "n", "p50", "p95", "Erros"]}
-              align={["left", "right", "right", "right", "right"]}
-              rows={data.telemetry.map((t) => [t.host, t.count, `${num(t.p50)} ms`, `${num(t.p95)} ms`, t.errors])}
-            />
-          ) : (
-            <p className="text-xs text-muted">Sem chamadas registradas nesta instância.</p>
-          )}
-        </Panel>
-      </div>
-
-      <Panel title="Catálogo de APIs e SLAs" subtitle="O que o auditor verifica">
-        {data ? (
-          <Table
-            head={["Fonte", "Provedor", "Região", "Categoria", "Cadência", "SLA frescor", "Licença", "Docs"]}
-            rows={data.registry.map((s) => [
-              s.name,
-              s.provider,
-              s.region,
-              s.category,
-              s.cadence,
-              `${s.freshnessSlaHours} h`,
-              s.license,
-              <a key="d" href={s.docs} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
-                docs <ExternalLink size={11} aria-hidden />
-              </a>,
-            ])}
-          />
+            <ul className="flex flex-col gap-2">
+              {report.findings.map((f, i) => (
+                <li key={i} className="rounded-xl bg-surface-2 p-2.5">
+                  <div className="flex items-center gap-2">
+                    <Badge level={f.severity === "critical" ? "critical" : f.severity === "warning" ? "warning" : "neutral"}>{f.severity}</Badge>
+                    <span className="font-medium text-ink">{f.sourceId} — {f.title}</span>
+                  </div>
+                  <dl className="mt-1.5 grid grid-cols-[88px_1fr] gap-x-2 gap-y-0.5 text-muted">
+                    <dt>Evidência</dt><dd className="text-ink-2">{f.evidence}</dd>
+                    <dt>Hipótese</dt><dd className="text-ink-2">{f.hypothesis}</dd>
+                    <dt>Ação</dt><dd className="text-ink-2">{f.action}</dd>
+                  </dl>
+                </li>
+              ))}
+            </ul>
+            {report.toolCalls.length ? (
+              <p className="text-[12px] text-muted">Ferramentas: {report.toolCalls.map((t) => `${t.name}(${t.ms} ms)`).join(" · ")}</p>
+            ) : null}
+          </div>
         ) : (
-          <Loading height={200} />
+          <p className="text-[13px] leading-relaxed text-muted">
+            Nenhum relatório ainda. Configure <code className="text-ink-2">ADMIN_KEY</code> na Vercel (a <code className="text-ink-2">GROQ_API_KEY</code> da Iara já serve ao agente) e rode a auditoria com a chave. O agente re-sonda as fontes com problema, consulta o histórico no Firestore, inspeciona amostras e checa PLD×CMO antes de concluir.
+          </p>
         )}
       </Panel>
+
+      <Disclosure title="Detalhes" hint="SLO, confiança nos dados, telemetria e catálogo">
+        {data?.slo?.samples ? (
+          <Panel
+            title="SLO das fontes"
+            subtitle={`Últimas ${data.slo.samples} execuções · disponibilidade = não estar fora do ar; conformidade = OK em todas as checagens`}
+          >
+            <div className="mb-3 flex flex-wrap gap-2 text-[13px]">
+              <Badge level={data.slo.healthyPct >= 95 ? "good" : data.slo.healthyPct >= 80 ? "warning" : "critical"}>saudável em {num(data.slo.healthyPct, 1)}% dos runs</Badge>
+              {data.slo.meanScore !== null ? <Badge level="neutral">score médio {num(data.slo.meanScore, 1)}</Badge> : null}
+            </div>
+            <Table
+              head={["Fonte", "Amostras", "Disponibilidade", "Conformidade", "Latência p50", "Latência p95"]}
+              align={["left", "right", "right", "right", "right", "right"]}
+              rows={data.slo.sources.map((s) => [
+                s.expectedDown ? `${s.name} (bloqueio esperado; coberto pelo CMO)` : s.name,
+                s.samples,
+                <Badge key="a" level={s.expectedDown ? "neutral" : s.availabilityPct >= 99 ? "good" : s.availabilityPct >= 95 ? "warning" : "critical"}>{num(s.availabilityPct, 1)}%</Badge>,
+                `${num(s.okPct, 1)}%`,
+                s.latencyP50 !== null ? `${num(s.latencyP50)} ms` : "—",
+                s.latencyP95 !== null ? `${num(s.latencyP95)} ms` : "—",
+              ])}
+            />
+          </Panel>
+        ) : null}
+
+        {trust ? (
+          <Panel
+            title="Confiança nos dados abertos"
+            subtitle={`Impressão digital de cada dia fechado (últimos ${trust.windowDays} dias): avisa quando a fonte republica o passado ou entrega dias incompletos`}
+          >
+            <div className="mb-3 flex flex-wrap gap-2 text-[13px]">
+              <Badge level={trust.totalRevisions30d === 0 ? "good" : "warning"}>{trust.totalRevisions30d} revisão(ões) retroativa(s) em 30 dias</Badge>
+            </div>
+            <Table
+              head={["Fonte", "Selo", "Completude (10 dias)", "Revisões (30 d)", "Observações"]}
+              align={["left", "left", "right", "right", "left"]}
+              rows={trust.seals.map((s) => [
+                s.name,
+                s.monitored ? <Badge key="l" level={s.level === "alta" ? "good" : s.level === "média" ? "warning" : "critical"}>{s.level}</Badge> : <Badge key="l" level="neutral">sem dado real</Badge>,
+                s.completeness ? `${s.completeness.completeDays}/${s.completeness.days}` : "—",
+                s.revisions30d,
+                s.reasons.length ? s.reasons.join(" · ") : s.monitored ? "nenhuma revisão nem lacuna detectada" : "fonte indisponível ou estimada nesta leitura",
+              ])}
+            />
+            {trust.recentRevisions.length ? (
+              <div className="mt-3">
+                <p className="mb-1 text-[12px] font-semibold text-ink-2">Últimas revisões detectadas</p>
+                <Table
+                  head={["Detectada", "Fonte", "Dia revisado", "Pontos alterados", "Maior mudança", "Δ da média"]}
+                  align={["left", "left", "left", "right", "right", "right"]}
+                  rows={trust.recentRevisions.slice(0, 8).map((r) => [dateTime(r.detectedAt), r.source, r.date, r.changedPoints, `${num(r.maxAbsDiff, 2)} (${num(100 * r.maxRelDiff, 0)}%)`, num(r.meanShift, 2)])}
+                />
+              </div>
+            ) : null}
+          </Panel>
+        ) : null}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+          <Panel title="Telemetria observada" subtitle="Chamadas reais desta instância">
+            {data?.telemetry.length ? (
+              <Table
+                head={["Host", "n", "p50", "p95", "Erros"]}
+                align={["left", "right", "right", "right", "right"]}
+                rows={data.telemetry.map((t) => [t.host, t.count, `${num(t.p50)} ms`, `${num(t.p95)} ms`, t.errors])}
+              />
+            ) : (
+              <p className="text-[13px] text-muted">Sem chamadas registradas nesta instância.</p>
+            )}
+          </Panel>
+          <Panel className="xl:col-span-2" title="Catálogo de APIs e SLAs" subtitle="O que o auditor verifica">
+            {data ? (
+              <Table
+                head={["Fonte", "Provedor", "Região", "Categoria", "Cadência", "SLA frescor", "Licença", "Docs"]}
+                rows={data.registry.map((s) => [
+                  s.name,
+                  s.provider,
+                  s.region,
+                  s.category,
+                  s.cadence,
+                  `${s.freshnessSlaHours} h`,
+                  s.license,
+                  <a key="d" href={s.docs} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
+                    docs <ExternalLink size={11} aria-hidden />
+                  </a>,
+                ])}
+              />
+            ) : (
+              <Loading height={200} />
+            )}
+          </Panel>
+        </div>
+      </Disclosure>
     </div>
   );
 }

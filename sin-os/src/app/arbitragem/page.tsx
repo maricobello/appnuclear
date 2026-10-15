@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { Badge, ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, SourceTag, Stat, Table } from "@/components/ui";
+import { Badge, Button, Disclosure, ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, SourceTag, Stat, Table } from "@/components/ui";
 import type { ArbitragemResp } from "@/lib/apiTypes";
 import { baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, valueAxis } from "@/lib/chart";
 import { brl, compact, num, pct, signed } from "@/lib/fmt";
@@ -13,18 +13,20 @@ const SUB_OPTS = SUBS.map((s) => ({ value: s, label: s }));
 
 function NumberField({ label, value, onChange, step, min, max, suffix }: { label: string; value: number; onChange: (v: number) => void; step: number; min: number; max: number; suffix: string }) {
   return (
-    <label className="flex items-center gap-1.5 text-xs text-muted">
+    <label className="flex flex-col gap-1 text-[12px] text-muted">
       {label}
-      <input
-        type="number"
-        value={value}
-        step={step}
-        min={min}
-        max={max}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="tnum w-20 rounded border border-line bg-surface px-2 py-1 text-ink focus:border-accent focus:outline-none"
-      />
-      <span>{suffix}</span>
+      <span className="flex items-center gap-1.5">
+        <input
+          type="number"
+          value={value}
+          step={step}
+          min={min}
+          max={max}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="tnum h-11 w-24 rounded-[10px] bg-surface-2 sm:h-9 px-3 text-[14px] text-ink outline-none focus:ring-2 focus:ring-accent/50"
+        />
+        <span className="text-[13px]">{suffix}</span>
+      </span>
     </label>
   );
 }
@@ -143,88 +145,58 @@ export default function ArbitragemPage() {
   const b = a?.bess;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <PageHeader
         title="Arbitragem"
-        subtitle="Temporal (armazenamento: LP exato + Least-Squares Monte Carlo), espacial (spreads entre submercados) e europeia. Métricas de decisão/risco, não P&L transacionável."
+        subtitle="Quanto uma bateria capturaria com a diferença de preço ao longo do dia, e o risco de descolamento entre submercados."
         right={
-          <div className="flex items-center gap-3">
-            <a
-              href={`${url}&format=csv`}
-              className="rounded-md border border-line px-2.5 py-1 text-xs text-ink-2 hover:bg-surface-2"
-              title="Baixar o despacho ótimo das próximas 72 h (preço esperado, potência e SoC) em CSV"
-            >
-              ↓ CSV
+          <div className="flex items-center gap-2">
+            <a href={`${url}&format=csv`} className="inline-flex min-h-11 sm:min-h-9 items-center rounded-full bg-surface-2 px-4 text-[13px] font-semibold text-ink hover:bg-surface-3" title="Baixar o despacho ótimo das próximas 72 h (preço esperado, potência e SoC) em CSV">
+              Baixar CSV
             </a>
             <Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />
           </div>
         }
       />
-      <SimBanner metas={[a?.meta.pld, a?.meta.eu, a?.meta.fx]} />
-      <div role="note" className="flex items-start gap-2 rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
-        <span aria-hidden>ℹ️</span>
-        <span>
-          <strong className="text-ink-2">Como ler estes números.</strong> No SIN não existe mercado spot contínuo onde se compre/venda no PLD à vontade
-          (a liquidação é ex-post, mensal, sobre a exposição líquida). O valor de bateria em R$/MW·dia é um <strong>teto prospectivo</strong> do
-          potencial de arbitragem — não P&L realizável hoje — e não inclui encargos, TUST/TUSD nem tributos. Receita real de BESS vem de leilão de
-          reserva de capacidade, serviços ancilares ou behind-the-meter. O spread entre submercados é <strong>indicador de risco</strong> (não há FTR no SIN);
-          “reversão esperada” é leitura estatística, não uma operação executável.
-        </span>
-      </div>
+      <SimBanner metas={[a?.meta.pld, a?.meta.eu, a?.meta.fx]} label="PLD" />
       {error && !a ? <ErrorBox error={error} /> : null}
 
-      <div className="flex flex-wrap items-center gap-3 rounded-md border border-line bg-surface px-4 py-3">
-        <span className="text-xs font-medium text-ink-2">Ativo de armazenamento</span>
+      <section className="card flex flex-wrap items-end gap-x-5 gap-y-3 px-5 py-4" aria-label="Ativo de armazenamento">
         <NumberField label="Potência" value={pow} onChange={setPow} step={5} min={1} max={2000} suffix="MW" />
         <NumberField label="Energia" value={cap} onChange={setCap} step={10} min={1} max={5000} suffix="MWh" />
-        <NumberField label="Eficiência ida-volta" value={rte} onChange={setRte} step={1} min={50} max={99} suffix="%" />
+        <NumberField label="Eficiência ida e volta" value={rte} onChange={setRte} step={1} min={50} max={99} suffix="%" />
         <NumberField label="Degradação" value={deg} onChange={setDeg} step={5} min={0} max={500} suffix="R$/MWh" />
-        <button
-          onClick={() => setApplied({ pow, cap, rte, deg })}
-          className="rounded-md border border-accent/50 bg-accent/10 px-3 py-1 text-xs font-medium text-accent hover:bg-accent/20"
-        >
+        <Button variant="primary" onClick={() => setApplied({ pow, cap, rte, deg })}>
           Recalcular
-        </button>
-        <span className="text-[11px] text-muted">duração {num(cap / Math.max(pow, 1), 1)} h</span>
-      </div>
+        </Button>
+        <span className="pb-2 text-[13px] text-muted">duração {num(cap / Math.max(pow, 1), 1)} h</span>
+      </section>
 
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-        <Stat label="Valor com opcionalidade (7 dias)" value={brl(b?.lsmcRS, 0)} hint={b ? `intrínseco + LSMC · ± ${brl(1.96 * b.lsmcStdErr, 0)} (IC 95%)` : undefined} />
-        <Stat label="Intrínseco (LP exato, curva média)" value={brl(b?.intrinsicRS, 0)} hint={b?.solver} />
-        <Stat label="Opcionalidade (extrínseco)" value={brl(b?.extrinsicRS, 0)} delta={b && b.intrinsicRS ? `${signed((100 * b.extrinsicRS) / Math.abs(b.intrinsicRS), 0)}% sobre o intrínseco` : null} />
-        <Stat label="Informação perfeita (teto)" value={brl(b?.perfectForesightRS, 0)} hint="LP exato por trajetória · limite superior" />
-        <Stat label="Receita por MW·dia" value={brl(b?.perMWDayRS, 0)} />
+      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+        <Stat label="Valor em 7 dias" value={brl(b?.lsmcRS, 0)} hint={b ? `com opcionalidade · ± ${brl(1.96 * b.lsmcStdErr, 0)}` : undefined} />
+        <Stat label="Por MW·dia" value={brl(b?.perMWDayRS, 0)} hint="teto prospectivo, sem encargos" />
+        <Stat label="Teto (informação perfeita)" value={brl(b?.perfectForesightRS, 0)} hint="limite superior" />
         <Stat
-          label="P&L médio no pior 5% (CVaR 95%)"
+          label="Pior 5% (CVaR 95%)"
           value={brl(b ? -b.risk.cvar95 : null, 0)}
           deltaGood={b ? -b.risk.cvar95 >= 0 : null}
           delta={b ? (-b.risk.cvar95 >= 0 ? "lucro mesmo na cauda" : "perda esperada na cauda") : null}
-          hint={b ? `P(perda) ${pct(100 * b.risk.probLoss, 1)} · Ω ${Number.isFinite(b.risk.omega) ? num(b.risk.omega, 2) : "∞"}` : undefined}
         />
       </div>
-
-      {b?.realized ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
-          <Stat label="Teto realizado (últimos dias)" value={brl(b.realized.perMWDayRS, 0)} unit="R$/MW·dia" hint={`informação perfeita no PLD realizado · ${b.realized.days} dias`} />
-          <Stat label="Política simples (limiar)" value={brl(b.realized.naivePerMWDayRS, 0)} unit="R$/MW·dia" hint="carrega nas horas mais baratas e descarrega nas mais caras, 1 ciclo/dia; não opera se o caixa do dia seria < 0 (o PLD D+1 sai na véspera)" />
-          {b.realized.captureRatio === null ? (
-            <Stat label="Capture ratio" value="n/d" hint="PLD quase plano no período: o teto é ~0 e a razão não tem significado" />
-          ) : (
-            <Stat label="Capture ratio" value={pct(100 * b.realized.captureRatio, 0)} hint="política simples / teto realizado" deltaGood={b.realized.captureRatio >= 0.5} delta={b.realized.captureRatio >= 0.5 ? "captura a maior parte" : "muito abaixo do teto"} />
-          )}
-        </div>
-      ) : null}
+      <p className="-mt-2 px-1 text-[13px] text-muted">
+        No SIN não há mercado contínuo a PLD: estes valores são o teto do potencial de arbitragem. Receita real de bateria vem de leilão de capacidade, serviços ancilares ou atrás do medidor.
+      </p>
 
       {b?.notes?.length ? (
-        <ul className="flex flex-col gap-1 text-[11px] text-muted" aria-label="Diagnósticos numéricos">
+        <ul className="flex flex-col gap-1 px-1 text-[13px] text-warning" aria-label="Diagnósticos numéricos">
           {b.notes.map((n, i) => (
-            <li key={i}>⚠ {n}</li>
+            <li key={i}>{n}</li>
           ))}
         </ul>
       ) : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Despacho ótimo — próximas 72 h" subtitle="Preço previsto, potência na rede e estado de carga (gráficos separados, mesmo eixo de tempo)" right={<SourceTag meta={a?.meta.pld} label="PLD" />}>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Panel className="xl:col-span-2" title="Despacho ótimo — próximas 72 h" subtitle="Preço previsto, potência na rede e estado de carga" right={<SourceTag meta={a?.meta.pld} label="PLD" />}>
           {priceOpt && dispatchOpt && socOpt ? (
             <div className="flex flex-col gap-1">
               <EChart option={priceOpt} height={150} label="PLD previsto" dim={isValidating} />
@@ -235,40 +207,38 @@ export default function ArbitragemPage() {
             <Loading height={450} />
           )}
         </Panel>
-        <div className="flex flex-col gap-3">
-          <Panel title="Distribuição de P&L" subtitle="1.000 trajetórias MRJD (500 treino / 500 avaliação) · barras vermelhas = cauda VaR 95%">
+        <div className="flex flex-col gap-4">
+          <Panel title="Distribuição do resultado" subtitle="1.000 cenários simulados · vermelho = pior 5%">
             {histOpt ? <EChart option={histOpt} height={220} label="Distribuição de P&L" /> : <Loading height={220} />}
-            {b ? <p className="mt-2 text-[11px] text-muted">P05 {brl(b.risk.p05, 0)} · mediana {brl(b.risk.p50, 0)} · P95 {brl(b.risk.p95, 0)} · média na cauda 5% {brl(-b.risk.cvar95, 0)}</p> : null}
+            {b ? <p className="mt-2 text-[12px] text-muted">P05 {brl(b.risk.p05, 0)} · mediana {brl(b.risk.p50, 0)} · P95 {brl(b.risk.p95, 0)} · média na cauda 5% {brl(-b.risk.cvar95, 0)}</p> : null}
           </Panel>
-          <Panel title="D+1 já publicado" subtitle="Despacho exato no preço conhecido; energia que sobra no fim do dia valorizada pela previsão dos dias seguintes">
+          <Panel title="Amanhã (já publicado)" subtitle="Despacho exato no preço conhecido">
             {b?.publishedTomorrow ? (
-              <div className="flex flex-col gap-1 text-xs">
-                <div className="text-2xl font-semibold text-ink">{brl(b.publishedTomorrow.valueRS, 0)}</div>
+              <div className="flex flex-col gap-1 text-[13px]">
+                <div className="tnum text-[26px] font-semibold tracking-[-0.02em] text-ink">{brl(b.publishedTomorrow.valueRS, 0)}</div>
                 <div className="text-muted">
                   {b.publishedTomorrow.date} · caixa do dia {brl(b.publishedTomorrow.cashRS, 0)} · SoC final {pct(100 * b.publishedTomorrow.endSoc, 0)} · spread intradiário {brl(b.publishedTomorrow.spreadRS, 0)}/MWh
                 </div>
               </div>
             ) : (
-              <p className="text-xs text-muted">O PLD de amanhã ainda não foi divulgado pela CCEE (normalmente sai à tarde).</p>
+              <p className="text-[13px] text-muted">O PLD de amanhã ainda não foi divulgado (normalmente sai à tarde).</p>
             )}
           </Panel>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <Panel title="Spreads entre submercados (30 dias)" subtitle="Risco de descolamento entre submercados (não é arbitragem: não há FTR no SIN). z-score, % de horas descoladas, ADF, Engle–Granger e meia-vida (OU)">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel title="Spreads entre submercados" subtitle="Últimos 30 dias · risco de descolamento (não há FTR no SIN); toque num par para ver a série">
           {a ? (
             <Table
-              head={["Par", "Atual", "z", "Descolado", "Meia-vida", "ADF p", "Coint.", "Sinal"]}
-              align={["left", "right", "right", "right", "right", "right", "center", "left"]}
+              head={["Par", "Atual", "z", "Descolado", "Meia-vida", "Sinal"]}
+              align={["left", "right", "right", "right", "right", "left"]}
               rows={a.spreads.map((s, i) => [
-                <button key="p" onClick={() => setPair(i)} className={`underline-offset-2 hover:underline ${pair === i ? "text-accent" : "text-ink-2"}`}>{`${s.a}−${s.b}`}</button>,
+                <button key="p" onClick={() => setPair(i)} title={`ADF p = ${num(s.adfP, 3)} · cointegrado: ${s.cointegrated === null ? "—" : s.cointegrated ? "sim" : "não"}`} className={`font-medium underline-offset-2 hover:underline ${pair === i ? "text-accent" : "text-ink-2"}`}>{`${s.a}−${s.b}`}</button>,
                 brl(s.current, 2),
                 num(s.z, 2),
                 pct(s.decoupledPct, 0),
                 s.halfLifeH !== null ? `${num(s.halfLifeH, 1)} h` : "—",
-                num(s.adfP, 3),
-                s.cointegrated === null ? "—" : s.cointegrated ? "sim" : "não",
                 <Badge key="s" level={s.signal.startsWith("Spread alto") || s.signal.startsWith("Spread baixo") ? "warning" : s.signal === "Acoplados" ? "good" : "neutral"}>{s.signal}</Badge>,
               ])}
             />
@@ -277,35 +247,55 @@ export default function ArbitragemPage() {
           )}
           <div className="mt-3">{spreadOpt ? <EChart option={spreadOpt} height={180} label="Série do spread selecionado" /> : null}</div>
         </Panel>
-        <Panel title="Lente global — preço médio do dia em R$/MWh" subtitle="Conversão pelo câmbio do BCB. Indicativo: não há interconexão física entre os mercados." right={<SourceTag meta={a?.meta.fx} label="BCB" />}>
+        <Panel title="Lente global" subtitle="Preço médio do dia em R$/MWh pelo câmbio do BCB · só referência, não há interconexão">
           {lensOpt ? <EChart option={lensOpt} height={360} label="Comparação global de preços" /> : <Loading height={360} />}
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <Panel title="Europa — bateria 1 MW / 2 MWh por zona" subtitle="Receita intrínseca ótima no último dia de entrega disponível (resolução nativa)" right={<SourceTag meta={a?.meta.eu} label="Energy-Charts" />}>
-          {a ? (
-            <Table
-              head={["Zona", "Entrega", "Média", "Mín", "Máx", "h negativas", "€/MW·dia"]}
-              align={["left", "left", "right", "right", "right", "right", "right"]}
-              rows={a.eu.map((z) => [`${z.name} (${z.bzn})`, z.date, num(z.avg, 1), num(z.min, 1), num(z.max, 1), num(z.negativeHours, 2), <strong key="v" className="text-ink">{num(z.bessEurPerMWDay, 1)}</strong>])}
-            />
-          ) : (
-            <Loading height={200} />
-          )}
-        </Panel>
-        <Panel title="Europa — valor de congestionamento (FTR intrínseco)" subtitle="Σ max(spread, 0)·Δt por direção — valor de 1 MW de direito de transmissão">
-          {a ? (
-            <Table
-              head={["Fronteira", "Entrega", "Spread médio", "→ €/MW·dia", "← €/MW·dia", "Congestionado"]}
-              align={["left", "left", "right", "right", "right", "right"]}
-              rows={a.borders.map((x) => [`${x.from} ⇄ ${x.to}`, x.date, signed(x.avgSpread, 2), num(x.ftrFromTo, 1), num(x.ftrToFrom, 1), pct(x.congestedPct, 0)])}
-            />
-          ) : (
-            <Loading height={200} />
-          )}
-        </Panel>
-      </div>
+      <Disclosure title="Europa, opcionalidade e resultado realizado" hint="bateria por zona, congestionamento e capture ratio">
+        {b?.realized ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <Stat label="Teto realizado" value={brl(b.realized.perMWDayRS, 0)} unit="R$/MW·dia" hint={`informação perfeita no PLD realizado · ${b.realized.days} dias`} />
+            <Stat label="Política simples" value={brl(b.realized.naivePerMWDayRS, 0)} unit="R$/MW·dia" hint="1 ciclo por dia nas horas mais baratas e mais caras" />
+            {b.realized.captureRatio === null ? (
+              <Stat label="Capture ratio" value="n/d" hint="PLD quase plano: o teto é ~0" />
+            ) : (
+              <Stat label="Capture ratio" value={pct(100 * b.realized.captureRatio, 0)} hint="política simples / teto realizado" deltaGood={b.realized.captureRatio >= 0.5} delta={b.realized.captureRatio >= 0.5 ? "captura a maior parte" : "muito abaixo do teto"} />
+            )}
+          </div>
+        ) : null}
+        {b ? (
+          <div className="grid grid-cols-2 gap-3 md:grid-cols-3">
+            <Stat label="Intrínseco (curva média)" value={brl(b.intrinsicRS, 0)} hint={b.solver} />
+            <Stat label="Opcionalidade" value={brl(b.extrinsicRS, 0)} delta={b.intrinsicRS ? `${signed((100 * b.extrinsicRS) / Math.abs(b.intrinsicRS), 0)}% sobre o intrínseco` : null} />
+            <Stat label="Probabilidade de perda" value={pct(100 * b.risk.probLoss, 1)} hint={`Ω ${Number.isFinite(b.risk.omega) ? num(b.risk.omega, 2) : "∞"}`} />
+          </div>
+        ) : null}
+        <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+          <Panel title="Europa — bateria 1 MW / 2 MWh" subtitle="Receita ótima no último dia de entrega, por zona" right={<SourceTag meta={a?.meta.eu} label="Energy-Charts" />}>
+            {a ? (
+              <Table
+                head={["Zona", "Entrega", "Média", "Mín", "Máx", "h negativas", "€/MW·dia"]}
+                align={["left", "left", "right", "right", "right", "right", "right"]}
+                rows={a.eu.map((z) => [`${z.name} (${z.bzn})`, z.date, num(z.avg, 1), num(z.min, 1), num(z.max, 1), num(z.negativeHours, 2), <strong key="v" className="text-ink">{num(z.bessEurPerMWDay, 1)}</strong>])}
+              />
+            ) : (
+              <Loading height={200} />
+            )}
+          </Panel>
+          <Panel title="Europa — congestionamento" subtitle="Valor de 1 MW de direito de transmissão por fronteira">
+            {a ? (
+              <Table
+                head={["Fronteira", "Entrega", "Spread médio", "→ €/MW·dia", "← €/MW·dia", "Congestionado"]}
+                align={["left", "left", "right", "right", "right", "right"]}
+                rows={a.borders.map((x) => [`${x.from} ⇄ ${x.to}`, x.date, signed(x.avgSpread, 2), num(x.ftrFromTo, 1), num(x.ftrToFrom, 1), pct(x.congestedPct, 0)])}
+              />
+            ) : (
+              <Loading height={200} />
+            )}
+          </Panel>
+        </div>
+      </Disclosure>
     </div>
   );
 }

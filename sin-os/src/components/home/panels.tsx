@@ -3,14 +3,14 @@
 import Link from "next/link";
 import { motion } from "motion/react";
 import { useMemo } from "react";
-import { ArrowUpRight, CircleCheck, Droplets, ShieldCheck, TrendingUp, TriangleAlert, Zap } from "lucide-react";
+import { ChevronRight, CircleCheck, Droplets, ShieldCheck, TrendingUp, TriangleAlert, Zap } from "lucide-react";
 import type { ChartOption } from "@/components/EChart";
 import { ChartFrame } from "@/components/EChart";
 import { Appear, EASE } from "@/components/motion";
-import { ConfidenceBar, Empty, MetricRow, sourceState, type DataState } from "@/components/ui";
+import { ConfidenceBar, Delta, Empty, MetricRow, ScrollX, sourceState, type DataState } from "@/components/ui";
 import type { AlertasResp, AuditoriaResp, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp } from "@/lib/apiTypes";
 import type { BessAsset } from "@/lib/asset";
-import { band, baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, tooltipTime, valueAxis } from "@/lib/chart";
+import { band, baseOption, C, categoryAxis, line, SUB_COLOR, SUB_CSS, timeAxis, tooltipTime, valueAxis } from "@/lib/chart";
 import { brl, compact, nf, num, pct } from "@/lib/fmt";
 import type { Opportunity } from "@/lib/market/opportunities";
 import { addDays, brtDate, brtHour } from "@/lib/sources/time";
@@ -38,6 +38,7 @@ export interface KpiSpec {
   at?: number | null;
   source?: string;
   detail?: string | null;
+  foot?: string | null;
 }
 
 const lastAtOrBefore = (ts: number[], vals: (number | null)[], t: number) => {
@@ -55,7 +56,7 @@ export function buildKpis(br?: BrasilResp, clima?: ClimaResp, renov?: Renovaveis
     const k = br?.kpis?.find((x) => x.sub === s);
     out.push({
       key: `pld-${s}`,
-      label: `PLD ${s === "SE" ? "SE/CO" : SUB_NAMES[s]}`,
+      label: s === "SE" ? "SE/CO" : SUB_NAMES[s],
       value: k?.now ?? null,
       format: (v) => n2.format(v),
       unit: "R$/MWh",
@@ -63,8 +64,9 @@ export function buildKpis(br?: BrasilResp, clima?: ClimaResp, renov?: Renovaveis
       deltaTitle: "vs. mesma hora de ontem",
       spark: k?.spark,
       color: SUB_COLOR[s],
-      swatch: SUB_COLOR[s],
+      swatch: SUB_CSS[s],
       state: pldState,
+      foot: k?.tomorrowAvg != null ? `amanhã ${n0.format(k.tomorrowAvg)}` : null,
       at: k?.at ?? br?.meta.pld.latestTs,
       source: `${pldSrc} · hora ${hh(k?.at)}${k?.tomorrowAvg != null ? ` · D+1 ${n0.format(k.tomorrowAvg)}` : ""}`,
       detail: br?.meta.pld.fallback ?? br?.meta.pld.note,
@@ -240,12 +242,18 @@ export function pldMainOption(br: BrasilResp, range: Range, mode: Mode, fc: Part
   const days = [...new Set(ts.map(brtDate))];
   if (end > lastObs) for (let d = addDays(days[days.length - 1], 1); Date.parse(`${d}T00:00:00-03:00`) < end; d = addDays(d, 1)) days.push(d);
   const peaks = days.map((d) => [{ xAxis: Date.parse(`${d}T18:00:00-03:00`) }, { xAxis: Date.parse(`${d}T21:00:00-03:00`) }]);
-  const current = Object.fromEntries(SUBS.map((s) => [s, br.kpis?.find((k) => k.sub === s)?.now ?? null])) as Record<Sub, number | null>;
+  // o preço atual de cada submercado já está nos cartões acima; no gráfico fica só a marca de "agora"
+  const nowMark = {
+    symbol: "none",
+    silent: true,
+    data: [{ xAxis: now, lineStyle: { color: C.muted, type: "solid", width: 1, opacity: 0.6 }, label: { position: "end", formatter: "agora", color: C.muted, fontSize: 11 } }],
+  };
   const base = baseOption();
   return {
     ...base,
-    grid: { left: 8, right: 64, top: 46, bottom: 34, containLabel: true },
-    legend: { ...base.legend, data: SUBS.map((s) => `${s} · ${SUB_NAMES[s]}`) },
+    grid: { left: 8, right: 24, top: 46, bottom: 8, containLabel: true },
+    // legenda curta (SE, S, NE, N); o nome completo aparece no tooltip
+    legend: { ...base.legend, data: SUBS.map((s) => `${s} · ${SUB_NAMES[s]}`), formatter: (name: string) => name.split(" · ")[0] },
     tooltip: {
       ...base.tooltip,
       formatter: (params: { seriesName: string; value: [number, number | null]; color: string }[]) => {
@@ -258,34 +266,22 @@ export function pldMainOption(br: BrasilResp, range: Range, mode: Mode, fc: Part
           .map((p) => {
             const v = p.value[1] as number;
             const diff = se !== null && !p.seriesName.startsWith("SE") ? `<span style="color:${C.muted};margin-left:6px">${v - se >= 0 ? "+" : ""}${n2.format(v - se)}</span>` : "";
-            return `<div style="display:flex;justify-content:space-between;gap:14px"><span><span style="display:inline-block;width:8px;height:2px;background:${p.color};margin-right:6px;vertical-align:middle"></span>${p.seriesName}</span><span style="font-variant-numeric:tabular-nums">${n2.format(v)}${diff}</span></div>`;
+            return `<div style="display:flex;justify-content:space-between;gap:16px;line-height:1.6"><span><span style="display:inline-block;width:8px;height:8px;border-radius:4px;background:${p.color};margin-right:7px"></span>${p.seriesName}</span><span style="font-variant-numeric:tabular-nums;font-weight:600">${n2.format(v)}${diff}</span></div>`;
           })
           .join("");
-        return `<div style="font-size:11px;color:${C.muted};margin-bottom:3px">${tooltipTime(t)}${h >= 18 && h < 21 ? ` · <span style="color:${C.warning}">ponta</span>` : ""}${t > lastObs ? ` · <span style="color:${C.accent}">previsão</span>` : ""}</div>${rows}`;
+        return `<div style="font-size:12px;color:${C.muted};margin-bottom:4px">${tooltipTime(t)}${h >= 18 && h < 21 ? ` · <span style="color:${C.warning}">ponta</span>` : ""}${t > lastObs ? ` · <span style="color:${C.accent}">previsão</span>` : ""}</div>${rows}`;
       },
     },
     xAxis: timeAxis({ max: end }),
     yAxis: valueAxis("R$/MWh"),
-    dataZoom: [
-      { type: "inside", filterMode: "none" },
-      { type: "slider", height: 14, bottom: 4, borderColor: "transparent", backgroundColor: C.surface2, fillerColor: "rgba(59,158,255,0.12)", handleSize: 12, handleStyle: { color: C.axis, borderColor: C.muted }, textStyle: { color: C.muted, fontSize: 9 }, labelFormatter: () => "", dataBackground: { lineStyle: { color: C.axis }, areaStyle: { color: C.surface2 } }, moveHandleSize: 4 },
-    ],
+    dataZoom: [{ type: "inside", filterMode: "none", zoomOnMouseWheel: "ctrl", moveOnMouseWheel: false }],
     series: [
       ...SUBS.map((s, k) =>
         line(`${s} · ${SUB_NAMES[s]}`, ts.map((t, i) => [t, values[s][i]]), SUB_COLOR[s], {
           z: 10 - k,
           lineStyle: { width: 1.6, color: SUB_COLOR[s] },
-          markLine:
-            current[s] !== null
-              ? {
-                  symbol: "none",
-                  silent: true,
-                  lineStyle: { color: SUB_COLOR[s], width: 1, type: [2, 3], opacity: 0.6 },
-                  label: { position: "end", formatter: `${s} ${n2.format(current[s]!)}`, color: "#04111f", backgroundColor: SUB_COLOR[s], padding: [1, 4], borderRadius: 2, fontSize: 10 },
-                  data: [{ yAxis: current[s]! }, ...(k === 0 ? [{ xAxis: now, lineStyle: { color: C.muted, type: "solid", opacity: 0.8 }, label: { position: "end", formatter: "agora", color: C.muted, backgroundColor: "transparent", fontSize: 10 } }] : [])],
-                }
-              : undefined,
-          markArea: k === 0 ? { silent: true, itemStyle: { color: "rgba(242,182,58,0.045)" }, data: peaks } : undefined,
+          markLine: k === 0 ? nowMark : undefined,
+          markArea: k === 0 ? { silent: true, itemStyle: { color: C.peakSoft }, data: peaks } : undefined,
         }),
       ),
       ...forecastSeries,
@@ -296,34 +292,102 @@ export function pldMainOption(br: BrasilResp, range: Range, mode: Mode, fc: Part
 /* ======================================================= oportunidades */
 
 const KIND_TONE: Record<Opportunity["kind"], string> = {
-  bess: "text-accent border-accent/35",
-  peak: "text-warning border-warning/35",
-  shift: "text-accent-2 border-accent-2/35",
-  floor: "text-good border-good/35",
-  spread: "text-ink-2 border-line-strong",
-  intl: "text-[#9085e9] border-[#9085e9]/40",
+  bess: "text-accent bg-accent/12",
+  peak: "text-serious bg-serious/12",
+  shift: "text-accent-2 bg-accent-2/12",
+  floor: "text-good bg-good/12",
+  spread: "text-ink-2 bg-surface-2",
+  intl: "text-[var(--sub-n)] bg-[var(--sub-n)]/12",
 };
-const KIND_LABEL: Record<Opportunity["kind"], string> = { bess: "BESS", peak: "PEAK", shift: "SHIFT", floor: "STORE", spread: "SPREAD", intl: "INTL" };
+const KIND_LABEL: Record<Opportunity["kind"], string> = { bess: "Bateria", peak: "Ponta", shift: "Deslocar", floor: "Armazenar", spread: "Spread", intl: "Exterior" };
+
+/** Verde cobre o custo nivelado do ativo; amarelo não cobre; vermelho é margem negativa. */
+function marginTone(r: Opportunity) {
+  const vsCost = r.margin !== null && r.costPerMWDay !== null ? r.margin - r.costPerMWDay : null;
+  return r.margin === null ? "text-muted" : r.margin <= 0 ? "text-critical" : vsCost !== null && vsCost < 0 ? "text-warning" : "text-good";
+}
+
+function Market({ market }: { market: string }) {
+  return (
+    <span className="inline-flex items-center whitespace-nowrap">
+      {market.split("/").map((m, j) => (
+        <span key={m} className="inline-flex items-center gap-1.5">
+          {j ? <span className="px-1 text-muted">/</span> : null}
+          {SUB_CSS[m] ? <span className="inline-block h-2 w-2 rounded-full" style={{ background: SUB_CSS[m] }} aria-hidden /> : null}
+          <span className="text-ink-2">{m}</span>
+        </span>
+      ))}
+    </span>
+  );
+}
+
+/** No celular: lista no estilo iOS, a linha inteira é tocável e leva à página da estratégia. */
+function OpportunityList({ rows }: { rows: Opportunity[] }) {
+  return (
+    <div className="sm:hidden">
+      <div className="flex justify-between px-3 pb-1 text-[12px] text-muted">
+        <span>Estratégia</span>
+        <span>Margem R$/MW·dia</span>
+      </div>
+      <ul className="flex flex-col" aria-label="Oportunidades">
+        {rows.map((r) => {
+          const conf = r.confidence === null || !Number.isFinite(r.confidence) ? null : Math.round(100 * Math.min(1, Math.max(0, r.confidence)));
+          return (
+            <li key={r.id} className="border-b border-line last:border-0">
+              <Link href={r.action.href} title={r.action.label} className="flex min-h-14 items-center gap-3 rounded-xl px-3 py-2.5 transition-colors active:bg-surface-2">
+                <span className="min-w-0 flex-1">
+                  <span className="flex items-center gap-2">
+                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[12px] font-medium ${KIND_TONE[r.kind]}`}>{KIND_LABEL[r.kind]}</span>
+                    <span className="truncate text-[15px] text-ink">{r.strategy}</span>
+                  </span>
+                  <span className="mt-1 flex flex-wrap items-center gap-x-1.5 text-[13px] text-muted">
+                    <Market market={r.market} />
+                    {r.spread !== null ? <span className="tnum">· spread {n2.format(r.spread)} R$/MWh</span> : null}
+                  </span>
+                </span>
+                <span className="shrink-0 text-right">
+                  <span className={`tnum block text-[15px] font-semibold ${marginTone(r)}`}>{r.margin === null ? "indicador" : n0.format(r.margin)}</span>
+                  {conf !== null ? <span className="tnum block text-[12px] text-muted" title={r.confidenceNote}>conf. {conf}%</span> : null}
+                </span>
+                <ChevronRight size={18} className="shrink-0 text-muted" aria-hidden />
+              </Link>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
 
 export function OpportunitiesTable({ rows }: { rows: Opportunity[] }) {
   if (!rows.length) return <Empty label="Sem oportunidades calculáveis agora (sem dia completo de PLD)." height={120} />;
   return (
-    <div className="scrollbar-thin overflow-x-auto">
-      <table className="w-full min-w-[860px] border-collapse text-[12px]">
+    <>
+      <OpportunityList rows={rows} />
+      <div className="hidden sm:block">
+        <OpportunityTable rows={rows} />
+      </div>
+    </>
+  );
+}
+
+function OpportunityTable({ rows }: { rows: Opportunity[] }) {
+  return (
+    <ScrollX label="Oportunidades">
+      <table className="w-full min-w-[720px] border-collapse text-[14px]">
         <thead>
-          <tr className="border-b border-line-strong">
-            {["#", "Estratégia", "Mercado", "Spread", "Margem", "MW", "Liquidez", "Confiança", "Ação"].map((h, i) => (
-              <th key={h} className={`eyebrow whitespace-nowrap px-2 py-1.5 font-semibold ${i >= 3 && i <= 5 ? "text-right" : "text-left"}`}>
-                {h}
-                {h === "Spread" ? <span className="ml-1 normal-case tracking-normal text-muted">R$/MWh</span> : h === "Margem" ? <span className="ml-1 normal-case tracking-normal text-muted">R$/MW·dia</span> : null}
+          <tr className="border-b border-line">
+            {["Estratégia", "Mercado", "Spread", "Margem", "Confiança", ""].map((h, i) => (
+              <th key={i} className={`whitespace-nowrap px-3 py-2 text-[12px] font-medium text-muted ${i === 2 || i === 3 ? "text-right" : "text-left"}`}>
+                {h || <span className="sr-only">Abrir</span>}
+                {h === "Spread" ? <span className="ml-1 font-normal">R$/MWh</span> : h === "Margem" ? <span className="ml-1 font-normal">R$/MW·dia</span> : null}
               </th>
             ))}
           </tr>
         </thead>
         <tbody className="tnum">
           {rows.map((r, i) => {
-            const vsCost = r.margin !== null && r.costPerMWDay !== null ? r.margin - r.costPerMWDay : null;
-            const tone = r.margin === null ? "text-muted" : r.margin <= 0 ? "text-critical" : vsCost !== null && vsCost < 0 ? "text-warning" : "text-good";
+            const tone = marginTone(r);
             return (
               <motion.tr
                 key={r.id}
@@ -331,36 +395,26 @@ export function OpportunitiesTable({ rows }: { rows: Opportunity[] }) {
                 initial={{ opacity: 0 }}
                 animate={{ opacity: 1 }}
                 transition={{ duration: 0.25, ease: EASE, delay: i * 0.02 }}
-                className="group border-b border-line/60 last:border-0 hover:bg-surface-2"
+                className="border-b border-line last:border-0 hover:bg-surface-2/60"
+                title={[r.detail, r.liquidity ? `liquidez: ${r.liquidity}` : null, r.mw !== null ? `${n0.format(r.mw)} MW` : null].filter(Boolean).join(" · ")}
               >
-                <td className="px-2 py-1.5 font-mono text-[11px] text-muted">{String(i + 1).padStart(2, "0")}</td>
-                <td className="px-2 py-1.5" title={r.detail}>
-                  <span className={`mr-2 inline-block w-[52px] rounded-[3px] border px-1 text-center font-mono text-[9.5px] font-semibold tracking-wider ${KIND_TONE[r.kind]}`}>{KIND_LABEL[r.kind]}</span>
+                <td className="px-3 py-2.5">
+                  <span className={`mr-2.5 inline-block min-w-[76px] rounded-full px-2 py-0.5 text-center text-[12px] font-medium ${KIND_TONE[r.kind]}`}>{KIND_LABEL[r.kind]}</span>
                   <span className="text-ink">{r.strategy}</span>
-                  <span className="ml-2 hidden text-[11px] text-muted 2xl:inline">{r.detail}</span>
                 </td>
-                <td className="whitespace-nowrap px-2 py-1.5">
-                  {r.market.split("/").map((m, j) => (
-                    <span key={m} className="inline-flex items-center gap-1">
-                      {j ? <span className="px-0.5 text-muted">/</span> : null}
-                      {SUB_COLOR[m] ? <span className="inline-block h-1.5 w-1.5 rounded-[1px]" style={{ background: SUB_COLOR[m] }} aria-hidden /> : null}
-                      <span className="font-mono text-ink-2">{m}</span>
-                    </span>
-                  ))}
+                <td className="whitespace-nowrap px-3 py-2.5">
+                  <Market market={r.market} />
                 </td>
-                <td className="px-2 py-1.5 text-right font-mono text-ink-2">{r.spread === null ? "—" : n2.format(r.spread)}</td>
-                <td className={`px-2 py-1.5 text-right font-mono font-semibold ${tone}`} title={r.costPerMWDay !== null ? `custo nivelado do ativo ≈ ${n0.format(r.costPerMWDay)} R$/MW·dia` : undefined}>
+                <td className="px-3 py-2.5 text-right text-ink-2">{r.spread === null ? "—" : n2.format(r.spread)}</td>
+                <td className={`px-3 py-2.5 text-right font-semibold ${tone}`} title={r.costPerMWDay !== null ? `custo nivelado do ativo ≈ ${n0.format(r.costPerMWDay)} R$/MW·dia` : undefined}>
                   {r.margin === null ? "indicador" : n0.format(r.margin)}
                 </td>
-                <td className="px-2 py-1.5 text-right font-mono text-ink-2">{r.mw === null ? "—" : n0.format(r.mw)}</td>
-                <td className="whitespace-nowrap px-2 py-1.5 text-[11px] text-muted">{r.liquidity}</td>
-                <td className="px-2 py-1.5">
+                <td className="px-3 py-2.5">
                   <ConfidenceBar value={r.confidence} title={r.confidenceNote} />
                 </td>
-                <td className="px-2 py-1.5">
-                  <Link href={r.action.href} className="inline-flex items-center gap-0.5 rounded-[4px] border border-line px-1.5 py-0.5 text-[11px] text-ink-2 transition-colors hover:border-accent/50 hover:text-accent">
-                    {r.action.label}
-                    <ArrowUpRight size={11} aria-hidden />
+                <td className="px-2 py-2.5 text-right">
+                  <Link href={r.action.href} aria-label={r.action.label} title={r.action.label} className="inline-grid h-11 w-11 place-items-center rounded-full text-muted transition-colors hover:bg-surface-2 hover:text-accent sm:h-8 sm:w-8">
+                    <ChevronRight size={18} aria-hidden />
                   </Link>
                 </td>
               </motion.tr>
@@ -368,6 +422,30 @@ export function OpportunitiesTable({ rows }: { rows: Opportunity[] }) {
           })}
         </tbody>
       </table>
+    </ScrollX>
+  );
+}
+
+/* ====================================================== indicadores do sistema */
+
+/** Os indicadores de contexto num só cartão, sem caixas internas. */
+export function SystemStats({ items }: { items: KpiSpec[] }) {
+  return (
+    <div className="grid grid-cols-2 gap-x-6 gap-y-5 sm:grid-cols-3 xl:grid-cols-6">
+      {items.map((k) => (
+        <div key={k.key} className="min-w-0" title={[k.source, k.detail].filter(Boolean).join(" · ") || undefined}>
+          <div className="truncate text-[13px] text-muted">{k.label}</div>
+          <div className="mt-0.5 flex flex-wrap items-baseline gap-x-1">
+            <span className="tnum text-[20px] font-semibold tracking-[-0.01em] text-ink">{k.value === null ? "—" : k.format(k.value)}</span>
+            {k.unit ? <span className="text-[12px] text-muted">{k.unit}</span> : null}
+          </div>
+          {k.delta !== undefined ? (
+            <div className="text-[13px]">
+              <Delta value={k.delta} suffix={k.deltaSuffix} title={k.deltaTitle} />
+            </div>
+          ) : null}
+        </div>
+      ))}
     </div>
   );
 }
@@ -437,10 +515,10 @@ export function DaySummary({ br, fc, audit, alerts, now: nowTs }: { br?: BrasilR
   }, [br, fc, audit, alerts, nowTs]);
   if (!items.length) return <Empty label="Aguardando dados do PLD…" height={160} />;
   return (
-    <ul className="flex flex-col gap-2">
+    <ul className="flex flex-col gap-3">
       {items.map((it, i) => (
-        <Appear as="li" key={i} delay={i * 0.04} className="flex gap-2 text-[12px] leading-snug text-ink-2">
-          <it.Icon size={13} className={`mt-0.5 shrink-0 ${it.tone}`} aria-hidden />
+        <Appear as="li" key={i} delay={i * 0.04} className="flex gap-3 text-[14px] leading-snug text-ink-2">
+          <it.Icon size={17} className={`mt-px shrink-0 ${it.tone}`} aria-hidden />
           <span>{it.text}</span>
         </Appear>
       ))}
@@ -468,7 +546,7 @@ export function SinFlow({ br, now }: { br?: BrasilResp; now: number }) {
       <svg viewBox="0 0 332 216" className="h-auto w-full" role="img" aria-label="Esquema dos submercados com preço, carga e reservatório">
         <defs>
           <marker id="arr" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
-            <path d="M0,0 L8,4 L0,8 z" fill="var(--muted)" />
+            <path d="M0,0 L8,4 L0,8 z" style={{ fill: "var(--muted)" }} />
           </marker>
         </defs>
         {links.map(([a, b]) => {
@@ -482,8 +560,8 @@ export function SinFlow({ br, now }: { br?: BrasilResp; now: number }) {
           const mid = shorten(from, to, 0.5);
           return (
             <g key={`${a}${b}`}>
-              <line x1={s1[0]} y1={s1[1]} x2={s2[0]} y2={s2[1]} stroke={coupled ? "var(--border-strong)" : "var(--muted)"} strokeWidth={1.2} strokeDasharray={coupled ? "3 3" : undefined} markerEnd={coupled ? undefined : "url(#arr)"} />
-              <text x={mid[0] + 6} y={mid[1] - 4} fontSize="9" fill={coupled ? "var(--muted)" : "var(--ink-2)"} className="tnum">
+              <line x1={s1[0]} y1={s1[1]} x2={s2[0]} y2={s2[1]} style={{ stroke: coupled ? "var(--border-strong)" : "var(--muted)" }} strokeWidth={1.2} strokeDasharray={coupled ? "3 3" : undefined} markerEnd={coupled ? undefined : "url(#arr)"} />
+              <text x={mid[0] + 6} y={mid[1] - 4} fontSize="9" style={{ fill: coupled ? "var(--muted)" : "var(--ink-2)" }} className="tnum">
                 {d === null ? "" : coupled ? "acoplado" : `Δ ${n0.format(Math.abs(d))}`}
               </text>
             </g>
@@ -493,17 +571,17 @@ export function SinFlow({ br, now }: { br?: BrasilResp; now: number }) {
           const [x, y] = pos[s];
           return (
             <g key={s} transform={`translate(${x - 52},${y - 20})`}>
-              <rect width="104" height="40" rx="4" fill="var(--surface-2)" stroke="var(--border-strong)" />
-              <rect width="3" height="40" rx="1.5" fill={SUB_COLOR[s]} />
-              <text x="9" y="13" fontSize="9" fill="var(--muted)" fontWeight="600" letterSpacing="0.06em">{s === "SE" ? "SE/CO" : SUB_NAMES[s].toUpperCase()}</text>
-              <text x="9" y="28" fontSize="12" fill="var(--ink)" fontWeight="600" className="tnum">{price[s] === null ? "—" : n2.format(price[s]!)}</text>
-              <text x="98" y="13" fontSize="8.5" fill="var(--muted)" textAnchor="end" className="tnum">{loadNow[s] === null ? "" : `${n1.format(loadNow[s]! / 1000)} GW`}</text>
-              <text x="98" y="28" fontSize="8.5" fill="var(--muted)" textAnchor="end" className="tnum">{earNow[s] === null ? "" : `${n0.format(earNow[s]!)}% EAR`}</text>
+              <rect width="104" height="40" rx="10" style={{ fill: "var(--surface-2)" }} />
+              <circle cx="11" cy="11" r="3" style={{ fill: SUB_CSS[s] }} />
+              <text x="18" y="14" fontSize="9" style={{ fill: "var(--muted)" }} fontWeight="500">{s === "SE" ? "SE/CO" : SUB_NAMES[s]}</text>
+              <text x="8" y="31" fontSize="12.5" style={{ fill: "var(--ink)" }} fontWeight="600" className="tnum">{price[s] === null ? "—" : n2.format(price[s]!)}</text>
+              <text x="98" y="14" fontSize="9" style={{ fill: "var(--muted)" }} textAnchor="end" className="tnum">{loadNow[s] === null ? "" : `${n1.format(loadNow[s]! / 1000)} GW`}</text>
+              <text x="98" y="31" fontSize="9" style={{ fill: "var(--muted)" }} textAnchor="end" className="tnum">{earNow[s] === null ? "" : `${n0.format(earNow[s]!)}% EAR`}</text>
             </g>
           );
         })}
       </svg>
-      <p className="mt-1 text-[10.5px] leading-snug text-muted">Seta = sentido sugerido pelo preço (do mais barato para o mais caro); “acoplado” quando os PLDs coincidem. O ONS não publica o intercâmbio em tempo real aqui.</p>
+      <p className="mt-2 text-[12px] leading-snug text-muted">A seta vai do submercado mais barato para o mais caro; “acoplado” quando os PLDs coincidem.</p>
     </div>
   );
 }
@@ -529,15 +607,15 @@ export function BessMini({ bess, asset, loading, error }: { bess?: BessResp; ass
       xAxis: categoryAxis(r.ts.map((t) => `${brtHour(t)}h`), { axisLabel: { color: C.muted, fontSize: 9, interval: 5 } }),
       yAxis: [valueAxis(undefined, { splitNumber: 2, axisLabel: { show: false } }), valueAxis(undefined, { splitNumber: 2, splitLine: { show: false }, axisLabel: { show: false } })],
       series: [
-        { name: "Descarga (MW)", type: "bar", stack: "p", data: r.dischargeMW.map((v) => +v.toFixed(1)), itemStyle: { color: C.good }, barWidth: "60%" },
-        { name: "Carga (MW)", type: "bar", stack: "p", data: r.chargeMW.map((v) => -+v.toFixed(1)), itemStyle: { color: C.accent } },
+        { name: "Descarga (MW)", type: "bar", stack: "p", data: r.dischargeMW.map((v) => +v.toFixed(1)), itemStyle: { color: C.good, borderRadius: [3, 3, 0, 0] }, barWidth: "60%" },
+        { name: "Carga (MW)", type: "bar", stack: "p", data: r.chargeMW.map((v) => -+v.toFixed(1)), itemStyle: { color: C.accent, borderRadius: [0, 0, 3, 3] } },
         { name: "PLD (R$/MWh)", type: "line", yAxisIndex: 1, data: r.price.map((v) => +v.toFixed(2)), showSymbol: false, lineStyle: { width: 1.2, color: C.ink2 }, itemStyle: { color: C.ink2 } },
       ],
     };
   }, [r0]);
   return (
     <div className="flex flex-col gap-2">
-      <ChartFrame option={opt} loading={loading} error={error} height={110} label="Despacho do BESS no dia de referência" />
+      <ChartFrame option={opt} loading={loading} error={error} height={120} label="Despacho do BESS no dia de referência" />
       {bess ? (
         <div className="grid grid-cols-1">
           <MetricRow label="Receita média" hint="30 d" value={`${brl(bess.last30.revenuePerDay, 0)}/dia`} />
@@ -546,14 +624,9 @@ export function BessMini({ bess, asset, loading, error }: { bess?: BessResp; ass
           <MetricRow label="vs. custo nivelado" value={bess.margin.netMargin === null ? "—" : `${bess.margin.netMargin >= 0 ? "+" : "−"}${n0.format(Math.abs(bess.margin.netMargin))}`} tone={bess.margin.netMargin !== null && bess.margin.netMargin >= 0 ? "good" : "critical"} />
         </div>
       ) : null}
-      <div className="flex items-center justify-between text-[10.5px] text-muted">
-        <span>
-          {asset.name} · {asset.pow} MW / {asset.cap} MWh · {asset.sub} · {idle ? "amanhã sem spread — exibindo o dia mediano" : (r0?.label ?? "")}
-        </span>
-        <Link href="/bess" className="text-accent hover:underline">
-          abrir BESS →
-        </Link>
-      </div>
+      <p className="text-[12px] text-muted">
+        {asset.pow} MW / {asset.cap} MWh · {asset.sub} · {idle ? "amanhã sem spread, exibindo o dia mediano" : (r0?.label ?? "")}
+      </p>
     </div>
   );
 }
@@ -582,14 +655,14 @@ export function EnaRow({ br }: { br?: BrasilResp }) {
   const ena = br?.ena;
   if (!ena) return null;
   return (
-    <div className="mt-2 grid grid-cols-4 gap-1 text-center">
+    <div className="mt-3 grid grid-cols-4 gap-2 text-center">
       {SUBS.map((s) => {
         const v = ena.values[s].filter((x): x is number => x !== null);
         const last = v[v.length - 1];
         return (
-          <div key={s} className="rounded-[4px] border border-line px-1 py-1">
-            <div className="text-[9.5px] text-muted">ENA {s}</div>
-            <div className="tnum text-[12px] font-semibold" style={{ color: last >= 100 ? "var(--good)" : last >= 70 ? "var(--ink)" : "var(--warning)" }}>
+          <div key={s} className="rounded-xl bg-surface-2 px-1 py-2" title="Energia natural afluente, % da média de longo termo">
+            <div className="text-[12px] text-muted">ENA {s}</div>
+            <div className="tnum text-[15px] font-semibold" style={{ color: last >= 100 ? "var(--good)" : last >= 70 ? "var(--ink)" : "var(--warning)" }}>
               {last === undefined ? "—" : `${n0.format(last)}%`}
             </div>
           </div>

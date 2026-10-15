@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useSyncExternalStore } from "react";
-import { ErrorBox, Loading, PageHeader, Panel, Stat, Table } from "@/components/ui";
+import { Disclosure, ErrorBox, Loading, PageHeader, Panel, Stat, Table } from "@/components/ui";
 import { bookSummary, hoursInMonth, isMonth, markToForward, openExposure, parseContracts, type Contract, type MonthlyPld, type Side } from "@/lib/market/book";
 import { toCsv } from "@/lib/csv";
 import { brl, num } from "@/lib/fmt";
@@ -163,23 +163,16 @@ export default function CarteiraPage() {
     }
   };
 
-  const inputCls = "rounded-md border border-line bg-surface px-2 py-1 text-sm text-ink";
+  const inputCls = "h-11 rounded-[10px] bg-surface-2 sm:h-9 px-3 text-[14px] text-ink outline-none focus:ring-2 focus:ring-accent/50";
+  const pill = "inline-flex min-h-11 sm:min-h-9 items-center rounded-full bg-surface-2 px-4 text-[13px] font-medium text-ink hover:bg-surface-3 disabled:opacity-40";
 
   return (
-    <div className="flex flex-col gap-3">
-      <PageHeader
-        title="Carteira"
-        subtitle="Contratos como swap financeiro sobre o PLD médio mensal por submercado: liquidação de curto prazo, exposição líquida e resultado. Os contratos ficam salvos só neste navegador."
-      />
-
-      <div role="note" className="flex items-start gap-2 rounded-md border border-line bg-surface-2/40 px-3 py-2 text-[11px] text-muted">
-        <span aria-hidden>ℹ️</span>
-        <span>
-          Modelo simplificado da <strong className="text-ink-2">liquidação de curto prazo</strong> (a &ldquo;metade PLD&rdquo; do resultado): não inclui sazonalização/flexibilidade,
-          encargos, TUST/TUSD, tributos, MRE/GSF nem garantia física. Só liquida meses com <strong className="text-ink-2">PLD realizado</strong> disponível no app
-          {pld?.simulated ? " (atenção: PLD atual SIMULADO)" : pld?.fallback ? " (PLD estimado pelo CMO do ONS)" : ""}; meses futuros dependem da <strong className="text-ink-2">curva a termo (BBCE)</strong>, que o app ainda não tem.
-        </span>
-      </div>
+    <div className="flex flex-col gap-5">
+      <PageHeader title="Carteira" subtitle="Seus contratos como swap sobre o PLD mensal: liquidação, exposição e resultado. Ficam salvos só neste navegador." />
+      <p className="-mt-2 px-1 text-[13px] text-muted">
+        Modelo simplificado da liquidação de curto prazo: sem sazonalização, encargos, tributos, MRE/GSF ou garantia física. Só liquida meses com PLD realizado
+        {pld?.simulated ? " (atenção: PLD atual simulado)" : pld?.fallback ? " (PLD estimado pelo CMO do ONS)" : ""}; meses futuros dependem da curva a termo informada abaixo.
+      </p>
 
       {error && !pld ? <ErrorBox error={error} /> : null}
       {!pld ? <Loading label="Carregando PLD mensal…" height={120} /> : null}
@@ -197,8 +190,8 @@ export default function CarteiraPage() {
             <Stat label="Cobertura do PLD" value={months.length ? `${months[0]} … ${months[months.length - 1]}` : "—"} hint={`${months.length} meses no app`} />
           </div>
 
-          <Panel title={editing ? "Editar contrato" : "Adicionar contrato"} subtitle="Swap sobre o PLD do submercado. Volume em MW médio; preço fixo em R$/MWh; período em meses (AAAA-MM).">
-            <div className="flex flex-wrap items-end gap-2 text-xs">
+          <Panel title={editing ? "Editar contrato" : "Adicionar contrato"} subtitle="Volume em MW médio, preço fixo em R$/MWh e período em meses">
+            <div className="flex flex-wrap items-end gap-3 text-[12px] text-muted">
               <label className="flex flex-col gap-1">Rótulo<input className={inputCls} value={f.label} onChange={(e) => setF({ ...f, label: e.target.value })} placeholder="opcional" /></label>
               <label className="flex flex-col gap-1">Submercado
                 <select className={inputCls} value={f.submarket} onChange={(e) => setF({ ...f, submarket: e.target.value as Sub })}>{SUBS.map((s) => <option key={s} value={s}>{s}</option>)}</select>
@@ -210,15 +203,15 @@ export default function CarteiraPage() {
               <label className="flex flex-col gap-1">Preço R$/MWh<input className={`${inputCls} w-28`} type="number" min="0" step="1" value={f.priceRS} onChange={(e) => setF({ ...f, priceRS: e.target.value })} /></label>
               <label className="flex flex-col gap-1">Início<input className={`${inputCls} w-28`} type="month" value={f.start} onChange={(e) => setF({ ...f, start: e.target.value })} /></label>
               <label className="flex flex-col gap-1">Fim<input className={`${inputCls} w-28`} type="month" value={f.end} onChange={(e) => setF({ ...f, end: e.target.value })} /></label>
-              <button onClick={add} disabled={!valid} className="rounded-md border border-accent/50 bg-accent/10 px-3 py-1.5 text-xs font-medium text-accent hover:bg-accent/20 disabled:opacity-40">{editing ? "Salvar alterações" : "Adicionar"}</button>
-              {editing ? <button onClick={() => setEditing(null)} className="rounded-md border border-line px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-2">Cancelar edição</button> : null}
-              {contracts.length === 0 ? <button onClick={() => setContracts(EXEMPLOS)} className="rounded-md border border-line px-3 py-1.5 text-xs text-ink-2 hover:bg-surface-2">Carregar exemplos</button> : null}
+              <button onClick={add} disabled={!valid} className="inline-flex min-h-11 sm:min-h-9 items-center rounded-full bg-accent-fill px-4 text-[13px] font-semibold text-on-accent hover:brightness-110 disabled:opacity-40">{editing ? "Salvar alterações" : "Adicionar"}</button>
+              {editing ? <button onClick={() => setEditing(null)} className={pill}>Cancelar edição</button> : null}
+              {contracts.length === 0 ? <button onClick={() => setContracts(EXEMPLOS)} className={pill}>Carregar exemplos</button> : null}
             </div>
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-line pt-3 text-xs">
-              <button onClick={exportCsv} disabled={!contracts.length} className="rounded-md border border-line px-2.5 py-1 text-ink-2 hover:bg-surface-2 disabled:opacity-40" title="Resultado mês a mês de cada contrato">↓ CSV da carteira</button>
-              <button onClick={exportJson} disabled={!contracts.length} className="rounded-md border border-line px-2.5 py-1 text-ink-2 hover:bg-surface-2 disabled:opacity-40" title="Backup dos contratos para restaurar em outro navegador">↓ Backup (JSON)</button>
-              <label className="cursor-pointer rounded-md border border-line px-2.5 py-1 text-ink-2 hover:bg-surface-2" title="Restaurar contratos de um backup JSON">
-                ↑ Importar JSON
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-[13px]">
+              <button onClick={exportCsv} disabled={!contracts.length} className={pill} title="Resultado mês a mês de cada contrato">Baixar CSV</button>
+              <button onClick={exportJson} disabled={!contracts.length} className={pill} title="Backup dos contratos para restaurar em outro navegador">Backup (JSON)</button>
+              <label className={`${pill} cursor-pointer`} title="Restaurar contratos de um backup JSON">
+                Importar backup
                 <input type="file" accept="application/json,.json" className="sr-only" onChange={(e) => { void importJson(e.target.files?.[0]); e.target.value = ""; }} />
               </label>
               {msg ? <span className="text-muted" role="status">{msg}</span> : null}
@@ -226,7 +219,7 @@ export default function CarteiraPage() {
           </Panel>
 
           {summary.exposure.length ? (
-            <Panel title="Exposição líquida por submercado" subtitle={`MW médio ativos no último mês com PLD (${summary.latestMonth ?? "—"}). Positivo = comprado, negativo = vendido.`}>
+            <Panel title="Exposição líquida" subtitle={`MW médio no último mês com PLD (${summary.latestMonth ?? "—"}); positivo = comprado`}>
               <Table
                 head={["Submercado", "Exposição (MWm)", "Contratos"]}
                 align={["left", "right", "right"]}
@@ -237,10 +230,10 @@ export default function CarteiraPage() {
 
           {openRows.length ? (
             <Panel
-              title="Exposição a termo — meses em aberto"
-              subtitle="Energia líquida por mês ainda sem PLD realizado (MWh; + comprado, − vendido). Informe a sua curva a termo (ex.: cotação BBCE do dia) para marcar a mercado — o valor fica só neste navegador."
+              title="Meses em aberto"
+              subtitle="Energia líquida por mês ainda sem PLD (MWh). Informe a curva a termo (ex.: BBCE) para marcar a mercado."
             >
-              <div className="mb-3 flex flex-wrap items-end gap-2 text-xs">
+              <div className="mb-4 flex flex-wrap items-end gap-3 text-[12px] text-muted">
                 {SUBS.map((s) => (
                   <label key={s} className="flex flex-col gap-1">
                     Termo {s} (R$/MWh)
@@ -249,21 +242,22 @@ export default function CarteiraPage() {
                 ))}
                 {mtm && mtm.pricedMonths ? (
                   <div className="ml-2 flex flex-col">
-                    <span className="text-muted">MtM dos meses em aberto</span>
-                    <span className={`text-lg font-semibold ${mtm.mtmRS >= 0 ? "text-good" : "text-critical"}`}>{brl(mtm.mtmRS, 0)}</span>
-                    <span className="text-[11px] text-muted">{mtm.pricedMonths} mês(es)-contrato marcados{mtm.unpricedMonths ? ` · ${mtm.unpricedMonths} sem preço` : ""}</span>
+                    <span className="text-muted">Marcação a mercado</span>
+                    <span className={`tnum text-[22px] font-semibold ${mtm.mtmRS >= 0 ? "text-good" : "text-critical"}`}>{brl(mtm.mtmRS, 0)}</span>
+                    <span className="text-[12px] text-muted">{mtm.pricedMonths} mês(es)-contrato marcados{mtm.unpricedMonths ? ` · ${mtm.unpricedMonths} sem preço` : ""}</span>
                   </div>
                 ) : null}
               </div>
               <Table
                 head={["Mês", ...SUBS, "Total"]}
+                stack={false}
                 align={["left", "right", "right", "right", "right", "right"]}
                 rows={openRows.slice(0, 24).map((r) => [r.month, ...SUBS.map((s) => (r.bySub[s] === undefined ? "—" : num(r.bySub[s]!, 0))), num(r.totalMWh, 0)])}
               />
             </Panel>
           ) : null}
 
-          <Panel title="Contratos" subtitle="Liquidação = Σ (PLD_mês − preço)·energia (comprador; simétrico para vendedor), nos meses com PLD realizado.">
+          <Panel title="Contratos" subtitle="Resultado = (PLD do mês − preço) × energia, para quem compra; o inverso para quem vende">
             {contracts.length ? (
               <Table
                 head={["Rótulo", "Sub", "Lado", "MWm", "Preço", "Período", "Meses liq.", "Resultado", ""]}
@@ -277,27 +271,30 @@ export default function CarteiraPage() {
                   `${r.contract.start} → ${r.contract.end}`,
                   r.openMonths ? `${r.coveredMonths} (+${r.openMonths} aberto${r.partialMonths ? `, ${r.partialMonths} parcial` : ""})` : String(r.coveredMonths),
                   r.coveredMonths ? brl(r.settledRS, 0) : "—",
-                  <span key="x" className="inline-flex gap-3">
-                    <button onClick={() => edit(r.contract)} className="text-accent hover:underline" title="Editar">editar</button>
-                    <button onClick={() => remove(r.contract.id)} className="text-critical hover:underline" title="Remover">remover</button>
+                  <span key="x" className="-ml-2 inline-flex gap-1 sm:ml-0 sm:gap-3">
+                    <button onClick={() => edit(r.contract)} className="inline-flex min-h-11 items-center px-2 text-accent hover:underline sm:min-h-0 sm:px-0" title="Editar">editar</button>
+                    <button onClick={() => remove(r.contract.id)} className="inline-flex min-h-11 items-center px-2 text-critical hover:underline sm:min-h-0 sm:px-0" title="Remover">remover</button>
                   </span>,
                 ])}
               />
             ) : (
-              <p className="text-xs text-muted">Nenhum contrato. Adicione acima ou carregue os exemplos.</p>
+              <p className="text-[14px] text-muted">Nenhum contrato. Adicione acima ou carregue os exemplos.</p>
             )}
           </Panel>
 
-          <Panel title="PLD médio mensal (referência)" subtitle="Base da liquidação, calculado do painel realizado do app por submercado.">
-            <Table
-              head={["Mês", ...SUBS]}
-              align={["left", "right", "right", "right", "right"]}
-              rows={months.slice(-12).map((m) => [
-                pld.hours && SUBS.some((s) => (pld.hours?.[m]?.[s] ?? Infinity) < hoursInMonth(m)) ? `${m} (parcial)` : m,
-                ...SUBS.map((s) => { const v = pld.byMonth[m]?.[s]; return v === undefined ? "—" : brl(v, 0); }),
-              ])}
-            />
-          </Panel>
+          <Disclosure title="PLD médio mensal" hint="base da liquidação">
+            <Panel title="PLD médio mensal" subtitle="Calculado do PLD realizado do app, por submercado">
+              <Table
+                head={["Mês", ...SUBS]}
+                stack={false}
+                align={["left", "right", "right", "right", "right"]}
+                rows={months.slice(-12).map((m) => [
+                  pld.hours && SUBS.some((s) => (pld.hours?.[m]?.[s] ?? Infinity) < hoursInMonth(m)) ? `${m} (parcial)` : m,
+                  ...SUBS.map((s) => { const v = pld.byMonth[m]?.[s]; return v === undefined ? "—" : brl(v, 0); }),
+                ])}
+              />
+            </Panel>
+          </Disclosure>
         </>
       ) : null}
     </div>

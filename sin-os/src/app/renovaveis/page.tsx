@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { Empty, ErrorBox, Kpi, Loading, MetricRow, PageHeader, Panel, Segmented, SimBanner, SourceTag, sourceState, Table } from "@/components/ui";
+import { Disclosure, Empty, ErrorBox, Kpi, Loading, MetricRow, PageHeader, Panel, Segmented, SimBanner, sourceState, Table } from "@/components/ui";
 import type { RenovaveisHistoricoResp, RenovaveisResp } from "@/lib/apiTypes";
 import { baseOption, C, categoryAxis, line, SUB_COLOR, valueAxis } from "@/lib/chart";
 import { brl, dayLabel, num } from "@/lib/fmt";
@@ -108,10 +108,10 @@ export default function RenovaveisPage() {
   const ne = data?.vsPld?.find((x) => x.sub === "NE") ?? null;
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <PageHeader
-        title="Renováveis · corte e carga líquida"
-        subtitle="Energia eólica e solar que o ONS mandou não gerar (constrained-off), por que e quando — cruzada com o PLD da mesma hora e com a curva do pato. Dados abertos do ONS, dias fechados."
+        title="Renováveis & corte"
+        subtitle="Quanta energia eólica e solar o ONS mandou não gerar, quando e por quê."
         right={
           <div className="flex flex-wrap items-center gap-2">
             <Segmented label="Janela" value={days} options={DAYS_OPTS} onChange={setDays} />
@@ -119,10 +119,10 @@ export default function RenovaveisPage() {
           </div>
         }
       />
-      <SimBanner metas={[data?.meta.curtailment, data?.meta.balanco, data?.meta.pld]} />
+      <SimBanner metas={[data?.meta.curtailment, data?.meta.balanco, data?.meta.pld]} label="ONS" staleAfterMs={STALE_MS} />
       {error && !data ? <ErrorBox error={error} onRetry={() => mutate()} /> : null}
 
-      <div className="grid grid-cols-2 gap-2 md:grid-cols-3 xl:grid-cols-6">
+      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
         <Kpi label="Eólica cortada" value={c ? gwh(c.totals.eolicaMWh) : null} format={(v) => num(v, 0)} unit={`GWh · ${num(c?.curtailedSharePct.eolica, 1)}%`} state={state} at={data?.meta.curtailment.latestTs} source={c ? `% do potencial · ${dayLabel(c.from!)}–${dayLabel(c.to!)}` : undefined} />
         <Kpi label="Solar cortada" value={c ? gwh(c.totals.solarMWh) : null} format={(v) => num(v, 0)} unit={`GWh · ${num(c?.curtailedSharePct.solar, 1)}%`} state={state} at={data?.meta.curtailment.latestTs} source="% do potencial · ONS" />
         <Kpi label="Corte total" value={totalMWh !== null ? gwh(totalMWh) : null} format={(v) => num(v, 0)} unit={c ? `GWh · piso ${num(gwh(c.totals.cappedMWh), 0)}` : "GWh"} state={state} source="oficial · piso = limitado à disponibilidade" detail="Piso: referência limitada à disponibilidade do conjunto. Teto: geração não realizada apurada do ONS." />
@@ -131,21 +131,21 @@ export default function RenovaveisPage() {
         <Kpi label="Rampa da noite" value={n?.eveningRampMW != null ? n.eveningRampMW / 1000 : null} format={(v) => num(v, 1)} unit="GW em 3 h" state={sourceState(data?.meta.balanco, STALE_MS)} at={data?.meta.balanco.latestTs} source={`SIN · mínimo da carga líquida às ${n?.minHour ?? "—"}h`} />
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <Panel title="Corte por dia e submercado" subtitle="GWh · geração não realizada apurada (oficial)" right={<Segmented label="Fonte" value={tech} options={TECH_OPTS} onChange={setTech} />}>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel title="Corte por dia" subtitle="GWh por submercado, valor oficial do ONS" right={<Segmented label="Fonte" value={tech} options={TECH_OPTS} onChange={setTech} size="xs" />}>
           {daily ? <EChart option={daily} height={280} label="Corte diário por submercado" dim={isValidating} /> : data ? <Empty label="Sem corte registrado na janela." height={280} /> : <Loading height={280} />}
         </Panel>
-        <Panel title={`Em que hora sobra energia — ${area === "SIN" ? "SIN" : SUB_NAMES[area]}`} subtitle="Corte médio por hora do dia (barras) × PLD médio na mesma hora (linha)" right={<SourceTag meta={data?.meta.pld} label="PLD" />}>
+        <Panel title={`Em que hora sobra energia — ${area === "SIN" ? "SIN" : SUB_NAMES[area]}`} subtitle="Corte médio por hora (barras) e PLD na mesma hora (linha)">
           {hourly ? <EChart option={hourly} height={280} label="Perfil horário do corte versus PLD" dim={isValidating} /> : <Loading height={280} />}
         </Panel>
       </div>
 
-      <Panel title="Corte por mês — 12 meses" subtitle="GWh de eólica + solar (oficial ONS) e o piso limitado à disponibilidade · * mês em curso, parcial" right={<SourceTag meta={data?.meta.curtailment} label="ONS" staleAfterMs={STALE_MS} />}>
+      <Panel title="Corte por mês" subtitle="Últimos 12 meses, em GWh · * mês em curso">
         {monthly ? (
           <>
             <EChart option={monthly} height={260} label="Corte mensal de eólica e solar" />
             {histMonths?.some((m) => m.revision) ? (
-              <ul className="mt-2 flex flex-col gap-1 text-[11.5px] text-warning">
+              <ul className="mt-2 flex flex-col gap-1 text-[13px] text-warning">
                 {histMonths
                   .filter((m) => m.revision)
                   .map((m) => (
@@ -155,7 +155,7 @@ export default function RenovaveisPage() {
                   ))}
               </ul>
             ) : (
-              <p className="mt-2 text-[11px] text-muted">Cada mês é recalculado quando o ONS republica o arquivo; mudanças nos totais aparecem aqui.</p>
+              <p className="mt-2 text-[12px] text-muted">Cada mês é recalculado quando o ONS republica o arquivo; mudanças nos totais aparecem aqui.</p>
             )}
           </>
         ) : hist.error ? (
@@ -165,11 +165,11 @@ export default function RenovaveisPage() {
         )}
       </Panel>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title={`Curva do pato — ${area}`} subtitle="Perfil médio por hora: carga e carga líquida (carga − eólica − solar). A rampa da noite é o que térmicas, hidrelétricas e baterias precisam cobrir." right={<SourceTag meta={data?.meta.balanco} label="ONS" staleAfterMs={STALE_MS} />}>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Panel className="xl:col-span-2" title={`Curva do pato — ${area}`} subtitle="Carga e carga líquida (sem eólica e solar) por hora; a rampa da noite é o que o resto do sistema cobre">
           {duck ? <EChart option={duck} height={280} label="Carga e carga líquida por hora" dim={isValidating} /> : <Loading height={280} />}
         </Panel>
-        <Panel title="Por que cortou" subtitle="Razão declarada pelo ONS (MWh)">
+        <Panel title="Por que cortou" subtitle="Motivo declarado pelo ONS">
           {c ? (
             <div className="flex flex-col">
               {(["ENE", "CNF", "REL"] as const).map((r) => (
@@ -183,44 +183,46 @@ export default function RenovaveisPage() {
         </Panel>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel className="xl:col-span-2" title="Corte × PLD por submercado" subtitle={`Horas com ≥ 50 MWh cortados · PLD no piso (${brl(data?.pldFloor)}) = energia sobrando · valor = MWh cortado × PLD da hora`}>
-          {data?.vsPld ? (
-            <Table
-              head={["Submercado", "Horas com corte", "PLD no piso", "MWh cortado", "PLD médio no corte", "Valor a PLD"]}
-              align={["left", "right", "right", "right", "right", "right"]}
-              rows={data.vsPld.map((x) => [SUB_NAMES[x.sub], num(x.hours), x.sharePct === null ? "—" : `${num(x.sharePct, 0)}%`, num(x.mwhPriced), brl(x.avgPld), brl(x.valueBRL, 0)])}
-            />
-          ) : data ? (
-            <Empty label="PLD indisponível para cruzar com o corte." />
-          ) : (
-            <Loading height={140} />
-          )}
-        </Panel>
-        <Panel title="Qualidade dos dados" subtitle="Checagens feitas a cada leitura">
-          {c ? (
-            <div className="flex flex-col">
-              <MetricRow label="Meias horas com restrição" value={num(c.quality.restrictedIntervals)} />
-              <MetricRow label="Referência acima da disponibilidade" value={num(c.quality.refAboveAvailIntervals)} hint={`${num(c.quality.inflatedSharePct, 1)}% do MWh`} tone={c.quality.inflatedSharePct > 5 ? "warning" : undefined} />
-              <MetricRow label="Método da apurada (erro médio)" value={c.quality.methodMAE === null ? "—" : `${num(c.quality.methodMAE, 2)} MW`} tone={c.quality.methodMAE !== null && c.quality.methodMAE < 1 ? "good" : "warning"} />
-              <MetricRow label="Convenção de hora (início da meia hora)" value={data?.hourCheck ? (data.hourCheck.ok ? "validada" : "divergente") : "—"} tone={data?.hourCheck?.ok ? "good" : "warning"} />
-              <MetricRow label="Balanço fecha (horas)" value={n ? `${num(n.quality.hours - n.quality.identityBreaks)}/${num(n.quality.hours)}` : "—"} tone={n && n.quality.identityBreaks === 0 ? "good" : "warning"} />
-            </div>
-          ) : (
-            <Loading height={140} />
-          )}
-        </Panel>
-      </div>
+      <Panel title="Corte × PLD por submercado" subtitle={`Horas com pelo menos 50 MWh cortados; PLD no piso (${brl(data?.pldFloor)}) indica energia sobrando`}>
+        {data?.vsPld ? (
+          <Table
+            head={["Submercado", "Horas com corte", "PLD no piso", "MWh cortado", "PLD médio no corte", "Valor a PLD"]}
+            align={["left", "right", "right", "right", "right", "right"]}
+            rows={data.vsPld.map((x) => [SUB_NAMES[x.sub], num(x.hours), x.sharePct === null ? "—" : `${num(x.sharePct, 0)}%`, num(x.mwhPriced), brl(x.avgPld), brl(x.valueBRL, 0)])}
+          />
+        ) : data ? (
+          <Empty label="PLD indisponível para cruzar com o corte." />
+        ) : (
+          <Loading height={140} />
+        )}
+      </Panel>
 
-      {data?.notes.length ? (
-        <Panel title="Como ler estes números" subtitle="Lições das bases do ONS, verificadas nos dados desta janela">
-          <ul className="flex list-disc flex-col gap-1.5 pl-4 text-[12px] leading-relaxed text-ink-2">
-            {data.notes.map((t) => (
-              <li key={t}>{t}</li>
-            ))}
-          </ul>
-        </Panel>
-      ) : null}
+      <Disclosure title="Qualidade dos dados e como ler" hint="checagens feitas a cada leitura">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <Panel title="Qualidade dos dados" subtitle="Checagens feitas a cada leitura">
+              {c ? (
+                <div className="flex flex-col">
+                  <MetricRow label="Meias horas com restrição" value={num(c.quality.restrictedIntervals)} />
+                  <MetricRow label="Referência acima da disponibilidade" value={num(c.quality.refAboveAvailIntervals)} hint={`${num(c.quality.inflatedSharePct, 1)}% do MWh`} tone={c.quality.inflatedSharePct > 5 ? "warning" : undefined} />
+                  <MetricRow label="Método da apurada (erro médio)" value={c.quality.methodMAE === null ? "—" : `${num(c.quality.methodMAE, 2)} MW`} tone={c.quality.methodMAE !== null && c.quality.methodMAE < 1 ? "good" : "warning"} />
+                  <MetricRow label="Convenção de hora (início da meia hora)" value={data?.hourCheck ? (data.hourCheck.ok ? "validada" : "divergente") : "—"} tone={data?.hourCheck?.ok ? "good" : "warning"} />
+                  <MetricRow label="Balanço fecha (horas)" value={n ? `${num(n.quality.hours - n.quality.identityBreaks)}/${num(n.quality.hours)}` : "—"} tone={n && n.quality.identityBreaks === 0 ? "good" : "warning"} />
+                </div>
+              ) : (
+                <Loading height={140} />
+              )}
+            </Panel>
+            {data?.notes.length ? (
+              <Panel title="Como ler estes números" subtitle="Lições das bases do ONS, verificadas nesta janela">
+                <ul className="flex list-disc flex-col gap-2 pl-4 text-[14px] leading-relaxed text-ink-2">
+                  {data.notes.map((t) => (
+                    <li key={t}>{t}</li>
+                  ))}
+                </ul>
+              </Panel>
+            ) : null}
+          </div>
+      </Disclosure>
     </div>
   );
 }

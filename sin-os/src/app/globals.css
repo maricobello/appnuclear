@@ -1,38 +1,102 @@
 @import "tailwindcss";
 
 /*
- * SIN OS — sistema de design "terminal".
- * Princípios (Apple HIG aplicados a um terminal de energia): clareza (tipografia técnica,
- * contraste alto, números tabulares), deferência (o dado é o protagonista; cromo mínimo,
- * bordas finas, sem sombras nem gradientes) e profundidade por camadas de superfície.
- * Paleta categórica dos submercados validada (skill de dataviz) contra a superfície.
+ * SIN OS — sistema visual calmo, no espírito do Apple HIG:
+ *  - deferência: o dado é o protagonista; superfícies em camadas, sem bordas nem enfeites;
+ *  - clareza: tipografia do sistema (SF Pro nos aparelhos Apple), poucos tamanhos, números tabulares;
+ *  - cor só com significado (submercado, alta/baixa, alerta), com variantes para claro e escuro.
+ * O tema segue o sistema operacional; `data-theme` no <html> força claro ou escuro.
  */
 :root {
+  color-scheme: light;
+  --page: #f5f5f7;
+  --surface: #ffffff;
+  --surface-2: #f2f2f5;
+  --surface-3: #e8e8ed;
+  --border: rgba(0, 0, 0, 0.07);
+  --border-strong: rgba(0, 0, 0, 0.13);
+  --grid: #ececf0;
+  --axis: #d2d2d7;
+  --ink: #1d1d1f;
+  --ink-2: #3a3a3c;
+  --muted: #6e6e73;
+  --accent: #0066cc;
+  --accent-fill: #0071e3;
+  --accent-2: #08739a;
+  --good: #167532;
+  --warning: #9a5400;
+  --serious: #b83200;
+  --critical: #c8001a;
+  --on-accent: #ffffff;
+  --seg-thumb: #ffffff;
+  --sub-se: #007aff;
+  --sub-s: #e67700;
+  --sub-ne: #2fa84f;
+  --sub-n: #af52de;
+  --shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 18px rgba(0, 0, 0, 0.05);
+  --glass: rgba(245, 245, 247, 0.78);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --page: #000000;
+    --surface: #1c1c1e;
+    --surface-2: #2c2c2e;
+    --surface-3: #3a3a3c;
+    --border: rgba(255, 255, 255, 0.08);
+    --border-strong: rgba(255, 255, 255, 0.15);
+    --grid: #28282a;
+    --axis: #3a3a3c;
+    --ink: #f5f5f7;
+    --ink-2: #d1d1d6;
+    --muted: #98989d;
+    --accent: #409cff;
+    --accent-fill: #0071e3;
+    --accent-2: #64d2ff;
+    --good: #30d158;
+    --warning: #ffd60a;
+    --serious: #ff9f0a;
+    --critical: #ff6961;
+    --on-accent: #ffffff;
+    --seg-thumb: #636366;
+    --sub-se: #0a84ff;
+    --sub-s: #ff9f0a;
+    --sub-ne: #30d158;
+    --sub-n: #bf5af2;
+    --shadow: none;
+    --glass: rgba(0, 0, 0, 0.72);
+  }
+}
+
+:root[data-theme="dark"] {
   color-scheme: dark;
-  --page: #05080d;
-  --surface: #0a0e15;
-  --surface-2: #0e141d;
-  --surface-3: #141c28;
-  --border: rgba(148, 163, 184, 0.11);
-  --border-strong: rgba(148, 163, 184, 0.2);
-  --grid: #161f2c;
-  --axis: #243044;
-  --ink: #e9eef5;
-  --ink-2: #b6c0cd;
-  --muted: #7c8797;
-  --accent: #3b9eff;
-  --accent-2: #22d3ee;
-  --s1: #3987e5;
-  --s2: #d95926;
-  --s3: #199e70;
-  --s4: #c98500;
-  --s5: #d55181;
-  --s7: #9085e9;
-  --good: #2fbf71;
-  --warning: #f2b63a;
-  --serious: #f08a4b;
-  --critical: #ef5350;
-  --radius: 6px;
+  --page: #000000;
+  --surface: #1c1c1e;
+  --surface-2: #2c2c2e;
+  --surface-3: #3a3a3c;
+  --border: rgba(255, 255, 255, 0.08);
+  --border-strong: rgba(255, 255, 255, 0.15);
+  --grid: #28282a;
+  --axis: #3a3a3c;
+  --ink: #f5f5f7;
+  --ink-2: #d1d1d6;
+  --muted: #98989d;
+  --accent: #409cff;
+  --accent-fill: #0071e3;
+  --accent-2: #64d2ff;
+  --good: #30d158;
+  --warning: #ffd60a;
+  --serious: #ff9f0a;
+  --critical: #ff6961;
+  --on-accent: #ffffff;
+  --seg-thumb: #636366;
+  --sub-se: #0a84ff;
+  --sub-s: #ff9f0a;
+  --sub-ne: #30d158;
+  --sub-n: #bf5af2;
+  --shadow: none;
+  --glass: rgba(0, 0, 0, 0.72);
 }
 
 @theme inline {
@@ -46,13 +110,18 @@
   --color-ink-2: var(--ink-2);
   --color-muted: var(--muted);
   --color-accent: var(--accent);
+  --color-accent-fill: var(--accent-fill);
   --color-accent-2: var(--accent-2);
   --color-good: var(--good);
   --color-warning: var(--warning);
   --color-serious: var(--serious);
   --color-critical: var(--critical);
-  --font-sans: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, "SF Pro Text", system-ui, "Segoe UI", sans-serif;
-  --font-mono: var(--font-geist-mono), "SF Mono", ui-monospace, Menlo, monospace;
+  --color-on-accent: var(--on-accent);
+  --color-seg-thumb: var(--seg-thumb);
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", var(--font-geist-sans), system-ui, "Segoe UI", sans-serif;
+  /* números alinhados na fonte do sistema (como o SF Pro tabular); mono de verdade só para código */
+  --font-mono: -apple-system, BlinkMacSystemFont, "SF Pro Text", var(--font-geist-sans), system-ui, sans-serif;
+  --font-code: "SF Mono", var(--font-geist-mono), ui-monospace, Menlo, monospace;
 }
 
 html,
@@ -63,36 +132,46 @@ body {
 
 body {
   font-family: var(--font-sans);
-  font-size: 13px;
-  line-height: 1.4;
+  font-size: 14px;
+  line-height: 1.45;
+  letter-spacing: -0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
 }
 
 ::selection {
-  background: rgba(59, 158, 255, 0.35);
+  background: color-mix(in srgb, var(--accent) 30%, transparent);
 }
 
-/* foco visível e consistente (teclado), sem anel no clique do mouse */
 :focus-visible {
   outline: 2px solid var(--accent);
   outline-offset: 2px;
-  border-radius: 3px;
+  border-radius: 6px;
 }
 
-.tnum {
+.tnum,
+.font-mono {
   font-variant-numeric: tabular-nums;
-  font-feature-settings: "tnum" 1, "zero" 1;
 }
 
-/* rótulo de seção: pequeno, caixa-alta, espaçado — hierarquia sem peso visual */
+/* rótulo pequeno em caixa normal: hierarquia pela cor, não por caixa-alta */
 .eyebrow {
-  font-size: 10.5px;
-  font-weight: 600;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
+  font-size: 12px;
+  font-weight: 500;
   color: var(--muted);
+}
+
+.card {
+  background: var(--surface);
+  border-radius: 18px;
+  box-shadow: var(--shadow);
+}
+
+.glass {
+  background: var(--glass);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
 }
 
 .scrollbar-thin {
@@ -135,7 +214,15 @@ body {
   background: linear-gradient(90deg, var(--surface-2) 0px, var(--surface-3) 120px, var(--surface-2) 240px);
   background-size: 800px 100%;
   animation: shimmer 1.4s linear infinite;
-  border-radius: 4px;
+  border-radius: 12px;
+}
+
+/* disclosure nativo sem o marcador padrão */
+summary::-webkit-details-marker {
+  display: none;
+}
+summary {
+  list-style: none;
 }
 
 /* inputs numéricos sem setas nativas (usamos stepper próprio) */

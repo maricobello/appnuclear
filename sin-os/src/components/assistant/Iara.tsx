@@ -159,22 +159,37 @@ function RichText({ text }: { text: string }) {
 
 /* --------------------------------------------------------------- botão */
 
-export function IaraButton({ open, onToggle }: { open: boolean; onToggle: () => void }) {
+export function IaraButton({ open, onToggle, variant = "pill" }: { open: boolean; onToggle: () => void; variant?: "pill" | "search" }) {
   const cfg = useIara();
   const { data } = useApi<IaraStatus>(cfg.enabled ? "/api/assistente" : null, 300_000);
-  const dot = !cfg.enabled ? "bg-muted/50" : !data ? "bg-muted" : data.online ? "bg-good" : data.configured ? "bg-critical" : "bg-warning";
+  const problem = cfg.enabled && data && !data.online ? (data.configured ? "bg-critical" : "bg-warning") : null;
   const title = !cfg.enabled ? "Iara — assistente de voz (desligada; clique para conhecer)" : data?.online ? `Iara online · ${data.model ?? "Groq"} (⌘J)` : data?.configured ? `Iara: Groq fora do ar — ${data.error ?? ""}` : "Iara: IA não configurada no servidor";
+  const orb = <span className={`h-4 w-4 shrink-0 rounded-full ${cfg.enabled ? "bg-[radial-gradient(circle_at_35%_30%,#7fe9ff,#0a84ff_55%,#0b3f80)]" : "bg-[radial-gradient(circle_at_35%_30%,#a1a1a6,#636366)]"}`} aria-hidden />;
+  if (variant === "search")
+    return (
+      <button
+        onClick={onToggle}
+        aria-expanded={open}
+        aria-controls="iara-panel"
+        title={title}
+        className={`flex min-h-10 w-full items-center gap-2.5 rounded-[10px] px-3 text-[14px] transition-colors ${open ? "bg-accent/12 text-ink" : "bg-surface-2 text-muted hover:text-ink"}`}
+      >
+        {orb}
+        <span className="min-w-0 flex-1 truncate text-left">Perguntar à Iara</span>
+        {problem ? <span className={`h-2 w-2 rounded-full ${problem}`} aria-hidden /> : <kbd className="font-sans text-[13px] text-muted">⌘J</kbd>}
+      </button>
+    );
   return (
     <button
       onClick={onToggle}
       aria-expanded={open}
       aria-controls="iara-panel"
       title={title}
-      className={`inline-flex h-7 items-center gap-1.5 rounded-full border px-1.5 pr-2 text-[11.5px] font-medium transition-colors ${open ? "border-accent/60 bg-accent/10 text-ink" : "border-line-strong text-ink-2 hover:bg-surface-2 hover:text-ink"}`}
+      className={`inline-flex min-h-11 items-center gap-2 rounded-full px-3 text-[14px] font-medium transition-colors ${open ? "bg-accent/12 text-ink" : "text-ink-2 hover:bg-surface-2"}`}
     >
-      <span className={`h-3.5 w-3.5 rounded-full ${cfg.enabled ? "bg-[radial-gradient(circle_at_35%_30%,#7fe9ff,#3b9eff_55%,#174a86)]" : "bg-[radial-gradient(circle_at_35%_30%,#56657a,#2a3342)]"}`} aria-hidden />
-      <span className="hidden sm:inline">Iara</span>
-      <span className={`h-1.5 w-1.5 rounded-full ${dot}`} aria-hidden />
+      {orb}
+      Iara
+      {problem ? <span className={`h-2 w-2 rounded-full ${problem}`} aria-hidden /> : null}
     </button>
   );
 }
@@ -431,18 +446,18 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
           role="dialog"
           aria-modal="false"
           aria-label="Iara — assistente"
-          className="fixed inset-x-2 bottom-2 z-50 flex h-[min(640px,calc(100dvh-72px))] flex-col overflow-hidden rounded-xl border border-line-strong bg-surface shadow-[0_24px_80px_-12px_rgba(0,0,0,0.8)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[420px]"
+          className="fixed inset-x-2 bottom-2 z-50 flex h-[min(640px,calc(100dvh-72px))] flex-col overflow-hidden rounded-[22px] bg-surface shadow-[0_24px_80px_-12px_rgba(0,0,0,0.45)] sm:inset-x-auto sm:right-4 sm:bottom-4 sm:w-[420px]"
           initial={{ opacity: 0, y: 24, scale: 0.97 }}
           animate={{ opacity: 1, y: 0, scale: 1 }}
           exit={{ opacity: 0, y: 16, scale: 0.98 }}
           transition={{ type: "spring", stiffness: 380, damping: 34 }}
         >
           {/* cabeçalho */}
-          <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3">
+          <div className="flex h-14 shrink-0 items-center gap-2.5 border-b border-line px-4">
             <span className={`h-4 w-4 rounded-full ${cfg.enabled ? "bg-[radial-gradient(circle_at_35%_30%,#7fe9ff,#3b9eff_55%,#174a86)]" : "bg-[radial-gradient(circle_at_35%_30%,#56657a,#2a3342)]"}`} aria-hidden />
             <div className="min-w-0 leading-tight">
               <div className="text-[13px] font-semibold text-ink">Iara</div>
-              <div className={`truncate text-[10.5px] ${statusTone}`}>{statusLine}</div>
+              <div className={`truncate text-[12px] ${statusTone}`}>{statusLine}</div>
             </div>
             <div className="ml-auto flex items-center gap-0.5">
               {cfg.enabled ? (
@@ -487,7 +502,7 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                     </p>
                     <div className="flex flex-wrap justify-center gap-1.5">
                       {SUGGESTIONS.map((s) => (
-                        <button key={s} onClick={() => void ask(s, false)} className="rounded-full border border-line-strong px-2.5 py-1 text-[11.5px] text-ink-2 transition-colors hover:border-accent/60 hover:text-ink">
+                        <button key={s} onClick={() => void ask(s, false)} className="rounded-full bg-surface-2 px-3 py-1.5 text-[13px] text-ink-2 transition-colors hover:bg-surface-3 hover:text-ink">
                           {s}
                         </button>
                       ))}
@@ -507,12 +522,12 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                             {m.tools?.length || m.actions?.length ? (
                               <div className="flex flex-wrap gap-1">
                                 {m.tools?.map((t, i) => (
-                                  <span key={`t${i}`} className={`rounded-[4px] border px-1.5 py-px text-[10px] ${t.ok ? "border-line text-muted" : "border-critical/40 text-critical"}`} title={`${t.ms} ms`}>
+                                  <span key={`t${i}`} className={`rounded-full px-2 py-px text-[11px] ${t.ok ? "border-line text-muted" : "border-critical/40 text-critical"}`} title={`${t.ms} ms`}>
                                     {TOOL_LABEL[t.name] ?? t.name}
                                   </span>
                                 ))}
                                 {m.actions?.map((a, i) => (
-                                  <span key={`a${i}`} className="rounded-[4px] border border-accent/40 px-1.5 py-px text-[10px] text-accent">
+                                  <span key={`a${i}`} className="rounded-[4px] border border-accent/40 px-1.5 py-px text-[11px] text-accent">
                                     {a.type === "navigate" ? `abriu ${a.label}` : `ativo → ${a.label}`}
                                   </span>
                                 ))}
@@ -544,7 +559,7 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                       </span>
                     </div>
                   </button>
-                  <span className="text-[10.5px] text-muted" aria-live="polite">
+                  <span className="text-[12px] text-muted" aria-live="polite">
                     {notice ?? PHASE_LABEL[phase]}
                   </span>
                 </div>
@@ -561,14 +576,14 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                     onChange={(e) => setDraft(e.target.value)}
                     placeholder="Pergunte à Iara…"
                     maxLength={1000}
-                    className="h-9 min-w-0 flex-1 rounded-md border border-line-strong bg-surface-2 px-3 text-[13px] text-ink placeholder:text-muted focus:border-accent/70 focus:outline-none"
+                    className="h-11 min-w-0 flex-1 rounded-full bg-surface-2 px-4 text-[13px] text-ink placeholder:text-muted focus:border-accent/70 focus:outline-none"
                     aria-label="Pergunta para a Iara"
                   />
-                  <button type="submit" disabled={!draft.trim()} className="grid h-9 w-9 place-items-center rounded-md bg-accent text-[#04111f] transition-opacity disabled:opacity-30" aria-label="Enviar">
+                  <button type="submit" disabled={!draft.trim()} className="grid h-11 w-11 place-items-center rounded-full bg-accent-fill text-on-accent transition-opacity disabled:opacity-30" aria-label="Enviar">
                     <Send size={15} />
                   </button>
                 </form>
-                <p className="mt-1.5 text-center text-[9.5px] text-muted">
+                <p className="mt-1.5 text-center text-[11px] text-muted">
                   <span className="hidden sm:inline">⌘J abre/fecha · Esc interrompe · </span>análise, não recomendação de investimento
                 </p>
               </div>
@@ -589,7 +604,7 @@ function Intro({ level, onEnable }: { level: MotionValue<number>; onEnable: () =
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
           Converse por voz ou texto com o SIN OS. A Iara consulta o PLD, a previsão, o estudo da bateria, os reservatórios e a saúde das fontes, e responde falando. Também abre telas e configura o seu ativo.
         </p>
-        <ul className="mt-3 space-y-1 text-left text-[11.5px] text-muted">
+        <ul className="mt-3 space-y-1 text-left text-[13px] text-muted">
           <li>• Fica desligada até você ativar; o microfone só abre quando você toca.</li>
           <li>• Só usa dado real das ferramentas do app — sem número inventado.</li>
           <li>• Voz: transcrição Whisper e raciocínio na Groq; fala com a voz pt-BR do seu sistema.</li>
@@ -606,8 +621,8 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
   return (
     <label className="flex cursor-pointer items-center justify-between gap-3 py-1">
       <span className="min-w-0">
-        <span className="block text-[12px] text-ink">{label}</span>
-        {hint ? <span className="block text-[10.5px] text-muted">{hint}</span> : null}
+        <span className="block text-[13px] text-ink">{label}</span>
+        {hint ? <span className="block text-[12px] text-muted">{hint}</span> : null}
       </span>
       <button
         role="switch"
@@ -629,9 +644,9 @@ function SettingsView({ ptVoices, voiceURI, needsCode, onClear, onDisable }: { p
       <Toggle label="Responder falando" hint="quando a pergunta vier por voz" checked={cfg.speak} onChange={(v) => saveIara({ speak: v })} />
       <Toggle label="Conversa contínua" hint="volta a ouvir depois de responder" checked={cfg.continuous} onChange={(v) => saveIara({ continuous: v })} />
       {ptVoices.length ? (
-        <label className="flex items-center justify-between gap-3 py-1 text-[12px] text-ink">
+        <label className="flex items-center justify-between gap-3 py-1 text-[13px] text-ink">
           Voz
-          <select value={voiceURI ?? ""} onChange={(e) => saveIara({ voiceURI: e.target.value || null })} className="h-7 max-w-[210px] rounded-md border border-line-strong bg-surface-2 px-1.5 text-[11.5px] text-ink">
+          <select value={voiceURI ?? ""} onChange={(e) => saveIara({ voiceURI: e.target.value || null })} className="h-7 max-w-[210px] rounded-md border border-line-strong bg-surface-2 px-1.5 text-[13px] text-ink">
             {ptVoices.map((v) => (
               <option key={v.voiceURI} value={v.voiceURI}>
                 {v.name}
@@ -648,7 +663,7 @@ function SettingsView({ ptVoices, voiceURI, needsCode, onClear, onDisable }: { p
             saveIara({ code: code.trim() });
           }}
         >
-          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="Código de acesso" className="h-7 min-w-0 flex-1 rounded-md border border-line-strong bg-surface-2 px-2 text-[12px] text-ink" aria-label="Código de acesso da Iara" autoComplete="off" />
+          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="Código de acesso" className="h-7 min-w-0 flex-1 rounded-md border border-line-strong bg-surface-2 px-2 text-[13px] text-ink" aria-label="Código de acesso da Iara" autoComplete="off" />
           <Button type="submit" variant="secondary">
             Salvar
           </Button>

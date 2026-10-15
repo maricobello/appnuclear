@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, SourceTag, Table } from "@/components/ui";
+import { SinFlow } from "@/components/home/panels";
+import { Disclosure, ErrorBox, Loading, PageHeader, Panel, Segmented, SimBanner, Table } from "@/components/ui";
+import { useNow } from "@/lib/useNow";
 import type { BrasilResp } from "@/lib/apiTypes";
 import { baseOption, C, categoryAxis, line, SUB_COLOR, timeAxis, valueAxis } from "@/lib/chart";
 import { brl, dayLabel, num } from "@/lib/fmt";
@@ -54,6 +56,7 @@ const dailyLines = (dates: string[], values: Record<Sub, (number | null)[]>, uni
 
 export default function SinPage() {
   const { data, error, isValidating } = useApi<BrasilResp>("/api/brasil", 60_000);
+  const now = useNow();
   const [sub, setSub] = useState<Sub>("SE");
 
   const heat = useMemo(() => (data?.aggregates ? heatmap(data, sub) : null), [data, sub]);
@@ -90,53 +93,62 @@ export default function SinPage() {
   const lastDays = data?.aggregates ? data.aggregates.dates.slice(-8).map((d, i, arr) => ({ d, i: data.aggregates!.dates.length - arr.length + i })) : [];
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <PageHeader
-        title="SIN · Sistema Interligado Nacional"
-        subtitle="PLD (CCEE), CMO do DESSEM (ONS), reservatórios, afluências e carga. O PLD é o CMO limitado ao piso/teto da ANEEL — divergências indicam problema de dados (o agente auditor checa isso)."
+        title="SIN · Brasil"
+        subtitle="Preço, operação e hidrologia dos quatro submercados."
         right={<Segmented label="Submercado" value={sub} options={SUB_OPTS} onChange={setSub} />}
       />
-      <SimBanner metas={[data?.meta.pld, data?.meta.cmo, data?.meta.ear, data?.meta.ena, data?.meta.load]} />
+      <SimBanner metas={[data?.meta.pld, data?.meta.cmo, data?.meta.ear, data?.meta.ena, data?.meta.load]} label="PLD" />
       {error && !data ? <ErrorBox error={error} /> : null}
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-        <Panel title={`Mapa de calor PLD ${sub} — dia × hora`} subtitle="Últimos 31 dias · escala sequencial (claro = caro)" right={<SourceTag meta={data?.meta.pld} />}>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Panel title="Agora" subtitle="Preço, carga e reservatório por submercado">
+          <SinFlow br={data} now={now} />
+        </Panel>
+        <Panel className="xl:col-span-2" title="PLD médio diário" subtitle="Últimos 90 dias">
+          {daily ? <EChart option={daily} height={260} label="PLD médio diário por submercado" /> : <Loading height={260} />}
+        </Panel>
+      </div>
+
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel title={`PLD ${sub} por dia e hora`} subtitle="Últimos 31 dias · mais claro = mais caro">
           {heat ? <EChart option={heat} height={520} label={`Mapa de calor do PLD ${sub}`} dim={isValidating} /> : <Loading height={520} />}
         </Panel>
-        <div className="flex flex-col gap-3">
-          <Panel title="PLD médio diário" subtitle="90 dias · 4 submercados">
-            {daily ? <EChart option={daily} height={220} label="PLD médio diário por submercado" /> : <Loading height={220} />}
-          </Panel>
-          <Panel title={`CMO (ONS) × PLD (CCEE) — ${SUB_NAMES[sub]}`} subtitle="Formação do preço: CMO semi-horário agregado por hora vs PLD" right={<SourceTag meta={data?.meta.cmo} label="ONS" />}>
+        <div className="flex flex-col gap-4">
+          <Panel title={`CMO × PLD — ${SUB_NAMES[sub]}`} subtitle="O PLD é o CMO do DESSEM limitado ao piso e ao teto">
             {cmoVsPld ? <EChart option={cmoVsPld} height={220} label="CMO versus PLD" /> : <Loading height={220} />}
+          </Panel>
+          <Panel title="Carga" subtitle="MWmed por hora · 7 dias">
+            {load ? <EChart option={load} height={220} label="Carga horária por subsistema" /> : <Loading height={220} />}
           </Panel>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel title="Energia armazenada (EAR)" subtitle="% da capacidade máxima · 12 meses" right={<SourceTag meta={data?.meta.ear} />}>
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+        <Panel title="Reservatórios (EAR)" subtitle="% da capacidade máxima · 12 meses">
           {ear ? <EChart option={ear} height={240} label="EAR por subsistema" /> : <Loading />}
         </Panel>
-        <Panel title="Energia natural afluente (ENA)" subtitle="% da MLT · 12 meses" right={<SourceTag meta={data?.meta.ena} />}>
+        <Panel title="Afluências (ENA)" subtitle="% da média de longo termo · 12 meses">
           {ena ? <EChart option={ena} height={240} label="ENA por subsistema" /> : <Loading />}
-        </Panel>
-        <Panel title="Carga horária" subtitle="MWmed · 7 dias" right={<SourceTag meta={data?.meta.load} />}>
-          {load ? <EChart option={load} height={240} label="Carga horária por subsistema" /> : <Loading />}
         </Panel>
       </div>
 
       {data?.aggregates ? (
-        <Panel title="PLD médio diário — tabela" subtitle="R$/MWh (inclui D+1 quando já publicado)">
-          <Table
-            head={["Data", ...SUBS.map((s) => `${s}`), "Spread máx."]}
-            align={["left", "right", "right", "right", "right", "right"]}
-            rows={lastDays.reverse().map(({ d, i }) => {
-              const v = SUBS.map((s) => data.aggregates!.daily[s][i]);
-              const f = v.filter((x): x is number => x !== null);
-              return [dayLabel(d), ...v.map((x) => num(x, 2)), f.length ? num(Math.max(...f) - Math.min(...f), 2) : "—"];
-            })}
-          />
-        </Panel>
+        <Disclosure title="Tabela de PLD médio diário" hint="R$/MWh · inclui amanhã quando publicado">
+          <Panel title="PLD médio diário">
+            <Table
+              head={["Data", ...SUBS.map((s) => `${s}`), "Spread máx."]}
+              stack={false}
+              align={["left", "right", "right", "right", "right", "right"]}
+              rows={lastDays.reverse().map(({ d, i }) => {
+                const v = SUBS.map((s) => data.aggregates!.daily[s][i]);
+                const f = v.filter((x): x is number => x !== null);
+                return [dayLabel(d), ...v.map((x) => num(x, 2)), f.length ? num(Math.max(...f) - Math.min(...f), 2) : "—"];
+              })}
+            />
+          </Panel>
+        </Disclosure>
       ) : null}
     </div>
   );

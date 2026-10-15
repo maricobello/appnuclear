@@ -10,7 +10,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 
 | Tela | O que faz |
 |---|---|
-| **Sala de Comando** | 10 KPIs com sparkline e estado da fonte (LIVE/FALLBACK/STALE/ERROR), PLD horário 24H/7D/30D com ponta, preço atual e modo previsão, scanner de oportunidades (BESS intraday, peak capture, load shifting, curtailment→storage, spreads, internacional), resumo do dia gerado dos dados e 8 painéis operacionais |
+| **Sala de Comando** | PLD agora nos 4 submercados (com amanhã quando publicado), PLD horário 24 h/7 dias/30 dias com ponta e modo previsão, resumo do dia gerado dos dados, indicadores do sistema (CMO, carga, reservatórios, vento, sol, corte), oportunidades (bateria, ponta, deslocamento, corte→armazenamento, spreads, exterior) e atalhos para previsão, bateria e reservatórios |
 | **BESS** | Ativo configurável (potência, energia, eficiência, degradação, LCOS + premissas): despacho ótimo diário (HiGHS) em até 12 meses de PLD real, fluxo de energia e SOC, margem de arbitragem, receita, CAPEX implícito, VPL, TIR, payback, ROI, LCOS de equilíbrio, cenários e sensibilidade — tudo recalculado no "Recalcular" |
 | **SIN · Brasil** | Mapa de calor do PLD dia×hora, médias diárias, CMO (ONS) × PLD (CCEE), EAR, ENA, carga |
 | **Previsão** | LEAR + conformal adaptativo (ACI) + QRA + Monte Carlo MRJD + regimes HMM + GARCH, com backtest e testes estatísticos |
@@ -164,15 +164,29 @@ por tipo de dia (sábado sub-coberto, 0,74–0,84) e a faixa de D+5–D+7, que f
 
 ## Interface — sistema de design
 
-Terminal escuro de alta densidade (mesa de energia, não dashboard genérico), com fundamentos das
-Human Interface Guidelines da Apple: **clareza** (tipografia técnica, números tabulares, contraste alto),
-**deferência** (bordas finas, sem sombras nem gradientes decorativos) e **profundidade** por camadas de
-superfície. Movimento com [Motion](https://motion.dev): springs curtos e amortecidos (indicador da
-navegação, controles segmentados, entrada de painéis, números que interpolam e piscam verde/vermelho no
-tick), sempre desligado com "reduzir movimento". Tokens em `src/app/globals.css`; componentes em
-`src/components/ui.tsx` (Panel, Kpi, StatusTag, Segmented, Table, MetricRow, ConfidenceBar) e
-`EChart.tsx` (ChartFrame com estados carregando/erro/vazio, crosshair e zoom). Todo dado exibe a
-procedência: LIVE · FALLBACK · STALE · ERROR · SIM, com a hora da última observação.
+Visual calmo no espírito das Human Interface Guidelines da Apple: **deferência** (o dado é o
+protagonista; cartões sem borda, superfícies em camadas, sem enfeite), **clareza** (fonte do sistema —
+SF Pro nos aparelhos Apple —, poucos tamanhos, título grande por tela, números tabulares, texto mínimo de
+12 px) e **cor só com significado** (cores do sistema da Apple por submercado; verde/vermelho para
+alta/baixa). Tema **claro e escuro** seguindo o sistema operacional, com escolha manual na barra lateral
+(Automático · Claro · Escuro). Cada tela abre com o essencial; o detalhe técnico fica em seções
+recolhíveis ("Mostrar detalhes"). Movimento com [Motion](https://motion.dev), curto e amortecido, sempre
+desligado com "reduzir movimento".
+
+Tokens em `src/app/globals.css` (claro e escuro); componentes em `src/components/ui.tsx` (Panel, Kpi,
+Stat, Segmented, Table, MetricRow, Disclosure, ScrollX, StatusTag) e `EChart.tsx`. Os gráficos são
+montados com a paleta escura de `src/lib/chart.ts` e convertidos para a variante clara no tema claro
+(`themeOption`, inclusive o HTML dos tooltips); as marcas do eixo de tempo ficam na meia-noite de
+Brasília qualquer que seja o fuso do navegador (`withBrtTicks`). Procedência do dado em linguagem simples:
+Ao vivo · Fonte alternativa · Atrasado · Indisponível · Simulado, numa linha logo abaixo do título de cada
+tela (`SimBanner`): discreta quando tudo está ao vivo ("PLD · Ao vivo · há 5 min"), em destaque quando há
+fonte alternativa, falha ou simulação. A linha tem sempre a mesma altura, inclusive enquanto carrega, para
+a página não pular quando os dados chegam.
+
+O ECharts é carregado sob demanda e cada gráfico só é montado quando chega perto da tela: a página pinta
+antes e o celular não processa gráficos que ninguém rolou até ver. No celular, tabela larga vira lista
+(a 1ª coluna é o título; as demais, pares rótulo/valor) e matriz numérica continua rolando para o lado
+com a 1ª coluna fixa (`Table` com `stack`); botões, campos e controles têm 44 px de altura no toque.
 
 ## PLD oficial "em tempo real" — CCEE Plataforma de Integração
 

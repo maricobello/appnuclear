@@ -59,30 +59,30 @@ function NumberField({
   const invalid = !(value >= min && value <= max);
   return (
     <label className="flex flex-col gap-1">
-      <span className="flex items-baseline justify-between text-[11px] text-ink-2">
+      <span className="flex items-baseline justify-between text-[12px] text-ink-2">
         {label}
-        {hint ? <span className="text-[10px] text-muted">{hint}</span> : null}
+        {hint ? <span className="text-[12px] text-muted">{hint}</span> : null}
       </span>
-      <span className={`flex items-stretch overflow-hidden rounded-md border bg-surface-2 transition-colors focus-within:border-accent ${invalid ? "border-critical/60" : "border-line-strong"}`}>
+      <span className={`flex items-stretch overflow-hidden rounded-[10px] bg-surface-2 transition-shadow focus-within:ring-2 ${invalid ? "ring-2 ring-critical/60" : "focus-within:ring-accent/50"}`}>
         <input
           inputMode="decimal"
           value={text}
           onChange={(e) => commit(e.target.value)}
           onBlur={() => setText(String(value).replace(".", ","))}
           aria-invalid={invalid}
-          className="tnum min-w-0 flex-1 bg-transparent px-2.5 py-1.5 text-[13px] text-ink outline-none"
+          className="tnum min-w-0 flex-1 bg-transparent px-3 py-3 text-[14px] text-ink outline-none sm:py-1.5"
         />
-        {suffix ? <span className="self-center pr-2 text-[10.5px] text-muted">{suffix}</span> : null}
-        <span className="flex flex-col border-l border-line">
-          <button type="button" tabIndex={-1} onClick={() => bump(1)} className="grid h-1/2 w-6 place-items-center text-muted hover:bg-surface-3 hover:text-ink" aria-label={`Aumentar ${label}`}>
+        {suffix ? <span className="self-center pr-2 text-[12px] text-muted">{suffix}</span> : null}
+        <span className="hidden flex-col sm:flex">
+          <button type="button" tabIndex={-1} onClick={() => bump(1)} className="grid h-1/2 w-7 place-items-center text-muted hover:bg-surface-3 hover:text-ink" aria-label={`Aumentar ${label}`}>
             <ChevronUp size={11} />
           </button>
-          <button type="button" tabIndex={-1} onClick={() => bump(-1)} className="grid h-1/2 w-6 place-items-center border-t border-line text-muted hover:bg-surface-3 hover:text-ink" aria-label={`Diminuir ${label}`}>
+          <button type="button" tabIndex={-1} onClick={() => bump(-1)} className="grid h-1/2 w-7 place-items-center text-muted hover:bg-surface-3 hover:text-ink" aria-label={`Diminuir ${label}`}>
             <ChevronDown size={11} />
           </button>
         </span>
       </span>
-      {invalid ? <span className="text-[10px] text-critical">entre {min} e {max}</span> : null}
+      {invalid ? <span className="text-[12px] text-critical">entre {min} e {max}</span> : null}
     </label>
   );
 }
@@ -125,22 +125,22 @@ export function ParamPanel({ initial, onApply, busy }: { initial: BessAsset; onA
   };
   const preset = ASSET_PRESETS.find((p) => p.asset.name === f.name)?.id ?? "custom";
   return (
-    <form onSubmit={submit} className="flex flex-col rounded-md border border-line bg-surface">
-      <header className="flex h-9 items-center justify-between border-b border-line px-3">
-        <span className="flex items-center gap-1.5 text-[12px] font-semibold text-ink">
-          <SlidersHorizontal size={13} className="text-accent" aria-hidden /> Parâmetros do sistema
+    <form onSubmit={submit} className="card flex flex-col">
+      <header className="flex items-center justify-between px-4 pb-1 pt-4">
+        <span className="flex items-center gap-2 text-[15px] font-semibold text-ink">
+          <SlidersHorizontal size={16} className="text-accent" aria-hidden /> Parâmetros
         </span>
-        <button type="button" onClick={() => setF(DEFAULT_ASSET)} className="inline-flex items-center gap-1 text-[11px] text-muted hover:text-accent" title="Voltar ao exemplo padrão">
+        <button type="button" onClick={() => setF(DEFAULT_ASSET)} className="inline-flex items-center gap-1 text-[12px] text-muted hover:text-accent" title="Voltar ao exemplo padrão">
           <RotateCcw size={11} aria-hidden /> Reset
         </button>
       </header>
-      <div className="flex flex-col gap-2.5 p-3">
+      <div className="flex flex-col gap-3 p-4">
         <label className="flex flex-col gap-1">
-          <span className="text-[11px] text-ink-2">Ativo de armazenamento</span>
+          <span className="text-[12px] text-ink-2">Ativo de armazenamento</span>
           <select
             value={preset}
             onChange={(e) => setF(ASSET_PRESETS.find((p) => p.id === e.target.value)?.asset ?? f)}
-            className="rounded-md border border-line-strong bg-surface-2 px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-accent"
+            className="rounded-[10px] bg-surface-2 px-3 py-3 text-[14px] text-ink outline-none focus:ring-2 focus:ring-accent/50 sm:py-2"
           >
             {ASSET_PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -148,10 +148,10 @@ export function ParamPanel({ initial, onApply, busy }: { initial: BessAsset; onA
               </option>
             ))}
           </select>
-          <span className="text-[10px] leading-snug text-muted">Valores típicos de mercado — ajuste conforme o datasheet e o contrato.</span>
+          <span className="text-[12px] leading-snug text-muted">Valores típicos de mercado — ajuste conforme o datasheet e o contrato.</span>
         </label>
         <div className="flex flex-col gap-1">
-          <span className="text-[11px] text-ink-2">Submercado (preço)</span>
+          <span className="text-[12px] text-ink-2">Submercado (preço)</span>
           <Segmented label="Submercado" value={f.sub} options={SUB_OPTS} onChange={set("sub")} size="xs" />
         </div>
         <div className="grid grid-cols-2 gap-2 xl:grid-cols-1">
@@ -162,7 +162,7 @@ export function ParamPanel({ initial, onApply, busy }: { initial: BessAsset; onA
         </div>
         <NumberField label="Custo nivelado (LCOS)" suffix="R$/MWh" value={f.lcos} onChange={set("lcos")} step={5} min={0} max={5000} hint="CAPEX + OPEX + degr." />
 
-        <button type="button" onClick={() => setAdv((a) => !a)} className="flex items-center justify-between rounded-md border border-line px-2.5 py-1.5 text-[11.5px] text-ink-2 hover:bg-surface-2" aria-expanded={adv}>
+        <button type="button" onClick={() => setAdv((a) => !a)} className="flex min-h-10 items-center justify-between rounded-[10px] bg-surface-2 px-3 text-[14px] text-ink-2 hover:bg-surface-3" aria-expanded={adv}>
           Premissas financeiras e de despacho
           <ChevronDown size={13} className={`transition-transform ${adv ? "rotate-180" : ""}`} aria-hidden />
         </button>
@@ -178,11 +178,11 @@ export function ParamPanel({ initial, onApply, busy }: { initial: BessAsset; onA
           </div>
         </motion.div>
 
-        <Button type="submit" variant="primary" disabled={!valid || busy} className="mt-1 w-full py-2 text-[12.5px] uppercase tracking-wider">
+        <Button type="submit" variant="primary" disabled={!valid || busy} className="mt-1 min-h-11 w-full text-[15px]">
           <RefreshCw size={13} className={busy ? "animate-spin" : ""} aria-hidden />
           {busy ? "Calculando…" : "Recalcular"}
         </Button>
-        <p className={`text-center text-[10.5px] ${dirty ? "text-warning" : "text-muted"}`} role="status">
+        <p className={`text-center text-[12px] ${dirty ? "text-warning" : "text-muted"}`} role="status">
           {dirty ? "Parâmetros alterados — recalcule para atualizar a tela." : "Resultados atualizados com estes parâmetros."}
         </p>
       </div>
@@ -262,7 +262,7 @@ export function flowOption(r: RefDay | null | undefined): ChartOption | null {
         step: "middle",
         lineStyle: { width: 1.5, color: C.ink2 },
         itemStyle: { color: C.ink2 },
-        areaStyle: { color: "rgba(182,192,205,0.06)" },
+        areaStyle: { color: C.inkSoft },
       },
       { name: "Descarga (injeção)", type: "bar", xAxisIndex: 1, yAxisIndex: 1, stack: "p", data: r.dischargeMW.map((v) => +v.toFixed(2)), itemStyle: { color: C.good, borderRadius: [2, 2, 0, 0] }, barWidth: "62%" },
       { name: "Carga (consumo da rede)", type: "bar", xAxisIndex: 1, yAxisIndex: 1, stack: "p", data: r.chargeMW.map((v) => -+v.toFixed(2)), itemStyle: { color: C.accent, borderRadius: [0, 0, 2, 2] } },
@@ -328,7 +328,7 @@ export function dailyRevenueOption(b: BessResp): ChartOption | null {
     xAxis: { type: "time", axisLine: { lineStyle: { color: C.axis } }, axisLabel: { color: C.muted, fontSize: 10, hideOverlap: true, formatter: (v: number) => new Intl.DateTimeFormat("pt-BR", { month: "short", timeZone: "America/Sao_Paulo" }).format(new Date(v)).replace(".", "") }, splitLine: { show: false } },
     yAxis: valueAxis(undefined, { splitNumber: 3 }),
     series: [
-      { name: "Despacho ótimo", type: "bar", data: ts.map((t, i) => [t, +(b.daily[i].revenue / 1000).toFixed(2)]), itemStyle: { color: "rgba(59,158,255,0.55)" }, barMaxWidth: 6 },
+      { name: "Despacho ótimo", type: "bar", data: ts.map((t, i) => [t, +(b.daily[i].revenue / 1000).toFixed(2)]), itemStyle: { color: C.accent, opacity: 0.55, borderRadius: [2, 2, 0, 0] }, barMaxWidth: 6 },
       { name: "Política simples", type: "line", data: ts.map((t, i) => [t, +(b.daily[i].naive / 1000).toFixed(2)]), showSymbol: false, lineStyle: { width: 0.8, color: C.muted, opacity: 0.6 }, itemStyle: { color: C.muted } },
       { name: "Média móvel 30 d", type: "line", data: ts.map((t, i) => [t, +roll[i].toFixed(2)]), showSymbol: false, lineStyle: { width: 1.8, color: C.accent2 }, itemStyle: { color: C.accent2 } },
     ],
@@ -355,7 +355,7 @@ export function spreadDurationOption(b: BessResp): ChartOption | null {
         showSymbol: false,
         lineStyle: { width: 1.6, color: C.accent },
         itemStyle: { color: C.accent },
-        areaStyle: { color: "rgba(59,158,255,0.10)" },
+        areaStyle: { color: C.accentSoft },
         markLine: { symbol: "none", silent: true, data: [{ yAxis: breakeven, label: { formatter: `LCOS ${n0.format(breakeven)}`, color: C.warning, fontSize: 9.5, position: "insideEndTop" }, lineStyle: { color: C.warning, type: [4, 3], width: 1 } }] },
       },
     ],
@@ -413,17 +413,17 @@ export const fmtMoney = (v: number | null | undefined, digits = 1) => {
 
 export function SpecCard({ Icon, label, value, unit, caption, delay = 0 }: { Icon: typeof RefreshCw; label: string; value: ReactNode; unit?: string; caption?: ReactNode; delay?: number }) {
   return (
-    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE, delay }} className="flex min-w-0 items-start gap-2.5 rounded-md border border-line bg-surface px-3 py-2.5">
-      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-md border border-accent/25 bg-accent/10 text-accent">
+    <motion.div initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.28, ease: EASE, delay }} className="card flex min-w-0 items-start gap-2.5 px-3 py-2.5">
+      <span className="mt-0.5 grid h-7 w-7 shrink-0 place-items-center rounded-[8px] bg-accent/12 text-accent">
         <Icon size={14} aria-hidden />
       </span>
       <div className="min-w-0">
         <div className="eyebrow truncate">{label}</div>
         <div className="tnum mt-0.5 truncate text-[19px] font-semibold leading-tight tracking-tight text-ink">
           {value}
-          {unit ? <span className="ml-1 text-[10.5px] font-normal tracking-normal text-muted">{unit}</span> : null}
+          {unit ? <span className="ml-1 text-[12px] font-normal tracking-normal text-muted">{unit}</span> : null}
         </div>
-        {caption ? <div className="mt-0.5 truncate text-[10.5px] text-muted">{caption}</div> : null}
+        {caption ? <div className="mt-0.5 truncate text-[12px] text-muted">{caption}</div> : null}
       </div>
     </motion.div>
   );

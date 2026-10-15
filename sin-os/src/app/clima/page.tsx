@@ -2,7 +2,7 @@
 
 import { useMemo } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { ErrorBox, Loading, PageHeader, Panel, SimBanner, SourceTag, Table } from "@/components/ui";
+import { Disclosure, ErrorBox, Loading, PageHeader, Panel, SimBanner, Table } from "@/components/ui";
 import type { ClimaResp } from "@/lib/apiTypes";
 import { band, baseOption, C, line, SUB_COLOR, timeAxis, valueAxis } from "@/lib/chart";
 import { num, pct } from "@/lib/fmt";
@@ -69,63 +69,36 @@ export default function ClimaPage() {
   );
 
   return (
-    <div className="flex flex-col gap-3">
-      <PageHeader
-        title="Clima & hidrologia"
-        subtitle="Drivers físicos do preço: temperatura nos centros de carga, vento a 100 m nos polos eólicos do Nordeste, irradiância no polo solar de MG e chuva nas bacias (ensemble ECMWF de 51 membros → incerteza hidrológica)."
-        right={<SourceTag meta={data?.meta.weather} label="Open-Meteo" />}
-      />
-      <SimBanner metas={[data?.meta.weather, data?.meta.ensemble]} />
+    <div className="flex flex-col gap-5">
+      <PageHeader title="Clima & hidrologia" subtitle="Vento, sol, temperatura e chuva nas bacias: o que move o preço nos próximos dias." />
+      <SimBanner metas={[data?.meta.weather, data?.meta.ensemble]} label="Open-Meteo" />
       {error && !data ? <ErrorBox error={error} /> : null}
 
-      <Panel title="Pontos monitorados — próximas 24 h" subtitle="Fator de capacidade por curva de potência genérica (IEC classe II) e PR 0,8 para FV · CDH = graus-hora acima de 24 °C">
-        {data ? (
-          <Table
-            head={["Ponto", "Papel", "Submercado", "Temp. média", "Temp. máx.", "CDH", "Vento 100 m", "FC eólico", "FC solar", "Chuva"]}
-            align={["left", "left", "center", "right", "right", "right", "right", "right", "right", "right"]}
-            rows={data.hubs.map((h) => [
-              h.name,
-              h.role,
-              h.sub,
-              `${num(h.next24.tempAvg, 1)} °C`,
-              `${num(h.next24.tempMax, 1)} °C`,
-              num(h.next24.cdh, 0),
-              `${num(h.next24.windAvg, 1)} m/s`,
-              pct(100 * h.next24.windCf, 0),
-              pct(100 * h.next24.solarCf, 0),
-              `${num(h.next24.precip, 1)} mm`,
-            ])}
-          />
-        ) : (
-          <Loading height={200} />
-        )}
-      </Panel>
-
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-3">
-        <Panel title="Eólica — fator de capacidade (7 dias)" subtitle="Polos RN e BA">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+        <Panel title="Vento" subtitle="Fator de capacidade eólico previsto · polos RN e BA">
           {wind ? <EChart option={wind} height={240} label="Fator de capacidade eólico" /> : <Loading />}
         </Panel>
-        <Panel title="Solar — fator de capacidade (7 dias)" subtitle="Polo de Pirapora/MG">
+        <Panel title="Sol" subtitle="Fator de capacidade solar previsto · Pirapora/MG">
           {solar ? <EChart option={solar} height={240} label="Fator de capacidade solar" /> : <Loading />}
         </Panel>
-        <Panel title="Temperatura nos centros de carga" subtitle="7 dias · cor = submercado">
+        <Panel title="Temperatura" subtitle="Centros de carga, próximos 7 dias">
           {temp ? <EChart option={temp} height={240} label="Temperatura nos centros de carga" /> : <Loading />}
         </Panel>
       </div>
 
-      <Panel title="Chuva acumulada nas bacias — ensemble ECMWF (15 dias)" subtitle="Faixa P10–P90 entre membros e mediana · mais chuva ⇒ mais ENA ⇒ pressão baixista no PLD" right={<SourceTag meta={data?.meta.ensemble} label="ECMWF" />}>
+      <Panel title="Chuva nas bacias — 15 dias" subtitle="Mediana e faixa entre os 51 membros do ECMWF · mais chuva tende a baixar o PLD">
         {basins.length ? (
           <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
             {basins.map(({ b, opt }) => (
-              <div key={b.hub.id} className="rounded-md border border-line p-2">
-                <div className="flex items-baseline justify-between px-1 text-xs">
-                  <span className="text-ink-2">{b.hub.name}</span>
+              <div key={b.hub.id} className="rounded-2xl bg-surface-2 p-3">
+                <div className="flex items-baseline justify-between px-1 text-[13px]">
+                  <span className="font-medium text-ink">{b.hub.name}</span>
                   <span className="tnum text-muted">
                     P50 {num(b.p50, 0)} mm · [{num(b.p10, 0)}–{num(b.p90, 0)}]
                   </span>
                 </div>
                 <EChart option={opt} height={170} label={`Chuva acumulada ${b.hub.name}`} />
-                <div className="px-1 text-[10px] text-muted">{b.members} membros · {b.horizonDays} dias</div>
+                <div className="px-1 text-[12px] text-muted">{b.members} membros · {b.horizonDays} dias</div>
               </div>
             ))}
           </div>
@@ -133,6 +106,31 @@ export default function ClimaPage() {
           <Loading height={200} />
         )}
       </Panel>
+
+      <Disclosure title="Pontos monitorados nas próximas 24 h" hint="tabela por localidade">
+        <Panel title="Pontos monitorados — próximas 24 h" subtitle="Fator de capacidade por curva genérica (IEC classe II) e PR 0,8 no solar · CDH = graus-hora acima de 24 °C">
+          {data ? (
+            <Table
+              head={["Ponto", "Papel", "Submercado", "Temp. média", "Temp. máx.", "CDH", "Vento 100 m", "FC eólico", "FC solar", "Chuva"]}
+              align={["left", "left", "center", "right", "right", "right", "right", "right", "right", "right"]}
+              rows={data.hubs.map((h) => [
+                h.name,
+                h.role,
+                h.sub,
+                `${num(h.next24.tempAvg, 1)} °C`,
+                `${num(h.next24.tempMax, 1)} °C`,
+                num(h.next24.cdh, 0),
+                `${num(h.next24.windAvg, 1)} m/s`,
+                pct(100 * h.next24.windCf, 0),
+                pct(100 * h.next24.solarCf, 0),
+                `${num(h.next24.precip, 1)} mm`,
+              ])}
+            />
+          ) : (
+            <Loading height={200} />
+          )}
+        </Panel>
+      </Disclosure>
     </div>
   );
 }

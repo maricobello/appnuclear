@@ -103,14 +103,14 @@ const ROADMAP = [
 
 export default function ModelosPage() {
   return (
-    <div className="flex flex-col gap-3">
+    <div className="flex flex-col gap-5">
       <PageHeader
         title="Modelos & APIs"
-        subtitle="Tudo implementado em TypeScript puro (roda em qualquer runtime da Vercel), com testes que validam cada método contra resultados conhecidos da literatura. As referências de código apontam as implementações canônicas no GitHub usadas como base de comparação."
+        subtitle="Os métodos por trás das telas, com referências da literatura e as implementações usadas para validar cada um."
       />
 
       <Panel title="Como o PLD é formado" subtitle="Por que o CMO do ONS é o melhor preditor e o melhor auditor do PLD">
-        <ol className="grid list-decimal grid-cols-1 gap-2 pl-5 text-xs leading-relaxed text-ink-2 md:grid-cols-2">
+        <ol className="grid list-decimal grid-cols-1 gap-2 pl-5 text-[14px] leading-relaxed text-ink-2 md:grid-cols-2">
           <li>O NEWAVE (médio prazo, SDDP) e o DECOMP (curto prazo) — modelos oficiais do CEPEL — calculam o valor da água nos reservatórios.</li>
           <li>O DESSEM (programação diária) usa esse valor e calcula o CMO semi-horário por subsistema para o dia seguinte.</li>
           <li>A CCEE publica o PLD horário = CMO limitado ao piso (R$ {PLD_LIMITS.min.toLocaleString("pt-BR")}) e ao teto horário (R$ {PLD_LIMITS.maxHourly.toLocaleString("pt-BR")}) de {PLD_LIMITS.year} — {PLD_LIMITS.source}.</li>
@@ -118,23 +118,23 @@ export default function ModelosPage() {
         </ol>
       </Panel>
 
-      <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
         {MODELS.map((m) => (
           <Panel key={m.name} title={m.name} subtitle={m.role}>
-            <pre className="scrollbar-thin mb-3 overflow-x-auto whitespace-pre-wrap rounded-md border border-line bg-surface-2 p-2.5 font-mono text-[11px] leading-relaxed text-ink-2">{m.math}</pre>
-            <ul className="mb-3 flex flex-col gap-0.5 text-[11px] text-muted">
+            <pre className="scrollbar-thin mb-3 overflow-x-auto whitespace-pre-wrap rounded-xl bg-surface-2 p-3 font-code text-[12px] leading-relaxed text-ink-2">{m.math}</pre>
+            <ul className="mb-3 flex flex-col gap-1 text-[13px] text-muted">
               {m.refs.map((r) => (
                 <li key={r}>• {r}</li>
               ))}
             </ul>
             <div className="mb-2 flex flex-wrap gap-2">
               {m.code.map((c) => (
-                <a key={c.href} href={c.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded border border-line px-1.5 py-0.5 text-[11px] text-accent hover:border-accent/50">
+                <a key={c.href} href={c.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 rounded-full bg-accent/10 px-2.5 py-1 text-[12px] font-medium text-accent hover:bg-accent/15">
                   {c.label} <ExternalLink size={11} aria-hidden />
                 </a>
               ))}
             </div>
-            <p className="text-[11px] text-ink-2">
+            <p className="text-[13px] text-ink-2">
               <span className="text-muted">Validação: </span>
               {m.validation}
             </p>
@@ -143,7 +143,7 @@ export default function ModelosPage() {
       </div>
 
       <Panel title="Roadmap de modelos" subtitle="Próximos passos com maior retorno esperado">
-        <ul className="flex flex-col gap-2 text-xs">
+        <ul className="flex flex-col gap-3 text-[14px]">
           {ROADMAP.map((r) => (
             <li key={r.name} className="flex flex-col">
               <a href={r.href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-ink hover:text-accent">
@@ -158,14 +158,14 @@ export default function ModelosPage() {
       <Panel title="APIs públicas integradas" subtitle="Todas gratuitas; só a EIA exige chave (opcional)">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {SOURCE_LIST.map((s) => (
-            <div key={s.id} className="rounded-md border border-line bg-surface-2 p-3 text-xs">
+            <div key={s.id} className="rounded-2xl bg-surface-2 p-4 text-[13px]">
               <div className="flex items-baseline justify-between gap-2">
                 <span className="font-medium text-ink">{s.name}</span>
-                <span className="text-[10px] text-muted">{s.region}</span>
+                <span className="text-[12px] text-muted">{s.region}</span>
               </div>
               <div className="mt-0.5 text-muted">{s.provider}</div>
               <p className="mt-1.5 leading-relaxed text-ink-2">{s.description}</p>
-              <div className="mt-2 flex items-center justify-between text-[11px] text-muted">
+              <div className="mt-2 flex items-center justify-between text-[12px] text-muted">
                 <span>{s.cadence}</span>
                 <a href={s.docs} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-accent hover:underline">
                   docs <ExternalLink size={11} aria-hidden />

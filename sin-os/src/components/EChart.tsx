@@ -1,38 +1,33 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
-import * as echarts from "echarts/core";
-import { BarChart, HeatmapChart, LineChart, ScatterChart } from "echarts/charts";
-import {
-  DataZoomComponent,
-  GridComponent,
-  LegendComponent,
-  MarkAreaComponent,
-  MarkLineComponent,
-  MarkPointComponent,
-  TooltipComponent,
-  VisualMapComponent,
-} from "echarts/components";
-import { CanvasRenderer } from "echarts/renderers";
+import { useEffect, useMemo, useRef, useState, type ReactNode, type RefObject } from "react";
+import type { EChartsCoreOption, ECharts } from "echarts/core";
+import { themeOption, withBrtTicks } from "@/lib/chart";
+import { useScheme } from "@/lib/theme";
 import { Empty, ErrorBox, Loading } from "./ui";
 
-echarts.use([
-  LineChart,
-  BarChart,
-  HeatmapChart,
-  ScatterChart,
-  GridComponent,
-  TooltipComponent,
-  LegendComponent,
-  DataZoomComponent,
-  VisualMapComponent,
-  MarkLineComponent,
-  MarkAreaComponent,
-  MarkPointComponent,
-  CanvasRenderer,
-]);
+export type ChartOption = EChartsCoreOption;
 
-export type ChartOption = echarts.EChartsCoreOption;
+/** Fica verdadeiro na primeira vez que o elemento chega perto da área visível (e não volta). */
+function useNearViewport(ref: RefObject<HTMLElement | null>, margin = "300px") {
+  const [near, setNear] = useState(() => typeof window !== "undefined" && typeof IntersectionObserver === "undefined");
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || near) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        if (entries.some((e) => e.isIntersecting)) {
+          setNear(true);
+          io.disconnect();
+        }
+      },
+      { rootMargin: margin },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [ref, near, margin]);
+  return near;
+}
 
 /** Uma série não precisa de legenda (o título já diz o que é plotado). */
 function withLegendRule(option: ChartOption): ChartOption {
@@ -44,34 +39,44 @@ function withLegendRule(option: ChartOption): ChartOption {
 }
 
 /**
- * Wrapper do ECharts (tree-shaken): redimensiona com o container, mantém o render anterior
- * durante refetch (esmaecido) e anima a transição entre estados (merge, não recria).
+ * Wrapper do ECharts: a biblioteca é carregada sob demanda e cada gráfico só é montado quando
+ * chega perto da tela (menos trabalho na abertura da página, sobretudo no celular). Redimensiona
+ * com o container, mantém o render anterior durante refetch (esmaecido) e segue o tema.
  */
 export function EChart({ option, height = 280, label, dim = false, group }: { option: ChartOption; height?: number; label: string; dim?: boolean; group?: string }) {
   const ref = useRef<HTMLDivElement>(null);
-  const chart = useRef<echarts.ECharts | null>(null);
+  const [chart, setChart] = useState<ECharts | null>(null);
+  const near = useNearViewport(ref);
+  const scheme = useScheme();
+  const themed = useMemo(() => themeOption(withBrtTicks(withLegendRule(option)), scheme), [option, scheme]);
 
   useEffect(() => {
     const el = ref.current;
-    if (!el) return;
-    const c = echarts.init(el, undefined, { renderer: "canvas" });
-    chart.current = c;
-    if (group) {
-      c.group = group;
-      echarts.connect(group);
-    }
-    const ro = new ResizeObserver(() => c.resize());
-    ro.observe(el);
+    if (!el || !near) return;
+    let c: ECharts | null = null;
+    let ro: ResizeObserver | null = null;
+    let gone = false;
+    void import("./echarts-lib").then(({ echarts }) => {
+      if (gone) return;
+      c = echarts.init(el, undefined, { renderer: "canvas" });
+      if (group) {
+        c.group = group;
+        echarts.connect(group);
+      }
+      ro = new ResizeObserver(() => c?.resize());
+      ro.observe(el);
+      setChart(c);
+    });
     return () => {
-      ro.disconnect();
-      c.dispose();
-      chart.current = null;
+      gone = true;
+      ro?.disconnect();
+      c?.dispose();
     };
-  }, [group]);
+  }, [group, near]);
 
   useEffect(() => {
-    chart.current?.setOption(withLegendRule(option), { notMerge: true, lazyUpdate: true });
-  }, [option]);
+    if (chart && !chart.isDisposed()) chart.setOption(themed, { notMerge: true, lazyUpdate: true });
+  }, [chart, themed]);
 
   return <div ref={ref} role="img" aria-label={label} style={{ height, opacity: dim ? 0.55 : 1, transition: "opacity 200ms" }} className="w-full" />;
 }
