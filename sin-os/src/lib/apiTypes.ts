@@ -111,6 +111,7 @@ export interface ConfiancaResp {
 }
 
 export type { RenewablesReport as RenovaveisResp } from "./market/renewables-report";
+export type { GridReport as RedeResp } from "./grid/report";
 
 export interface AlertasResp {
   generatedAt: number;

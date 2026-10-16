@@ -16,7 +16,7 @@ jobs:
       - name: Rotas de API
         run: |
           fail=0
-          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/renovaveis/historico" "/api/alertas" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
+          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/renovaveis/historico" "/api/rede" "/api/alertas" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
                       "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval" "/api/fontes" "/api/auditoria/modelos"; do
             # a auditoria dos modelos roda tudo no PLD real (até ~4 min na primeira do dia)
             code=$(curl -s -o body.json -w '%{http_code}' --max-time 300 "$URL$path")
@@ -67,6 +67,12 @@ jobs:
               print("   revisões 30d:", d.get("totalRevisions30d"))
               for x in d.get("seals") or []:
                   print("  ", x.get("source"), "| selo:", x.get("level"), "| completude:", x.get("completeness"), "| obs:", "; ".join(x.get("reasons") or []))
+          if path == "/api/rede":
+              ic = d.get("interchange") or {}
+              print("   intercâmbio:", ic.get("from"), "a", ic.get("to"), "|", "; ".join(f"{p['pair']} descolado {p['decoupledHours']}/{p['pricedHours']} h" for p in ic.get("pairs") or []))
+              g = d.get("grid") or {}
+              v = g.get("validation") or {}
+              print("   fluxo AC: dia", g.get("date"), "| idade", d.get("gridAgeDays"), "dias | atrasado:", d.get("gridStale"), "| convergiu", v.get("converged"), "/", v.get("hours"), "|", "; ".join(f"{x['par']} {x['status']}" for x in v.get("intercambio") or []))
           if path == "/api/renovaveis":
               c = d.get("curtailment") or {}
               t = c.get("totals") or {}

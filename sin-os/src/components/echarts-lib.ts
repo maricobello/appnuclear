@@ -1,5 +1,5 @@
 import * as echarts from "echarts/core";
-import { BarChart, HeatmapChart, LineChart, ScatterChart } from "echarts/charts";
+import { BarChart, HeatmapChart, LineChart, LinesChart, ScatterChart } from "echarts/charts";
 import {
   DataZoomComponent,
   GridComponent,
@@ -18,6 +18,7 @@ import { CanvasRenderer } from "echarts/renderers";
  */
 echarts.use([
   LineChart,
+  LinesChart,
   BarChart,
   HeatmapChart,
   ScatterChart,

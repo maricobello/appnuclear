@@ -7,6 +7,7 @@ export type SourceId =
   | "ons_carga"
   | "ons_curtailment"
   | "ons_balanco"
+  | "ons_intercambio"
   | "energy_charts"
   | "elexon_mid"
   | "elexon_sysprice"

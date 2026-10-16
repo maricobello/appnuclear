@@ -65,7 +65,7 @@ export interface BalanceRow {
   intercambio: number | null;
 }
 
-const num = (v: unknown): number | null => {
+export const num = (v: unknown): number | null => {
   if (v === null || v === undefined || v === "") return null;
   const n = typeof v === "number" ? v : typeof v === "bigint" ? Number(v) : Number(String(v).replace(",", "."));
   return Number.isFinite(n) ? n : null;
@@ -83,7 +83,7 @@ export function wallClockToTs(v: unknown): number | null {
   return m ? brtToUtc(+m[1], +m[2], +m[3], +m[4], +m[5]) : null;
 }
 
-const subOfId = (v: unknown): Sub | null => {
+export const subOfId = (v: unknown): Sub | null => {
   const s = String(v ?? "").trim().toUpperCase();
   return s === "SE" || s === "S" || s === "NE" || s === "N" ? s : null;
 };

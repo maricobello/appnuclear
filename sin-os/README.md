@@ -18,6 +18,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Mercados globais** | Europa (SDAC, 15 min), Reino Unido (Elexon, NESO), câmbio (BCB), combustíveis (EIA) |
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
+| **Rede elétrica** | Intercâmbio medido × programado nas 4 interligações (ONS, hora a hora) com a diferença de PLD entre os dois lados (quando a rede separou os preços); fluxo de potência AC diário do SIN montado só com dados do ONS: mapa de carregamento das linhas, as mais carregadas, N-1 e a validação contra o intercâmbio medido |
 | **Renováveis & corte** | Corte de eólica e solar do ONS por dia, hora, submercado e motivo, cruzado com o PLD; histórico de 12 meses com revisões; curva do pato |
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
@@ -26,7 +27,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
 mostra a idade do dado. O painel **APIs conectadas** (Sala de Comando) e a barra do modo Terminal mostram,
-a cada minuto, o estado de cada uma das 16 fontes — ao vivo, fonte alternativa, atrasada, fora do ar ou
+a cada minuto, o estado de cada uma das 17 fontes — ao vivo, fonte alternativa, atrasada, fora do ar ou
 desligada (sem chave) — calculado dos mesmos dados em cache que as telas usam (`GET /api/fontes`). As fontes brasileiras são publicadas em D−1/D+1 (PLD de amanhã sai à tarde); as
 europeias e britânicas têm resolução de 15–30 min.
 
@@ -37,7 +38,8 @@ Todas gratuitas e sem cadastro, exceto a EIA (chave gratuita, opcional).
 | Fonte | Dados | Uso |
 |---|---|---|
 | **CCEE — Dados Abertos** (CKAN) | PLD horário por submercado | preço de referência, alvo dos modelos |
-| **ONS — Dados Abertos** (S3 direto + CKAN) | CMO semi-horário (DESSEM), EAR, ENA, carga horária | formação do preço, fallback e auditoria do PLD, drivers hidrológicos |
+| **ONS — Dados Abertos** (S3 direto + CKAN) | CMO semi-horário (DESSEM), EAR, ENA, carga horária, corte de eólica/solar, balanço e intercâmbio entre subsistemas | formação do preço, fallback e auditoria do PLD, drivers hidrológicos, renováveis, rede |
+| **ONS — cadastros e operação** (S3, só no worker da rede) | linhas, subestações, transformadores, compensadores, unidades geradoras, geração por usina, fluxo programado dos elos CC | modelo e fluxo de potência AC do SIN |
 | **Energy-Charts** (Fraunhofer ISE) | preços day-ahead de 12 zonas europeias (limite de 2 req/min: o app atualiza 2 zonas por vez e guarda no Firestore) | arbitragem de bateria e de fronteira |
 | **Elexon BMRS** | Market Index Price e System Buy/Sell Price (GB) | preço de curto prazo e escassez |
 | **NESO Carbon Intensity** | gCO₂/kWh e mix de geração (GB) | contexto de mercado |
@@ -287,6 +289,44 @@ Checagens feitas a cada leitura (e testadas com amostra real em `tests/fixtures/
 - **Identidade do balanço:** hidro + térmica + eólica + solar − intercâmbio = carga em todas as horas.
 - A flag de dado inválido do ONS não é usada (não é atualizada depois da contestação do agente).
 
+## Rede elétrica: intercâmbio e fluxo de potência do SIN
+
+Tela `/rede` e `GET /api/rede?dias=7` (2–14).
+
+**Intercâmbio (ao vivo, D−1):** o arquivo `intercambio_nacional_ho` do ONS traz, hora a hora, o fluxo
+medido e o programado em cada interligação (N–NE, N–SE, NE–SE, S–SE), no sentido em que a energia passou.
+O app dá um sentido fixo a cada par (positivo = do primeiro para o segundo) e cruza com o PLD dos dois
+lados: hora com diferença acima de R$ 1 é hora em que algum limite de transmissão separou os preços.
+Conferência a cada leitura: somando as interligações, a exportação de N, NE e SE é exatamente o
+intercâmbio do balanço de energia (diferença ≤ 0,002 MW em 155 horas de out/2026); no Sul a diferença,
+quando existe, é o intercâmbio com Argentina e Uruguai (média de −405 MW em 2026 até 14/10).
+
+**Fluxo de potência (diário):** `grid/` (Python) monta a rede básica só com os cadastros abertos do ONS
+(linhas com R, X e B, subestações com coordenadas, transformadores, compensadores), coloca a geração
+real de cada usina na sua barra, distribui a carga de cada subsistema e roda o fluxo AC das 24 horas no
+[p3s](https://github.com/e2nIEE/parallel-pandapower-solver) (Fraunhofer IEE, C++/KLU), conferido com o
+pandapower, mais o N-1 das linhas de 440 kV ou mais e das interligações. Roda no GitHub Actions
+(`.github/workflows/rede.yml`, 16:47 e 23:47 UTC) e envia o relatório para `POST /api/rede/ingest`
+(segredo `ADMIN_KEY`, o mesmo da Vercel, nos segredos do repositório no GitHub).
+
+Resultado de 14/10/2026 (dia real): 1.667 barras, 1.841 linhas e 1.813 transformadores; 24/24 horas
+convergem; p3s × pandapower dentro de 4,7·10⁻⁷ MW por linha; perdas de 2,62%; 95,9% da geração
+despachada com barra; 607 contingências N-1 (606 resolvidas, nenhuma sobrecarga); 28 s no total.
+Intercâmbio calculado × medido: Sul–Sudeste 0,9% de erro, Norte–Nordeste 12,5%, Nordeste–Sudeste 16,8% e
+Norte–Sudeste 31,7%: a compensação série do corredor Norte–Sul não está no cadastro do ONS, o que
+deixa esse corredor mais "pesado" no modelo; ele aparece como menos confiável na tela e reprova na
+auditoria dos modelos até ser resolvido. Transformadores usam reatância presumida (12%), porque o
+cadastro não publica a impedância.
+
+```bash
+python -m venv .venv && . .venv/bin/activate   # Python 3.12+
+sudo apt-get install libsuitesparse-dev
+pip install -r grid/requirements.txt
+pip install "p3s-cpp @ git+https://github.com/e2nIEE/parallel-pandapower-solver.git@515cf75913955bf869eb182b3be4230a52d97fcc#subdirectory=p3s/cpp"
+python -m pytest grid/tests
+python grid/run.py --date auto --out rede.json        # --post https://sinos-iota.vercel.app para enviar
+```
+
 ## Metodologia pública
 
 Tela `/metodologia` e `GET /api/metodologia` (JSON): para cada fonte, o arquivo ou rota lido, as colunas
@@ -388,6 +428,7 @@ da resposta (`after()`); só a primeira de todas espera o cálculo. O smoke test
 | Dados | último dia completo; dias faltando na fonte (90 dias); PLD no piso/teto da ANEEL; horas faltando | ontem ou hoje; ≤ 3%; 0 fora; < 1% |
 | Backtest de 1 ano | D+1 contra o ingênuo; pior regime conhecido antes de prever | rMAE < 1 e DM p < 0,05; ≤ 1,05 |
 | Bateria (LP) | despacho ótimo ≥ regra simples todo dia; ciclos | 0 dias abaixo; ≤ limite |
+| Rede elétrica | retrato em dia; fluxo AC nas 24 h; p3s × pandapower; balanço na barra de referência; usinas com barra; intercâmbio calculado × medido por interligação; N-1 resolvido; tensões plausíveis | ≤ 2 dias; 24/24; < 1 MW; ≤ 2% da carga; ≥ 95%; erro ≤ 15% (≤ 30% atenção); ≥ 99%; ≥ 95% entre 0,90 e 1,10 pu |
 | Arbitragem | captura da regra simples | entre 0% e 100% |
 | Auditor de APIs | detecta falhas injetadas | ≥ 90% |
 
@@ -535,8 +576,10 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente (Groq)
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, confianca, renovaveis (+historico), brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, renovaveis (+historico), rede (+ingest), brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
 src/lib/methodology.ts  dicionário de dados e regras publicadas em /metodologia
+src/lib/grid/       retrato do fluxo de potência (esquema, armazenamento e a resposta de /api/rede)
+grid/               modelo da rede em Python (cadastros do ONS → pandapower → p3s), worker diário
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```
@@ -549,3 +592,6 @@ tests/              testes de validação
 - `npm audit` aponta um aviso moderado em `uuid` dentro de `firebase-admin → @google-cloud/storage`
   (caminho não usado pelo app); resolve quando o Firebase atualizar a dependência.
 - Os limites do PLD mudam todo ano (ANEEL); atualize `PLD_MIN`/`PLD_MAX_*` em janeiro.
+- Modelo da rede: sem compensação série das linhas e sem impedância de transformadores nos cadastros
+  públicos do ONS; o corredor Norte–Sudeste é o menos fiel ao medido. Tensões só como plausibilidade
+  (o ONS não publica tensões medidas).

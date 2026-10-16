@@ -1,6 +1,8 @@
+import type { GridSnapshot } from "../grid/snapshot";
 import type { BessDay } from "../market/bess-study";
 import type { ForecastResult } from "../market/forecast";
 import type { RegimeBacktestResult } from "../market/regime-backtest";
+import { tinyMw } from "../fmt";
 import { brtDate } from "../sources/time";
 import { TRACK_MIN_DAYS, type TrackRecord } from "./track-record";
 import { SUBS, type Sub } from "../sources/types";
@@ -58,7 +60,21 @@ export interface ModelAuditInput {
   pldSource: string;
   /** Previsões publicadas × PLD realizado (entra na nota a partir de TRACK_MIN_DAYS dias). */
   trackRecords?: Partial<Record<Sub, TrackRecord>>;
+  /** Retrato diário do modelo da rede (fluxo AC do worker) e a idade em dias (BRT). */
+  grid?: { snapshot: GridSnapshot | null; ageDays: number | null } | null;
 }
+
+/** Critérios do modelo da rede (fluxo de potência AC do SIN). */
+export const GRID_CHECKS = {
+  /** Dias desde o dia modelado: o ONS publica D−1 no fim da tarde do dia seguinte. */
+  ageDays: { pass: 2, warn: 3 },
+  /** |injeção extra da barra de referência| ÷ carga média: o que o despacho real não explica. */
+  slackShare: { pass: 0.02, warn: 0.05 },
+  coverage: { pass: 0.95, warn: 0.9 },
+  n1Converged: { pass: 0.99, warn: 0.95 },
+  voltageInBand: { pass: 0.95, warn: 0.9 },
+  pandapowerMw: 1,
+} as const;
 
 const f = (v: number | null | undefined, d = 2) => (v === null || v === undefined || !Number.isFinite(v) ? "—" : v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }));
 const pct = (v: number | null | undefined, d = 1) => (v === null || v === undefined || !Number.isFinite(v) ? "—" : `${f(100 * v, d)}%`);
@@ -436,6 +452,8 @@ export function auditModels(x: ModelAuditInput): ModelAudit {
     });
   }
 
+  if (x.grid !== undefined) gridChecks(x.grid, add);
+
   const counts = { pass: 0, warn: 0, fail: 0 } as Record<ModelCheckStatus, number>;
   for (const c of checks) counts[c.status]++;
   const n = checks.length || 1;
@@ -445,4 +463,124 @@ export function auditModels(x: ModelAuditInput): ModelAudit {
     return { sub, logged: t?.logged ?? 0, days: t?.days ?? 0, from: t?.from ?? null, to: t?.to ?? null };
   });
   return { generatedAt: x.now, score, counts, checks, dataNote: x.pldSource, trackRecord, trackMinDays: TRACK_MIN_DAYS };
+}
+
+const PAIR_HINT: Record<string, string> = {
+  "N-SE": " A compensação série das linhas Norte–Sul não está no cadastro do ONS: no modelo o corredor fica mais \"pesado\" e parte do fluxo desvia pelo Nordeste.",
+  "NE-SE": " Parte do erro vem do corredor Norte–Sul, que no modelo empurra fluxo pelo Nordeste.",
+};
+
+function gridChecks(g: ModelAuditInput["grid"], add: (c: ModelCheck) => void) {
+  const model = "Rede elétrica";
+  if (!g) {
+    add({ id: "rede.frescor", model, sub: null, label: "Retrato diário da rede lido", value: null, display: "—", target: "ler", status: "warn", detail: "Não foi possível ler o retrato guardado agora (armazenamento indisponível)." });
+    return;
+  }
+  const s = g.snapshot;
+  if (!s) {
+    add({ id: "rede.frescor", model, sub: null, label: "Retrato diário da rede recebido", value: null, display: "—", target: `≤ ${GRID_CHECKS.ageDays.pass} dias`, status: "warn", detail: "O worker do GitHub Actions (.github/workflows/rede.yml) ainda não enviou o relatório: confira o segredo ADMIN_KEY no GitHub (mesmo valor da Vercel)." });
+    return;
+  }
+  const day = s.date.split("-").reverse().join("/");
+  const age = g.ageDays;
+  add({
+    id: "rede.frescor",
+    model,
+    sub: null,
+    label: "Retrato diário da rede em dia",
+    value: age,
+    display: age === null ? "—" : `${age} dia(s)`,
+    target: `≤ ${GRID_CHECKS.ageDays.pass} dias`,
+    status: age === null ? "warn" : age <= GRID_CHECKS.ageDays.pass ? "pass" : age <= GRID_CHECKS.ageDays.warn ? "warn" : "fail",
+    detail: `Último dia modelado: ${day} (o ONS publica a operação de um dia no fim da tarde do dia seguinte).`,
+  });
+  const v = s.validation;
+  add({
+    id: "rede.convergencia",
+    model,
+    sub: null,
+    label: "Fluxo de potência AC fecha nas 24 horas",
+    value: v.converged,
+    display: `${v.converged}/${v.hours} h`,
+    target: "24/24",
+    status: v.converged === v.hours && v.hours === 24 ? "pass" : v.converged >= 22 ? "warn" : "fail",
+    detail: `Newton-Raphson em lote (p3s, C++/KLU) sobre ${s.model.barras_ilha_principal ?? "—"} barras e ${s.model.linhas ?? "—"} linhas do cadastro do ONS, com o despacho real de ${day}.`,
+  });
+  const pp = v.pandapower;
+  add({
+    id: "rede.pandapower",
+    model,
+    sub: null,
+    label: "Mesmo resultado do pandapower",
+    value: pp.dif_max_mw ?? null,
+    display: pp.convergiu === false ? "não convergiu" : tinyMw(pp.dif_max_mw),
+    target: `< ${GRID_CHECKS.pandapowerMw} MW`,
+    status: pp.ok ? "pass" : "fail",
+    detail: pp.convergiu === false ? `O solver de referência não fechou na hora ${pp.hora}: ${pp.erro ?? ""}` : `Na hora de maior carga (${pp.hora}h) o fluxo de cada linha no p3s difere do runpp do pandapower em no máximo ${tinyMw(pp.dif_max_mw)}.`,
+  });
+  const load = v.carga_media_mw;
+  const slack = Math.max(Math.abs(v.slack_mw.min ?? 0), Math.abs(v.slack_mw.max ?? 0));
+  const share = load ? slack / load : null;
+  add({
+    id: "rede.balanco",
+    model,
+    sub: null,
+    label: "Despacho real fecha o balanço",
+    value: share,
+    display: `${f(slack, 0)} MW`,
+    target: `≤ ${pct(GRID_CHECKS.slackShare.pass, 0)} da carga`,
+    status: upTo(share, GRID_CHECKS.slackShare.pass, GRID_CHECKS.slackShare.warn),
+    detail: `A barra de referência (Itaipu 60 Hz) precisou injetar entre ${f(v.slack_mw.min, 0)} e ${f(v.slack_mw.max, 0)} MW além da própria geração, com carga média de ${f(load, 0)} MW e perdas de ${f(v.perdas_pct, 2)}%.`,
+  });
+  add({
+    id: "rede.cobertura",
+    model,
+    sub: null,
+    label: "Usinas da rede básica com barra",
+    value: v.cobertura_rede_basica,
+    display: pct(v.cobertura_rede_basica),
+    target: `≥ ${pct(GRID_CHECKS.coverage.pass, 0)}`,
+    status: v.cobertura_rede_basica === null ? "warn" : v.cobertura_rede_basica >= GRID_CHECKS.coverage.pass ? "pass" : v.cobertura_rede_basica >= GRID_CHECKS.coverage.warn ? "warn" : "fail",
+    detail: `Geração das usinas despachadas pelo ONS ligada a uma barra do cadastro (por código, conjunto, ponto de conexão ou nome). A que sobra abate a carga do próprio estado${v.usinas_sem_barra[0] ? `; maior sem barra: ${v.usinas_sem_barra[0].nome} (${f(v.usinas_sem_barra[0].mwmed, 0)} MWmed)` : ""}.`,
+  });
+  for (const x of v.intercambio) {
+    add({
+      id: `rede.intercambio.${x.par}`,
+      model,
+      sub: null,
+      label: `Intercâmbio ${x.nome} vs. medido`,
+      value: x.erro_rel,
+      display: x.erro_rel === null ? "—" : pct(x.erro_rel),
+      target: "erro ≤ 15% do fluxo",
+      status: x.status === "bom" ? "pass" : x.status === "atencao" ? "warn" : x.status === "ruim" ? "fail" : "warn",
+      detail: `Fluxo calculado nas linhas da fronteira contra o intercâmbio medido pelo ONS em ${day}: erro médio de ${f(x.mae_mw, 0)} MW, correlação horária ${f(x.correlacao, 3)} (até 15% "aprovado", até 30% "atenção").${PAIR_HINT[x.par] ?? ""}`,
+    });
+  }
+  const tot = s.n1.contingencias ?? 0;
+  const conv = s.n1.convergiram ?? 0;
+  const share1 = tot ? conv / tot : null;
+  add({
+    id: "rede.n1",
+    model,
+    sub: null,
+    label: "Contingências N-1 resolvidas",
+    value: share1,
+    display: `${conv}/${tot}`,
+    target: `≥ ${pct(GRID_CHECKS.n1Converged.pass, 0)}`,
+    status: share1 === null ? "warn" : share1 >= GRID_CHECKS.n1Converged.pass ? "pass" : share1 >= GRID_CHECKS.n1Converged.warn ? "warn" : "fail",
+    detail: `${s.n1.criterio} (${s.n1.hora ?? "—"}h). ${s.n1.com_sobrecarga ?? 0} com sobrecarga${s.n1.nao_convergiram.length ? `; sem solução: ${s.n1.nao_convergiram.slice(0, 3).join(", ")}` : ""}.`,
+  });
+  if (v.tensao) {
+    add({
+      id: "rede.tensao",
+      model,
+      sub: null,
+      label: "Tensões plausíveis (0,90–1,10 pu)",
+      value: v.tensao.faixa_090_110,
+      display: pct(v.tensao.faixa_090_110),
+      target: `≥ ${pct(GRID_CHECKS.voltageInBand.pass, 0)} das barras`,
+      status: v.tensao.faixa_090_110 === null ? "warn" : v.tensao.faixa_090_110 >= GRID_CHECKS.voltageInBand.pass ? "pass" : v.tensao.faixa_090_110 >= GRID_CHECKS.voltageInBand.warn ? "warn" : "fail",
+      detail: `Só plausibilidade: o ONS não publica tensões medidas. Às ${v.tensao.hora}h a menor foi ${f(v.tensao.min, 3)} e a maior ${f(v.tensao.max, 3)} pu (reatores e capacitores manobráveis não estão no modelo).`,
+    });
+  }
 }

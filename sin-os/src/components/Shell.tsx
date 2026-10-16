@@ -19,6 +19,7 @@ import {
   Sun,
   TrendingUp,
   Wallet,
+  Waypoints,
   Wind,
   X,
   Zap,
@@ -38,6 +39,7 @@ const NAV: { group: string; items: { href: string; label: string; Icon: typeof G
     items: [
       { href: "/", label: "Sala de Comando", Icon: Gauge },
       { href: "/sin", label: "SIN · Brasil", Icon: Zap },
+      { href: "/rede", label: "Rede elétrica", Icon: Waypoints },
       { href: "/renovaveis", label: "Renováveis & corte", Icon: Wind },
       { href: "/previsao", label: "Previsão", Icon: TrendingUp },
       { href: "/arbitragem", label: "Arbitragem", Icon: ArrowLeftRight },

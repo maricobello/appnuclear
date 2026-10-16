@@ -1,0 +1,11 @@
+# Versões conferidas juntas (fluxo do p3s idêntico ao do pandapower em 4,7e-7 MW na rede do SIN).
+# O solver C++ (p3s/cpp) é compilado do mesmo commit no workflow .github/workflows/rede.yml.
+pandapower==3.5.6
+parallel-pandapower-solver==1.2.1
+numpy==2.4.6
+scipy==1.18.1
+pandas==2.3.3
+pyarrow==26.0.0
+networkx==3.7
+numba==0.68.0
+pytest==8.4.2

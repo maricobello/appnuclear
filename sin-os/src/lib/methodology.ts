@@ -1,9 +1,11 @@
 import { AUDIT_THRESHOLDS, CHECK_WEIGHTS } from "./audit/checks";
+import { GRID_CHECKS } from "./audit/models";
 import { DEFAULT_THRESHOLDS } from "./audit/market-alerts";
 import { TRUST_RULES, TRUST_SOURCES } from "./audit/trust";
 import { PLD_LIMITS } from "./market/brazil";
 import { FLOOR_SNAP, LEAR_WEIGHT } from "./market/forecast";
 import { EAR_BANDS, FLOOR_RECENT, PLD_BANDS, SEASONS } from "./market/regime-backtest";
+import { DECOUPLE_BRL, IDENTITY_TOL_MW } from "./market/interchange";
 import { RENEWABLE_CHECKS } from "./market/renewables";
 import { VALID_RANGES } from "./sources/ranges";
 import { SOURCES } from "./sources/registry";
@@ -150,6 +152,22 @@ export const DATA_DICTIONARY: Record<SourceId, DictEntry> = {
     ],
     steps: ["a linha SIN do arquivo é descartada: o SIN é a soma dos 4 submercados na mesma hora", "carga líquida = carga − eólica − solar"],
     version: "arquivo anual relido a cada 3 h; o app usa só a janela recente da página",
+  },
+  ons_intercambio: {
+    files: [`${S3}/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_AAAA.parquet`],
+    grain: "hora × interligação (N–NE, N–SE, NE–SE, S–SE)",
+    time: "din_instante no relógio de Brasília gravado como UTC (mesma correção do balanço)",
+    fields: [
+      { col: "id_subsistema_origem · id_subsistema_destino", as: "par", unit: "N · NE · SE · S", note: "o sentido do arquivo é o sentido em que a energia passou na hora" },
+      { col: "val_intercambiomwmed", as: "real", unit: "MWmed", note: "sempre ≥ 0 no arquivo; o app dá o sinal pelo sentido" },
+      { col: "val_intercambioprogmwmed", as: "prog", unit: "MWmed", note: "no mesmo sentido do medido; negativo quando o programa era o contrário" },
+    ],
+    steps: [
+      "cada par tem um sentido de referência fixo (N→NE, N→SE, NE→SE, S→SE): positivo = energia nesse sentido",
+      `conferência com o balanço: a exportação de N, NE e SE somando as interligações é o intercâmbio do balanço (diferença até ${IDENTITY_TOL_MW} MW); no Sul a diferença é o intercâmbio com Argentina e Uruguai`,
+      `par descolado = PLD do destino − PLD da origem acima de R$ ${DECOUPLE_BRL} na mesma hora`,
+    ],
+    version: "arquivo anual relido a cada 3 h",
   },
   energy_charts: {
     files: ["api.energy-charts.info/price?bzn=ZONA&start&end (12 zonas)"],
@@ -383,6 +401,33 @@ export function methodology(env: Record<string, string | undefined> = process.en
       "custos: o LCOS informado define o CAPEX implícito; OPEX fixo em % do CAPEX; VPL, TIR, payback e LCOS de equilíbrio saem do fluxo de caixa",
       "receita de capacidade (ex.: LRCAP) só entra se for informada (padrão 0), em R$/kW·ano, e aparece em linha separada da arbitragem: é premissa regulatória, não receita firme",
     ],
+    grid: {
+      checks: GRID_CHECKS,
+      steps: [
+        "rede: cadastros do ONS de linhas (resistência, reatância e susceptância em % na base de 100 MVA; capacidade de longa e de curta duração), subestações (barra, tensão, coordenadas) e transformadores em operação no dia; fica a maior ilha conectada",
+        "geração: cada usina da geração horária do ONS vai para a barra pelo código do equipamento, pelo conjunto, pelo ponto de conexão ou pelo nome; pequenas usinas e as sem barra abatem a carga do próprio estado",
+        "carga: a de cada subsistema (balanço horário do ONS, que já inclui as perdas) rateada pela potência dos transformadores que descem para 34,5–138 kV; as perdas calculadas pelo modelo são descontadas em duas passadas",
+        "elos de corrente contínua (Belo Monte, Madeira, Itaipu 50 Hz em Ibiúna, Garabi) pelos fluxos programados do ONS, como injeções nas barras de corrente alternada",
+        "fluxo de potência AC das 24 horas em lote no p3s (C++/KLU, Fraunhofer IEE); a hora de maior carga é refeita no pandapower e cada linha tem que bater em menos de 1 MW",
+        "N-1: saída de cada linha de 440 kV ou mais e de cada interligação entre subsistemas na hora de maior carga, conferida contra a capacidade de curta duração",
+        "validação: intercâmbio calculado nas linhas da fronteira (mais o elo de Belo Monte no Norte–Sudeste) contra o intercâmbio medido pelo ONS; até 15% do fluxo médio é bom, até 30% atenção",
+        "agenda: GitHub Actions às 16:47 e 23:47 UTC sobre o último dia com as 24 horas no balanço; o relatório entra por /api/rede/ingest só com o segredo do servidor e passa por um esquema fechado",
+      ],
+      audit: [
+        `retrato com até ${GRID_CHECKS.ageDays.pass} dias do dia modelado; ${GRID_CHECKS.ageDays.warn} dias é atenção, mais que isso reprova`,
+        "fluxo AC fecha nas 24 horas (22 ou 23 é atenção) e bate com o pandapower em menos de 1 MW",
+        `injeção extra da barra de referência até ${pct(GRID_CHECKS.slackShare.pass)} da carga média (até ${pct(GRID_CHECKS.slackShare.warn)} atenção)`,
+        `pelo menos ${pct(GRID_CHECKS.coverage.pass)} da geração das usinas despachadas com barra (${pct(GRID_CHECKS.coverage.warn)} atenção)`,
+        `contingências N-1 resolvidas em ${pct(GRID_CHECKS.n1Converged.pass)} dos casos ou mais (${pct(GRID_CHECKS.n1Converged.warn)} atenção)`,
+        `tensões entre 0,90 e 1,10 pu em ${pct(GRID_CHECKS.voltageInBand.pass)} das barras: só plausibilidade, o ONS não publica tensões medidas`,
+        "intercâmbio de cada interligação: bom aprova, atenção fica em atenção, ruim reprova",
+      ],
+      limits: [
+        "transformadores com reatância presumida (12% na própria base): o cadastro do ONS não publica a impedância",
+        "compensação série das linhas não está no cadastro: o corredor Norte–Sudeste sai mais pesado que o real e é o menos confiável",
+        "reatores e capacitores manobráveis fora do modelo; tensões servem só como plausibilidade",
+      ],
+    },
     limits: PLD_LIMITS,
   };
 }

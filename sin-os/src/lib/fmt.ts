@@ -44,3 +44,12 @@ export const dayLabel = (iso: string) => {
   const [, m, d] = iso.split("-");
   return `${d}/${m}`;
 };
+
+/** Diferença minúscula em notação científica ("4,7·10⁻⁷ MW"); a partir de 0,001 com 3 casas. */
+export function tinyMw(v: number | null | undefined): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  if (v === 0 || Math.abs(v) >= 1e-3) return `${nf(3).format(v)} MW`;
+  const e = Math.floor(Math.log10(Math.abs(v)));
+  const sup = String(e).replace("-", "⁻").replace(/\d/g, (d) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+d]);
+  return `${nf(1).format(v / 10 ** e)}·10${sup} MW`;
+}

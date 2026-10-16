@@ -15,6 +15,7 @@ const SECTIONS = [
   ["previsao", "Backtest por regime"],
   ["bess", "BESS"],
   ["alertas", "Alertas de mercado"],
+  ["rede", "Modelo da rede"],
 ] as const;
 
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -273,6 +274,34 @@ export default function MetodologiaPage() {
           </Panel>
         </section>
       </div>
+
+      <section id="rede" className="scroll-mt-16">
+        <Panel
+          title="Modelo da rede"
+          subtitle="Fluxo de potência AC do SIN só com dados abertos do ONS, todo dia"
+          right={
+            <Link href="/rede" className="text-[12px] text-accent hover:underline">
+              ver na Rede elétrica
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <List items={m.grid.steps} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="mb-1 text-[13px] font-medium text-ink">Critérios na auditoria dos modelos</p>
+                <List items={m.grid.audit} />
+              </div>
+              <div>
+                <p className="mb-1 text-[13px] font-medium text-ink">Limites conhecidos</p>
+                <List items={m.grid.limits} />
+              </div>
+            </div>
+          </div>
+        </Panel>
+      </section>
     </div>
   );
 }

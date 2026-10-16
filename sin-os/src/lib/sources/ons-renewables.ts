@@ -1,5 +1,6 @@
 import { parquetReadObjects } from "hyparquet";
 import { cached } from "../cache";
+import { interchangeRowFrom, PAIRS, type InterchangeRow } from "../market/interchange";
 import { balanceRowFrom, curtRowFrom, type BalanceRow, type CurtRow, type Tech } from "../market/renewables";
 import { errMsg, fetchBuffer, HttpError, probesOf } from "./http";
 import { ONS_S3 } from "./ons";
@@ -9,8 +10,8 @@ import { VALID_RANGES } from "./ranges";
 
 /**
  * ONS — restrição de operação por constrained-off de eólicas e fotovoltaicas (por conjunto, meia
- * hora) e balanço de energia por subsistema (horário). Arquivos parquet do bucket público
- * (um por mês nas restrições, um por ano no balanço), lidos com hyparquet.
+ * hora), balanço de energia por subsistema e intercâmbio entre subsistemas (horários). Arquivos
+ * parquet do bucket público (um por mês nas restrições, um por ano nos demais), lidos com hyparquet.
  */
 const CURT_FILE: Record<Tech, { prefix: string; file: string }> = {
   eolica: { prefix: "restricao_coff_eolica_tm", file: "RESTRICAO_COFF_EOLICA" },
@@ -21,6 +22,7 @@ const TTL = 3 * 3600_000;
 export const curtailmentUrl = (tech: Tech, y: number, m: number) =>
   `${ONS_S3}/${CURT_FILE[tech].prefix}/${CURT_FILE[tech].file}_${y}_${String(m).padStart(2, "0")}.parquet`;
 export const balanceUrl = (y: number) => `${ONS_S3}/balanco_energia_subsistema_ho/BALANCO_ENERGIA_SUBSISTEMA_${y}.parquet`;
+export const interchangeUrl = (y: number) => `${ONS_S3}/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_${y}.parquet`;
 
 export async function readParquet(url: string): Promise<{ rows: Record<string, unknown>[]; probes: Probe[] }> {
   const { buf, probes } = await fetchBuffer(url, { timeoutMs: 60_000 });
@@ -124,4 +126,18 @@ export const fetchBalance = (days = 14, now = Date.now()) =>
     const rows = r.rows.filter((x) => x.ts >= from);
     if (!rows.length) throw new HttpError("balanço do ONS sem linhas na janela", r.probes);
     return { data: rows, probes: r.probes, quality: qualityOf(rows, r.invalid, rows.map((x) => x.carga ?? 0), [...VALID_RANGES.ons_balanco.range]) };
+  });
+
+/** Intercâmbio medido e programado nas quatro interligações, hora a hora, últimos `days` dias. */
+export const fetchInterchange = (days = 14, now = Date.now()) =>
+  wrap<InterchangeRow[]>("ons_intercambio", async () => {
+    const years = [...new Set(monthsFor(now, days).map((x) => x.y))];
+    const urls = years.map(interchangeUrl);
+    const from = now - (days + 1) * 86400_000;
+    const r = await loadFiles(urls, interchangeRowFrom, `parquet:${urls.join("|")}`);
+    const rows = r.rows.filter((x) => x.ts >= from);
+    if (!rows.length) throw new HttpError("intercâmbio do ONS sem linhas na janela", r.probes);
+    // faixa e outliers por interligação, em ordem de tempo (as 4 intercaladas pareceriam saltos)
+    const series = PAIRS.flatMap((p) => rows.filter((x) => x.pair === p && x.real !== null).sort((a, b) => a.ts - b.ts).map((x) => Math.abs(x.real!)));
+    return { data: rows, probes: r.probes, quality: qualityOf(rows, r.invalid, series, [...VALID_RANGES.ons_intercambio.range]) };
   });

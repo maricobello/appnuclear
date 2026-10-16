@@ -1,0 +1,75 @@
+name: Modelo da rede (fluxo de potência)
+
+# Todo dia, depois que o ONS publica a operação do dia anterior (~19 h de Brasília), monta a rede
+# do SIN com os cadastros do ONS, roda o fluxo de potência AC hora a hora (p3s, C++/KLU) e o N-1,
+# valida contra o intercâmbio medido e envia o relatório para /api/rede/ingest do app.
+# Segredo: ADMIN_KEY (o mesmo valor cadastrado na Vercel). Sem ele, roda e só guarda o artefato.
+on:
+  workflow_dispatch:
+    inputs:
+      date:
+        description: "Dia a modelar (AAAA-MM-DD) ou auto"
+        default: auto
+  schedule:
+    # o ONS atualiza os arquivos perto das 15 h e das 22 h UTC; o dia sai quando o balanço fecha as 24 horas
+    - cron: "47 16 * * *"
+    - cron: "47 23 * * *"
+  push:
+    branches: [main]
+    paths: ["grid/**", ".github/workflows/rede.yml"]
+
+concurrency:
+  group: rede
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  rede:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      URL: ${{ vars.SIN_OS_URL || 'https://sinos-iota.vercel.app' }}
+      # mesmo commit do solver C++ conferido contra o pandapower (grid/tests)
+      P3S_COMMIT: 515cf75913955bf869eb182b3be4230a52d97fcc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: grid/requirements.txt
+      - name: SuiteSparse (KLU)
+        run: sudo apt-get update -q && sudo apt-get install -y -q libsuitesparse-dev
+      - name: Dependências
+        run: |
+          python -m pip install -r grid/requirements.txt
+          python -m pip install "p3s-cpp @ git+https://github.com/e2nIEE/parallel-pandapower-solver.git@${P3S_COMMIT}#subdirectory=p3s/cpp"
+          python -c "from p3s import nr_klu; print('solver C++ do p3s carregado')"
+      - name: Testes do modelo (inclui p3s × pandapower)
+        run: python -m pytest -q grid/tests
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/sin-grid
+          key: ons-${{ github.run_id }}
+          restore-keys: ons-
+      - name: Fluxo de potência do dia
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY || secrets.CRON_SECRET }}
+          DAY: ${{ inputs.date || 'auto' }}
+        run: |
+          case "$DAY" in auto|[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]) ;; *) echo "dia inválido: $DAY"; exit 1 ;; esac
+          post=()
+          if [ -n "$ADMIN_KEY" ]; then post=(--post "$URL"); else echo "::warning::sem ADMIN_KEY nos segredos do GitHub: o relatório fica só no artefato"; fi
+          python grid/run.py --date "$DAY" --out rede.json "${post[@]}"
+      - name: Tira do cache arquivos com mais de 10 dias
+        if: always()
+        run: find ~/.cache/sin-grid -type f -mtime +10 -delete || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: rede-${{ github.run_id }}
+          path: rede.json
+          retention-days: 14
+          if-no-files-found: ignore

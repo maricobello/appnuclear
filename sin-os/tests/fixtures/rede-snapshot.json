@@ -1,0 +1,951 @@
+{
+ "v": 1,
+ "date": "2026-10-14",
+ "generatedAt": "2026-10-16T15:06:12+00:00",
+ "hours": [
+  "2026-10-14T00:00",
+  "2026-10-14T01:00",
+  "2026-10-14T02:00",
+  "2026-10-14T03:00",
+  "2026-10-14T04:00",
+  "2026-10-14T05:00",
+  "2026-10-14T06:00",
+  "2026-10-14T07:00",
+  "2026-10-14T08:00",
+  "2026-10-14T09:00",
+  "2026-10-14T10:00",
+  "2026-10-14T11:00",
+  "2026-10-14T12:00",
+  "2026-10-14T13:00",
+  "2026-10-14T14:00",
+  "2026-10-14T15:00",
+  "2026-10-14T16:00",
+  "2026-10-14T17:00",
+  "2026-10-14T18:00",
+  "2026-10-14T19:00",
+  "2026-10-14T20:00",
+  "2026-10-14T21:00",
+  "2026-10-14T22:00",
+  "2026-10-14T23:00"
+ ],
+ "peakHour": 19,
+ "solver": {
+  "nome": "p3s (parallel pandapower solver, Fraunhofer IEE)",
+  "versao": "1.2.1",
+  "commit": "515cf75",
+  "pandapower": "3.5.6",
+  "metodo": "Newton-Raphson AC em lote (C++/KLU), 24 horas; N-1 em lote na hora de maior carga",
+  "segundos": 27.6
+ },
+ "model": {
+  "linhas_cadastro": 1868,
+  "trafos_cadastro": 1832,
+  "linhas_cc": 12,
+  "linhas_sem_barra": 5,
+  "trafos_sem_barra": 8,
+  "linhas_sem_impedancia": 0,
+  "barras": 1686,
+  "ilhas_descartadas": 8,
+  "barras_fora_da_ilha_principal": 19,
+  "linhas": 1841,
+  "trafos": 1813,
+  "barras_ilha_principal": 1667,
+  "barras_com_coordenada": 1659,
+  "linhas_com_capacidade": 1608,
+  "barras_de_carga": 517,
+  "barras_com_geracao": 326,
+  "compensadores": 73,
+  "compensadores_cadastro": 98,
+  "elos_cc_barras": [
+   7055,
+   7054,
+   972,
+   973,
+   7057,
+   86,
+   8100,
+   3010,
+   9605
+  ]
+ },
+ "assumptions": [
+  "Transformadores com reatância de 12% na base do próprio equipamento (o cadastro do ONS não publica a impedância).",
+  "Compensação série das linhas não está no cadastro: as interligações Norte–Sul aparecem mais 'pesadas' que na realidade.",
+  "Carga de cada subsistema (balanço horário do ONS, já com as perdas) rateada pela potência dos transformadores que descem para 34,5–138 kV; as perdas calculadas pelo modelo são descontadas.",
+  "Geração distribuída, pequenas usinas e usinas sem barra no cadastro abatem a carga do próprio estado.",
+  "Usinas a partir de 20 MW e compensadores síncronos/estáticos controlam a tensão em 1,0 pu; reatores e capacitores manobráveis não entram.",
+  "Elos de corrente contínua e conversoras pelos valores programados do ONS (média das meias horas); defasadores de Angra e Porto Colômbia como transformadores comuns.",
+  "Barra de referência: Itaipu 60 Hz 500 kV (barra 1106); classes de 500 e 525 kV na mesma base (525→500 kV)."
+ ],
+ "validation": {
+  "converged": 24,
+  "hours": 24,
+  "pandapower": {
+   "hora": 19,
+   "convergiu": true,
+   "dif_max_mw": 4.71e-07,
+   "dif_media_mw": 2e-09,
+   "ok": true
+  },
+  "slack_mw": {
+   "min": -606.0,
+   "mean": -219.0,
+   "max": 151.0
+  },
+  "carga_media_mw": 90633.0,
+  "perdas_media_mw": 2370.0,
+  "perdas_pct": 2.62,
+  "cobertura_rede_basica": 0.9585,
+  "geracao_mwmed_por_metodo": {
+   "codigo": 29682.0,
+   "conjunto": 18472.0,
+   "elo CC": 1856.0,
+   "embutida": 15672.0,
+   "nome": 7026.0,
+   "nome parcial": 1555.0,
+   "ponto": 13616.0,
+   "sem barra": 3042.0
+  },
+  "usinas_sem_barra": [
+   {
+    "nome": "JAGUARA",
+    "uf": "MG",
+    "mwmed": 187.0
+   },
+   {
+    "nome": "UTE SIDE PECEM",
+    "uf": "CE",
+    "mwmed": 176.0
+   },
+   {
+    "nome": "SIMPLICIO",
+    "uf": "RJ",
+    "mwmed": 159.0
+   }
+  ],
+  "intercambio": [
+   {
+    "par": "N-NE",
+    "nome": "Norte → Nordeste",
+    "modelo": [
+     -3212.0,
+     -3413.0,
+     -3723.0,
+     -3734.0,
+     -3723.0,
+     -3795.0,
+     -4510.0,
+     -4833.0,
+     -4745.0,
+     -4286.0,
+     -3884.0,
+     -3805.0,
+     -3818.0,
+     -3948.0,
+     -3915.0,
+     -3360.0,
+     -1735.0,
+     -476.0,
+     -1257.0,
+     -1756.0,
+     -1924.0,
+     -2295.0,
+     -2162.0,
+     -1836.0
+    ],
+    "real": [
+     -3523.0,
+     -3732.0,
+     -3940.0,
+     -4011.0,
+     -3968.0,
+     -3928.0,
+     -4974.0,
+     -5763.0,
+     -5745.0,
+     -5216.0,
+     -4680.0,
+     -4652.0,
+     -4695.0,
+     -4694.0,
+     -4503.0,
+     -3825.0,
+     -2232.0,
+     -984.0,
+     -1390.0,
+     -1878.0,
+     -2203.0,
+     -2426.0,
+     -2181.0,
+     -1894.0
+    ],
+    "mae_mw": 454.0,
+    "erro_rel": 0.125,
+    "correlacao": 0.983,
+    "status": "bom"
+   },
+   {
+    "par": "N-SE",
+    "nome": "Norte → Sudeste/CO",
+    "modelo": [
+     -822.0,
+     -799.0,
+     -281.0,
+     -93.0,
+     63.0,
+     309.0,
+     1616.0,
+     2256.0,
+     2190.0,
+     2038.0,
+     1661.0,
+     1599.0,
+     1605.0,
+     1159.0,
+     665.0,
+     645.0,
+     1026.0,
+     2490.0,
+     4112.0,
+     4341.0,
+     3483.0,
+     2451.0,
+     1908.0,
+     594.0
+    ],
+    "real": [
+     -596.0,
+     -568.0,
+     -158.0,
+     89.0,
+     195.0,
+     348.0,
+     2020.0,
+     3237.0,
+     3355.0,
+     3217.0,
+     2789.0,
+     2803.0,
+     2821.0,
+     2213.0,
+     1465.0,
+     1171.0,
+     1355.0,
+     2547.0,
+     3610.0,
+     3854.0,
+     3138.0,
+     1899.0,
+     1233.0,
+     -36.0
+    ],
+    "mae_mw": 590.0,
+    "erro_rel": 0.317,
+    "correlacao": 0.895,
+    "status": "ruim"
+   },
+   {
+    "par": "NE-SE",
+    "nome": "Nordeste → Sudeste/CO",
+    "modelo": [
+     4297.0,
+     4186.0,
+     4604.0,
+     4816.0,
+     5035.0,
+     5637.0,
+     8723.0,
+     9073.0,
+     8533.0,
+     7856.0,
+     6345.0,
+     6076.0,
+     6158.0,
+     5408.0,
+     4314.0,
+     3855.0,
+     3764.0,
+     4805.0,
+     6215.0,
+     7644.0,
+     8103.0,
+     6426.0,
+     5492.0,
+     3543.0
+    ],
+    "real": [
+     3250.0,
+     3190.0,
+     3816.0,
+     3973.0,
+     4206.0,
+     4925.0,
+     7691.0,
+     7804.0,
+     7349.0,
+     6826.0,
+     5474.0,
+     5221.0,
+     5286.0,
+     4607.0,
+     3667.0,
+     3335.0,
+     3038.0,
+     3779.0,
+     5464.0,
+     6948.0,
+     7242.0,
+     5743.0,
+     4922.0,
+     2908.0
+    ],
+    "mae_mw": 844.0,
+    "erro_rel": 0.168,
+    "correlacao": 0.995,
+    "status": "atencao"
+   },
+   {
+    "par": "S-SE",
+    "nome": "Sul → Sudeste/CO",
+    "modelo": [
+     4014.0,
+     5270.0,
+     5183.0,
+     5063.0,
+     4979.0,
+     4375.0,
+     2710.0,
+     1780.0,
+     544.0,
+     -77.0,
+     -733.0,
+     -884.0,
+     -311.0,
+     941.0,
+     1414.0,
+     1381.0,
+     973.0,
+     825.0,
+     29.0,
+     -625.0,
+     150.0,
+     1049.0,
+     2035.0,
+     3431.0
+    ],
+    "real": [
+     4048.0,
+     5312.0,
+     5221.0,
+     5093.0,
+     5008.0,
+     4404.0,
+     2721.0,
+     1771.0,
+     507.0,
+     -101.0,
+     -758.0,
+     -912.0,
+     -334.0,
+     940.0,
+     1419.0,
+     1380.0,
+     969.0,
+     826.0,
+     16.0,
+     -645.0,
+     137.0,
+     1048.0,
+     2048.0,
+     3462.0
+    ],
+    "mae_mw": 19.0,
+    "erro_rel": 0.009,
+    "correlacao": 1.0,
+    "status": "bom"
+   }
+  ],
+  "tensao": {
+   "hora": 19,
+   "faixa_090_110": 0.978,
+   "min": 0.846,
+   "max": 1.335
+  }
+ },
+ "lines": [
+  {
+   "id": 0,
+   "n": "CRUZEIRO SUL / FEIJO C 1 AC",
+   "kv": 230,
+   "a": [
+    -7.692,
+    -72.639
+   ],
+   "b": [
+    -8.192,
+    -70.555
+   ],
+   "max": 7.0
+  },
+  {
+   "id": 1,
+   "n": "FEIJO / RIO BRANCO I C 1 AC",
+   "kv": 230,
+   "a": [
+    -8.192,
+    -70.555
+   ],
+   "b": [
+    -10.011,
+    -67.73
+   ],
+   "max": 11.0
+  },
+  {
+   "id": 2,
+   "n": "RIO BRANCO I / TUCUMA C 1 AC",
+   "kv": 230,
+   "a": [
+    -10.011,
+    -67.73
+   ],
+   "b": [
+    -10.044,
+    -67.935
+   ],
+   "max": 0.0
+  },
+  {
+   "id": 3,
+   "n": "ARAPIRACA III / PENEDO C S9 AL",
+   "kv": 230,
+   "a": [
+    -9.787,
+    -36.649
+   ],
+   "b": [
+    -10.243,
+    -36.563
+   ],
+   "max": 8.0
+  },
+  {
+   "id": 4,
+   "n": "ARAPIRACA III / RIO LARGO II C F1 AL",
+   "kv": 230,
+   "a": [
+    -9.787,
+    -36.649
+   ],
+   "b": [
+    -9.504,
+    -35.838
+   ],
+   "max": 14.0
+  },
+  {
+   "id": 5,
+   "n": "MESSIAS / MACEIO C S6 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.579,
+    -35.786
+   ],
+   "max": 8.0
+  },
+  {
+   "id": 6,
+   "n": "MESSIAS / MACEIO C S7 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.579,
+    -35.786
+   ],
+   "max": 8.0
+  },
+  {
+   "id": 7,
+   "n": "MESSIAS / MACEIO II C M1 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.529,
+    -35.75
+   ],
+   "max": 6.0
+  },
+  {
+   "id": 8,
+   "n": "MESSIAS / MACEIO II C M2 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.529,
+    -35.75
+   ],
+   "max": 6.0
+  },
+  {
+   "id": 9,
+   "n": "MESSIAS / RIO LARGO II C C1 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.504,
+    -35.838
+   ],
+   "max": 4.0
+  },
+  {
+   "id": 10,
+   "n": "MESSIAS / RIO LARGO II C S3 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.504,
+    -35.838
+   ],
+   "max": 8.0
+  },
+  {
+   "id": 11,
+   "n": "MESSIAS / RIO LARGO II C S4 AL",
+   "kv": 230,
+   "a": [
+    -9.403,
+    -35.842
+   ],
+   "b": [
+    -9.504,
+    -35.838
+   ],
+   "max": 12.0
+  }
+ ],
+ "topLines": [
+  {
+   "id": 1749,
+   "nome": "LT 500 kV SE LAJEADO / MIRACEMA C 1 TO",
+   "kv": 500,
+   "cap_mva": 1898.0,
+   "subs": [
+    "N",
+    "N"
+   ],
+   "max": 91.7,
+   "hora_max": 16,
+   "carregamento": [
+    81.8,
+    81.2,
+    80.3,
+    81.6,
+    82.6,
+    83.8,
+    84.1,
+    82.6,
+    84.2,
+    86.8,
+    89.1,
+    89.5,
+    89.4,
+    89.0,
+    88.0,
+    89.1,
+    91.7,
+    90.1,
+    89.8,
+    88.2,
+    88.3,
+    89.6,
+    89.8,
+    89.4
+   ],
+   "mw": [
+    58.0,
+    63.0,
+    67.0,
+    66.0,
+    65.0,
+    64.0,
+    63.0,
+    72.0,
+    90.0,
+    108.0,
+    124.0,
+    128.0,
+    124.0,
+    118.0,
+    129.0,
+    134.0,
+    160.0,
+    223.0,
+    293.0,
+    277.0,
+    283.0,
+    318.0,
+    324.0,
+    332.0
+   ]
+  },
+  {
+   "id": 1750,
+   "nome": "LT 500 kV SE LAJEADO / MIRACEMA C 2 TO",
+   "kv": 500,
+   "cap_mva": 2355.0,
+   "subs": [
+    "N",
+    "N"
+   ],
+   "max": 73.7,
+   "hora_max": 16,
+   "carregamento": [
+    65.7,
+    65.3,
+    64.5,
+    65.6,
+    66.4,
+    67.3,
+    67.6,
+    66.4,
+    67.6,
+    69.7,
+    71.6,
+    71.9,
+    71.9,
+    71.5,
+    70.7,
+    71.6,
+    73.7,
+    72.4,
+    72.1,
+    70.9,
+    70.9,
+    72.0,
+    72.1,
+    71.8
+   ],
+   "mw": [
+    32.0,
+    37.0,
+    41.0,
+    40.0,
+    39.0,
+    37.0,
+    36.0,
+    45.0,
+    62.0,
+    79.0,
+    95.0,
+    99.0,
+    95.0,
+    89.0,
+    101.0,
+    105.0,
+    130.0,
+    194.0,
+    264.0,
+    248.0,
+    254.0,
+    289.0,
+    295.0,
+    303.0
+   ]
+  },
+  {
+   "id": 1731,
+   "nome": "LT 500 kV IBIUNA / BATEIAS C 1 SP/PR",
+   "kv": 500,
+   "cap_mva": 1500.0,
+   "subs": [
+    "SE",
+    "S"
+   ],
+   "max": 57.6,
+   "hora_max": 1,
+   "carregamento": [
+    53.8,
+    57.6,
+    56.9,
+    55.8,
+    55.1,
+    54.3,
+    47.2,
+    46.6,
+    42.0,
+    38.2,
+    36.9,
+    36.4,
+    37.9,
+    41.9,
+    45.4,
+    47.4,
+    46.1,
+    43.9,
+    40.7,
+    37.9,
+    41.3,
+    44.8,
+    48.1,
+    53.2
+   ],
+   "mw": [
+    -755.0,
+    -829.0,
+    -816.0,
+    -795.0,
+    -782.0,
+    -765.0,
+    -616.0,
+    -602.0,
+    -484.0,
+    -356.0,
+    -313.0,
+    -299.0,
+    -348.0,
+    -483.0,
+    -577.0,
+    -626.0,
+    -600.0,
+    -552.0,
+    -477.0,
+    -407.0,
+    -491.0,
+    -573.0,
+    -641.0,
+    -744.0
+   ]
+  },
+  {
+   "id": 1732,
+   "nome": "LT 500 kV IBIUNA / BATEIAS C 2 SP/PR",
+   "kv": 500,
+   "cap_mva": 1500.0,
+   "subs": [
+    "SE",
+    "S"
+   ],
+   "max": 57.6,
+   "hora_max": 1,
+   "carregamento": [
+    53.8,
+    57.6,
+    56.9,
+    55.8,
+    55.1,
+    54.3,
+    47.2,
+    46.6,
+    42.0,
+    38.2,
+    36.9,
+    36.4,
+    37.9,
+    41.9,
+    45.4,
+    47.4,
+    46.1,
+    43.9,
+    40.7,
+    37.9,
+    41.3,
+    44.8,
+    48.1,
+    53.2
+   ],
+   "mw": [
+    -755.0,
+    -829.0,
+    -816.0,
+    -795.0,
+    -782.0,
+    -765.0,
+    -616.0,
+    -602.0,
+    -484.0,
+    -356.0,
+    -313.0,
+    -299.0,
+    -348.0,
+    -483.0,
+    -577.0,
+    -626.0,
+    -600.0,
+    -552.0,
+    -477.0,
+    -407.0,
+    -491.0,
+    -573.0,
+    -641.0,
+    -744.0
+   ]
+  }
+ ],
+ "topTrafos": [
+  {
+   "id": 175,
+   "estacao": "XINGU",
+   "kv": "500/230",
+   "mva": 300.0,
+   "max": 113.7
+  },
+  {
+   "id": 1557,
+   "estacao": "C.PORTO VELHO",
+   "kv": "500/230",
+   "mva": 465.0,
+   "max": 113.1
+  },
+  {
+   "id": 129,
+   "estacao": "MARITUBA",
+   "kv": "500/230",
+   "mva": 900.0,
+   "max": 103.9
+  }
+ ],
+ "n1": {
+  "hora": 19,
+  "contingencias": 607,
+  "convergiram": 606,
+  "com_sobrecarga": 0,
+  "criterio": "linhas de 440 kV ou mais e interligações entre subsistemas; pós-contingência contra a capacidade de curta duração",
+  "top": [
+   {
+    "fora": "LT 500 kV SE LAJEADO / MIRACEMA C 2 TO",
+    "pior": "LT 500 kV SE LAJEADO / MIRACEMA C 1 TO",
+    "carregamento": 97.2,
+    "cap_curta_mva": 2833.0,
+    "sem_atendimento": 0
+   },
+   {
+    "fora": "LT 500 kV SE LAJEADO / MIRACEMA C 1 TO",
+    "pior": "LT 500 kV SE LAJEADO / MIRACEMA C 2 TO",
+    "carregamento": 93.5,
+    "cap_curta_mva": 2945.0,
+    "sem_atendimento": 0
+   },
+   {
+    "fora": "LT 500 kV CAMACARI IV / SAPEACU C L9 BA",
+    "pior": "LT 500 kV CAMACARI II / SAPEACU C L7 BA",
+    "carregamento": 76.8,
+    "cap_curta_mva": 1500.0,
+    "sem_atendimento": 0
+   },
+   {
+    "fora": "LT 500 kV MARABA / ITACAIUNAS C 1 PA",
+    "pior": "LT 500 kV MARABA / ITACAIUNAS C 2 PA",
+    "carregamento": 74.1,
+    "cap_curta_mva": 3000.0,
+    "sem_atendimento": 0
+   }
+  ],
+  "nao_convergiram": [
+   "LT 230 kV ITARARE II / JAGUARIAIVA C 1 SP/PR"
+  ]
+ },
+ "hvdc": {
+  "xingu_sudeste_mw": [
+   400.0,
+   400.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   800.0,
+   1400.0,
+   3000.0,
+   3050.0,
+   2200.0,
+   2000.0,
+   1800.0,
+   1200.0
+  ]
+ },
+ "sources": [
+  {
+   "name": "geracao_usina_2_ho",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/geracao_usina_2_ho/GERACAO_USINA-2_2026_10.parquet",
+   "modified": "2026-10-15T22:03:59+00:00"
+  },
+  {
+   "name": "balanco_energia_subsistema_ho",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/balanco_energia_subsistema_ho/BALANCO_ENERGIA_SUBSISTEMA_2026.parquet",
+   "modified": "2026-10-15T22:00:21+00:00"
+  },
+  {
+   "name": "programacao_fluxo_controlado",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/programacao_fluxo_controlado/PROGRAMACAO_FLUXO_CONTROLADO_2026_10_14.parquet",
+   "modified": "2026-10-13T22:12:04+00:00"
+  },
+  {
+   "name": "linha_transmissao",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/linha_transmissao/LINHA_TRANSMISSAO.csv",
+   "modified": "2026-10-15T22:04:50+00:00"
+  },
+  {
+   "name": "subestacao",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/subestacao/SUBESTACAO.csv",
+   "modified": "2026-10-15T22:05:56+00:00"
+  },
+  {
+   "name": "capacidade-transformacao",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/capacidade-transformacao/CAPACIDADE_TRANSFORMACAO.csv",
+   "modified": "2026-10-15T22:00:26+00:00"
+  },
+  {
+   "name": "capacidade-geracao",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/capacidade-geracao/CAPACIDADE_GERACAO.parquet",
+   "modified": "2026-10-15T22:00:28+00:00"
+  },
+  {
+   "name": "modalidade_usina",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/modalidade_usina/MODALIDADE_USINA.csv",
+   "modified": "2026-10-15T22:04:45+00:00"
+  },
+  {
+   "name": "usina_conjunto",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/usina_conjunto/RELACIONAMENTO_USINA_CONJUNTO.csv",
+   "modified": "2026-10-15T22:05:01+00:00"
+  },
+  {
+   "name": "equipamento_controle_reativo",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/equipamento_controle_reativo/EQP_CONTROLE_REATIVO.csv",
+   "modified": "2026-10-15T22:02:10+00:00"
+  },
+  {
+   "name": "intercambio_nacional_ho",
+   "url": "https://ons-aws-prod-opendata.s3.amazonaws.com/dataset/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_2026.parquet",
+   "modified": "2026-10-15T22:04:20+00:00"
+  }
+ ]
+}
