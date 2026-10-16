@@ -370,8 +370,10 @@ auditoria a partir de 14 dias conferidos.
 ## Auditoria dos modelos
 
 `GET /api/auditoria/modelos` (tela Agente auditor): roda todos os modelos sobre o PLD real e confere cada
-um contra um alvo fixo — aprovado, atenção ou reprovado; a nota é 100 × (aprovados + ½ atenção) / total.
-Recalculada no máximo a cada hora, com os mesmos caches das telas (`src/lib/audit/models.ts`).
+um contra um alvo fixo — aprovado, atenção ou reprovado; a nota é 100 × (aprovados + ½ atenção) / total
+(`src/lib/audit/models.ts`). Rodar tudo leva de 1 a 3 minutos, então a rota responde na hora com a última
+auditoria guardada (memória + Firestore `model_audit/latest`) e, se ela tiver mais de 1 hora, refaz depois
+da resposta (`after()`); só a primeira de todas espera o cálculo. O smoke test diário também a aciona.
 
 | Modelo | Critério | Alvo |
 |---|---|---|
