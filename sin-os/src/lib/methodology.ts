@@ -2,8 +2,8 @@ import { AUDIT_THRESHOLDS, CHECK_WEIGHTS } from "./audit/checks";
 import { DEFAULT_THRESHOLDS } from "./audit/market-alerts";
 import { TRUST_RULES, TRUST_SOURCES } from "./audit/trust";
 import { PLD_LIMITS } from "./market/brazil";
-import { LEAR_WEIGHT } from "./market/forecast";
-import { EAR_BANDS, PLD_BANDS, SEASONS } from "./market/regime-backtest";
+import { FLOOR_SNAP, LEAR_WEIGHT } from "./market/forecast";
+import { EAR_BANDS, FLOOR_RECENT, PLD_BANDS, SEASONS } from "./market/regime-backtest";
 import { RENEWABLE_CHECKS } from "./market/renewables";
 import { VALID_RANGES } from "./sources/ranges";
 import { SOURCES } from "./sources/registry";
@@ -359,19 +359,21 @@ export function methodology(env: Record<string, string | undefined> = process.en
     },
     forecast: {
       leadWeight: LEAR_WEIGHT,
-      published: `previsão publicada = ${Math.round(LEAR_WEIGHT * 100)}% LEAR + ${Math.round((1 - LEAR_WEIGHT) * 100)}% ingênuo; D+1 vem da programação do DESSEM (CMO limitado), o modelo começa em D+2`,
+      published: `previsão publicada = ${Math.round(LEAR_WEIGHT * 100)}% LEAR + ${Math.round((1 - LEAR_WEIGHT) * 100)}% ingênuo, com ajuste ao piso: se a hora ficou no piso em pelo menos ${FLOOR_SNAP.minDays} dos últimos ${FLOOR_SNAP.window} dias e a previsão está a menos de R$ ${FLOOR_SNAP.within} do piso, publica o piso. D+1 vem da programação do DESSEM (CMO limitado), o modelo começa em D+2`,
       naive: "ingênuo de Lago et al. (2021): segunda, sábado e domingo repetem o mesmo dia da semana anterior; os demais repetem ontem",
       walkForward: "cada dia é previsto só com o histórico anterior; LEAR re-estimado todo dia na janela de 90 dias; previsão limitada ao piso e ao teto horário e média diária ao teto estrutural",
       metric: "rMAE = MAE do modelo / MAE do ingênuo, hora a hora; abaixo de 1 o modelo ganha. Dias ausentes na fonte ficam de fora; menos de 48 horas no grupo = amostra pequena",
       regimes: {
         estacao: SEASONS.map((s) => ({ key: s.key, label: s.label })),
         reservatorio: bands(),
+        piso_recente: FLOOR_RECENT.map((b) => ({ key: b.key, label: b.label })),
         faixa_pld: PLD_BANDS.map((b) => ({ key: b.key, label: b.label })),
       },
       regimeNotes: [
         "estação pela data do dia previsto",
         "reservatório pela EAR do próprio submercado no dia",
-        `faixa pelo PLD realizado na hora; piso = até 1% acima de R$ ${br(PLD_LIMITS.min)}`,
+        `piso recente pelos 7 dias anteriores ao previsto (conhecido antes de prever)`,
+        `faixa pelo PLD realizado na hora; piso = até 1% acima de R$ ${br(PLD_LIMITS.min)}. Por ser separada pelo resultado, a faixa mostra onde o erro mora mas não julga o modelo (dilema do previsor, Lerch et al., 2017)`,
       ],
     },
     bess: [

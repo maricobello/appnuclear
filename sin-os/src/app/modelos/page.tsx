@@ -27,7 +27,7 @@ const MODELS: Model[] = [
       { label: "jeslago/epftoolbox", href: "https://github.com/jeslago/epftoolbox" },
       { label: "scikit-learn LassoLarsIC", href: "https://github.com/scikit-learn/scikit-learn" },
     ],
-    validation: "Backtest rolante com re-estimação diária em 891 dias reais (abr/2024–set/2026): LEAR sozinho rMAE 1,04–1,12 (perde do ingênuo no período longo); média LEAR ⊕ ingênuo 0,95–0,99 nos 4 submercados, melhor que o LEAR com DM (Newey–West) t ≈ −3,9 a −4,5. Em produção: rMAE e DM (HAC de Bartlett, HLN) nos últimos 28 dias.",
+    validation: "Backtest rolante com re-estimação diária em 891 dias reais (abr/2024–set/2026): LEAR sozinho rMAE 1,04–1,12 (perde do ingênuo no período longo); média LEAR ⊕ ingênuo 0,95–0,99 nos 4 submercados, melhor que o LEAR com DM (Newey–West) t ≈ −3,9 a −4,5. Ajuste ao piso (hora no piso em 4 dos últimos 7 dias e previsão a menos de R$ 50 do piso ⇒ publica o piso): em 361 dias walk-forward (out/2025–out/2026) cortou o MAE em 1,4–2,1% e a previsão publicada ficou em rMAE 0,91–0,92 nos 4 submercados (DM p < 0,001). Em produção: rMAE e DM (HAC de Bartlett, HLN) nos últimos 28 dias e o backtest de 1 ano por regime.",
   },
   {
     name: "Adaptive Conformal Inference (ACI)",
@@ -35,7 +35,7 @@ const MODELS: Model[] = [
     math: "α_{t+1} = α_t + γ(α − 𝟙{y_t ∉ Ĉ_t}) ; Ĉ_t = ŷ_t ± Q_{⌈(n+1)(1−α_t)⌉/n}(|resíduos|)",
     refs: ["Gibbs & Candès (2021), NeurIPS", "Angelopoulos & Bates (2023), Found. & Trends in ML — introdução à predição conformal", "Kupiec (1995) — teste de cobertura"],
     code: [{ label: "scikit-learn-contrib/MAPIE", href: "https://github.com/scikit-learn-contrib/MAPIE" }],
-    validation: "Teste unitário: cobertura empírica entre 87% e 93% para alvo de 90%. Escore normalizado pelo fator da hora (a cobertura é a da banda publicada). Em produção: Kupiec com efeito de desenho diário (violações se agrupam no dia) e independência de Christoffersen na mesma hora de dias consecutivos. A faixa da média diária é conformal nos erros diários por horizonte.",
+    validation: "Teste unitário: cobertura empírica entre 87% e 93% para alvo de 90%. Escore normalizado pelo fator da hora (a cobertura é a da banda publicada). Em produção: Kupiec com efeito de desenho diário (violações se agrupam no dia) e independência de Christoffersen na mesma hora de dias consecutivos. A faixa da média diária é conformal nos erros diários por horizonte. Os erros fora da banda se agrupam (Christoffersen); a banda escalada pela volatilidade recente corrigiu isso em 365 dias de teste, mas piorou o interval score em 1–22%, e por isso não foi adotada.",
   },
   {
     name: "Quantile Regression Averaging (QRA)",
@@ -51,7 +51,7 @@ const MODELS: Model[] = [
     math: "r_{d,h} = m_d + u_{d,h} ; m_d = φ m_{d−1} + η_d ; du = −κu dt + σ dW + J dN ; κ pelo AR(1) within com correção de Nickell ; saltos no resíduo do AR(1) (limiar 4,5·MAD) ; postos simulados → quantis empíricos dos erros reais por horizonte (y = ŷ + s_h·Q_k(u)) ; fator diário e κ calibrados em grade (dispersão da média do dia e variação intradiária)",
     refs: ["Schwartz (1997), Journal of Finance 52(3)", "Cartea & Figueroa (2005), Applied Mathematical Finance 12(4)", "Nickell (1981), Econometrica 49(6)", "Weron (2014), Int. J. Forecasting — revisão de EPF"],
     code: [{ label: "statsmodels (AR/OU)", href: "https://github.com/statsmodels/statsmodels" }],
-    validation: "Testes unitários: recupera κ, a variância e o AR(1) do nível diário de painéis sintéticos, inclusive com saltos. Em dados reais (56 origens por submercado): cobertura 5–95% horária 0,93 em D+1 e 0,85–0,91 em D+2–D+7; média diária realizada abaixo do p05 simulado em 2–7% dos dias (antes 14–24%). Em aberto: variação intradiária simulada ~1,3× a real.",
+    validation: "Testes unitários: recupera κ, a variância e o AR(1) do nível diário de painéis sintéticos, inclusive com saltos. Marginais por horizonte e por estado da previsão (no piso × fora do piso); cópula calibrada na dependência entre as horas do dia e na rugosidade do erro de D+1. Fora da amostra (40 origens por submercado, set–out/2026, cada uma só com o histórico até a véspera): faixa 5–95% horária com 0,92–0,93 de cobertura; a da média do dia cobriu 0,75–0,80 em SE, S e NE (0,93 no N; antes desta calibração, 0,63–0,78 e 0,90) — ainda estreita: a média realizada caiu abaixo da faixa em 13–15% dos dias, quase sempre dias inteiros no piso em que os cenários ficam poucos reais acima dele, ou dias seguintes a picos. As faixas publicadas na tela não dependem do Monte Carlo e ficaram calibradas: banda horária (ACI) 0,90–0,91 e média do dia (conformal) 0,90–0,93. Em aberto: as trajetórias oscilam 1,4–2,1× mais dentro do dia que o PLD realizado (mediana), então a opcionalidade (LSMC) e o teto por trajetória tendem a sair otimistas.",
   },
   {
     name: "Markov-switching / HMM gaussiano (3 regimes)",

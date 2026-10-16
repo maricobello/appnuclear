@@ -144,6 +144,7 @@ export interface RegimesResp {
   to: string;
   days: number;
   overall: import("./market/regime-backtest").RegimeBucket;
+  dm?: { statistic: number; pValue: number };
   buckets: import("./market/regime-backtest").RegimeBucket[];
   method: string;
   pldSource: string;

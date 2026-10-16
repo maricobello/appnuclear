@@ -137,7 +137,14 @@ export default function PrevisaoPage() {
             <Loading />
           )}
         </Panel>
-        <Panel title={`Erro por regime — ${sub}`} subtitle={reg365.data ? `Um ano de teste: de ${isoBr(reg365.data.from)} a ${isoBr(reg365.data.to)}` : "Um ano de teste contra o ingênuo · a primeira leitura do dia leva ~20 s"}>
+        <Panel
+          title={`Erro por regime — ${sub}`}
+          subtitle={
+            reg365.data
+              ? `Um ano de teste: de ${isoBr(reg365.data.from)} a ${isoBr(reg365.data.to)}${reg365.data.dm ? ` · Diebold–Mariano p = ${num(reg365.data.dm.pValue, 3)}` : ""}`
+              : "Um ano de teste contra o ingênuo · a primeira leitura do dia leva ~20 s"
+          }
+        >
           {reg365.data ? (
             <>
               <Table
@@ -150,6 +157,7 @@ export default function PrevisaoPage() {
                   return [
                     <span key="l" className={b === reg365.data!.overall ? "font-semibold text-ink" : undefined} title={`${num(b.hours, 0)} horas · MAE ${brl(b.maeModel)} vs ingênuo ${brl(b.maeNaive)}`}>
                       {b.label}
+                      {b.group === "faixa_pld" ? "*" : ""}
                     </span>,
                     <span key="r" className={`font-semibold ${tone}`}>{b.rmae === null ? "—" : num(b.rmae, 2)}</span>,
                     <span key="t" className={tone}>
@@ -160,6 +168,9 @@ export default function PrevisaoPage() {
                 })}
               />
               <p className="mt-2 text-[12px] text-muted">{reg365.data.method} Fonte do PLD: {reg365.data.pldSource}.</p>
+              <p className="mt-1 text-[12px] text-muted">
+                * Faixa do PLD realizado: mostra onde o erro mora, mas não serve para julgar o modelo. Separar pelo resultado favorece quem aposta no extremo (no piso, repetir o piso parece imbatível). A comparação justa é a do piso recente, conhecido antes de prever.
+              </p>
             </>
           ) : reg365.error ? (
             <ErrorBox error={reg365.error} onRetry={() => reg365.mutate()} />
@@ -196,17 +207,26 @@ export default function PrevisaoPage() {
             {gar ? <EChart option={gar} height={200} label="Volatilidade projetada" /> : <p className="text-[13px] text-muted">Sem variação suficiente para estimar (preço no piso/teto).</p>}
             {f?.garch ? <p className="mt-2 text-[12px] text-muted">α = {num(f.garch.alpha, 3)} · β = {num(f.garch.beta, 3)} · n = {f.garch.n} dias</p> : null}
           </Panel>
-          <Panel title="Dinâmica estocástica — MRJD" subtitle={`Reversão à média com saltos (Cartea–Figueroa) calibrada nos ${f?.mrjd?.calibratedOn ?? "resíduos do LEAR"}, espaço asinh`}>
+          <Panel
+            title="Cenários — MRJD de dois fatores"
+            subtitle={f?.mrjd?.fit ? "Nível do dia + reversão à média com saltos (Cartea–Figueroa) como cópula; a distribuição de cada hora vem do erro real" : `Reversão à média com saltos (Cartea–Figueroa) calibrada nos ${f?.mrjd?.calibratedOn ?? "resíduos do LEAR"}, espaço asinh`}
+          >
             {f?.mrjd ? (
               <Table
                 head={["Parâmetro", "Valor", "Leitura"]}
                 stack
                 align={["left", "right", "left"]}
                 rows={[
-                  ["κ (por hora)", num(f.mrjd.kappaPerHour, 4), "velocidade de reversão"],
-                  ["Meia-vida", `${num(f.mrjd.halfLifeHours, 1)} h`, "tempo p/ choque cair à metade"],
+                  ...(f.mrjd.fit
+                    ? [
+                        ["Horas do dia erram juntas", `${num(f.mrjd.fit.depSim, 2)} / ${num(f.mrjd.fit.depReal, 2)}`, "simulado / real (1 = juntas, 0,04 = independentes)"],
+                        ["Oscilação do erro", `${num(f.mrjd.fit.tvSim, 0)} / ${num(f.mrjd.fit.tvReal, 0)}`, "simulada / real, Σ|Δe| mediana (R$/MWh)"],
+                      ]
+                    : []),
+                  ["κ (por hora)", num(f.mrjd.kappaPerHour, 4), f.mrjd.fit ? "persistência do desvio dentro do dia" : "velocidade de reversão"],
+                  ["Meia-vida", `${num(f.mrjd.halfLifeHours, 1)} h`, f.mrjd.fit ? "suavidade das trajetórias (calibrada)" : "tempo p/ choque cair à metade"],
                   ["σ", num(f.mrjd.sigma, 4), "volatilidade difusiva"],
-                  ["Saltos / dia", num(f.mrjd.jumpsPerDay, 2), "intensidade λ·24"],
+                  ["Saltos / dia", num(f.mrjd.jumpsPerDay, 2), "choques acima de 4,5 MAD nos resíduos"],
                   ["Salto médio", num(f.mrjd.jumpMean, 3), "μ_J (asinh)"],
                   ["Desvio do salto", num(f.mrjd.jumpSd, 3), "σ_J (asinh)"],
                 ]}

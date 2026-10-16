@@ -5,11 +5,11 @@ import { learBacktest, learFit, learForecast, naiveForecast } from "../quant/lea
 import { christoffersen, crpsFromQuantiles, dieboldMariano, kupiecBlocks, mae, rmae, rmse, smape } from "../quant/metrics";
 import { calibrateMRJD, calibrateTwoFactor, fitSeasonality, simulateTwoFactor, type TwoFactorParams } from "../quant/ou";
 import { fitQRA, predictQRA } from "../quant/qra";
-import { mean, mulberry32, quantile, round } from "../quant/stats";
+import { mean, mulberry32, quantile, round, variance } from "../quant/stats";
 import { asinhFwd, asinhInv, fitAsinh } from "../quant/transforms";
 import { addDays } from "../sources/time";
 import type { Sub, SubPanel } from "../sources/types";
-import { capDailyMean, capDailyMeans, PLD_LIMITS, toDayMatrix } from "./brazil";
+import { capDailyMean, capDailyMeans, limitsFor, PLD_LIMITS, toDayMatrix } from "./brazil";
 
 export const QRA_TAUS = [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
 
@@ -24,15 +24,45 @@ export const QRA_TAUS = [0.05, 0.1, 0.25, 0.5, 0.75, 0.9, 0.95];
 export const LEAR_WEIGHT = 0.5;
 
 /**
+ * Ajuste ao piso. Com o PLD colado no piso, a mediana condicional do preço é o próprio piso, e
+ * a mediana é a previsão que minimiza o erro absoluto. Regra: se a hora ficou no piso em pelo
+ * menos 4 dos últimos 7 dias e a previsão combinada está a menos de R$ 50/MWh do piso, publica o
+ * piso. Walk-forward de 365 dias no PLD real (out/2025–out/2026): o MAE caiu 1,4–2,1% nos 4
+ * submercados, nas duas metades do período. Ajustar sem o limite de distância piorou 2–3% (a
+ * regra só corta erro quando o modelo já aponta para o piso).
+ */
+export const FLOOR_SNAP = { minDays: 4, window: 7, within: 50 };
+
+/** Piso do PLD vigente na data (o limite muda a cada ano). */
+export const floorOn = (date: string) => limitsFor(Number(date.slice(0, 4))).min;
+
+/** Ajuste ao piso de um dia previsto; `prev` = dias anteriores, cada um com o piso do seu ano. */
+export function snapToFloor(row: number[], prev: { row: number[]; floor: number }[], floor: number): number[] {
+  const last = prev.slice(-FLOOR_SNAP.window);
+  return row.map((v, h) => {
+    if (v >= floor + FLOOR_SNAP.within) return v;
+    let n = 0;
+    for (const d of last) if (d.row[h] <= d.floor * 1.001) n++;
+    return n >= FLOOR_SNAP.minDays ? floor : v;
+  });
+}
+
+/**
  * Combina uma trajetória LEAR (dias × 24) com o ingênuo semanal de forma recursiva: o
  * ingênuo de D+k usa a própria previsão combinada dos dias anteriores quando o dia de
- * referência ainda não foi observado. `hist` = dias observados até a origem.
+ * referência ainda não foi observado. `hist` = dias observados até a origem. Com `floors`
+ * (piso de cada dia de `hist` e de cada dia previsto) aplica o ajuste ao piso (FLOOR_SNAP).
  */
-export function combinePath(learPath: number[][], hist: number[][], dows: number[], w = LEAR_WEIGHT): number[][] {
+export function combinePath(learPath: number[][], hist: number[][], dows: number[], floors?: { hist: number[]; path: number[] }, w = LEAR_WEIGHT): number[][] {
   const ext = hist.slice(-7);
+  const prev = floors ? ext.map((row, i) => ({ row, floor: floors.hist[floors.hist.length - ext.length + i] })) : [];
   return learPath.map((row, k) => {
     const nv = naiveForecast(ext, dows[k]);
-    const c = row.map((v, h) => w * v + (1 - w) * nv[h]);
+    let c = row.map((v, h) => w * v + (1 - w) * nv[h]);
+    if (floors) {
+      c = snapToFloor(c, prev, floors.path[k]);
+      prev.push({ row: c, floor: floors.path[k] });
+    }
     ext.push(c);
     return c;
   });
@@ -46,7 +76,7 @@ export interface ForecastResult {
   history: { ts: number[]; values: number[] };
   horizon: {
     ts: number[];
-    /** Previsão pontual publicada: LEAR ⊕ ingênuo semanal (ver LEAR_WEIGHT). Centro das bandas e do Monte Carlo. */
+    /** Previsão pontual publicada: LEAR ⊕ ingênuo semanal (ver LEAR_WEIGHT), com ajuste ao piso (FLOOR_SNAP). Centro das bandas e do Monte Carlo. */
     point: number[];
     /** LEAR sozinho (transparência). */
     lear: number[];
@@ -106,8 +136,17 @@ export interface ForecastResult {
     dayLevelSd: number;
     dayPhi: number;
     calibratedOn: string;
+    /**
+     * Ajuste da calibração em D+1 (só no modo de cópula empírica), tudo no erro (trajetória −
+     * previsão): dependência entre as horas do dia (Var da média / Var horária, real × simulada),
+     * rugosidade mediana Σ|e_{h+1} − e_h| real × simulada e, para referência, a faixa conformal de
+     * 90% da média do dia (dayQ) × a das trajetórias.
+     */
+    fit?: { dayQTarget: number; dayQSim: number; tvReal: number; tvSim: number; depReal: number; depSim: number } | null;
   } | null;
   lear: { activeFeatures: number; nTrain: number; calibrationDays: number };
+  /** Qualidade da série usada: dias na janela recente (até 90) e quantos foram interpolados por falta na fonte. */
+  dataQuality: { windowDays: number; imputedDays: number; recentImputed: string[] };
   warnings: string[];
 }
 
@@ -135,9 +174,11 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   // backtest multi-horizonte: cada origem prevê D+1…D+H, para medir o erro por horizonte
   const btAll = learBacktest(dm.rows, dm.dows, nTest, { ...learOpts, horizon: horizonDays });
   // previsão publicada em cada origem: LEAR ⊕ ingênuo (recursivo por horizonte)
+  const dayFloors = dm.dates.map(floorOn);
   const comboMulti = btAll.multi.map((path, i) => {
     const o = btAll.dayIndex[i];
-    return combinePath(path, dm.rows.slice(0, o), dm.dows.slice(o, o + path.length));
+    const pathFloors = path.map((_, k) => floorOn(dm.dates[o + k] ?? addDays(dm.dates[o], k)));
+    return combinePath(path, dm.rows.slice(0, o), dm.dows.slice(o, o + path.length), { hist: dayFloors.slice(0, o), path: pathFloors });
   });
   // dias interpolados (ausentes na fonte) não são "observados": ficam fora das métricas
   const imputed = new Set(dm.imputed);
@@ -154,12 +195,18 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
 
   // erros por horizonte (k = 0 é D+1): só dias observados de verdade
   const errByH: number[][] = Array.from({ length: horizonDays }, () => []);
+  // estado de cada erro: a previsão estava no piso? (aí o erro é 0 ou um salto para cima)
+  const errAtFloorByH: boolean[][] = Array.from({ length: horizonDays }, () => []);
   comboMulti.forEach((path, i) => {
     const o = btAll.dayIndex[i];
     path.forEach((f, k) => {
       const d = o + k;
       if (d >= dm.rows.length || imputed.has(dm.dates[d])) return;
-      dm.rows[d].forEach((a, h) => errByH[k].push(a - f[h]));
+      const fl = dayFloors[d] * 1.001;
+      dm.rows[d].forEach((a, h) => {
+        errByH[k].push(a - f[h]);
+        errAtFloorByH[k].push(f[h] <= fl);
+      });
     });
   });
   // razão de dispersão D+k / D+1 (quantil 90% de |erro|), monotônica; poucos dados ⇒ √k
@@ -219,12 +266,13 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     floorShare: act.length ? rg.floorErr.length / act.length : 0,
   };
   // previsão pior que o ingênuo na janela: explica o regime em vez de esconder o número.
-  // Backtest de 150 dias reais (mai–out/2026): a combinação errou 5–7% menos que o ingênuo nos
-  // 4 submercados, mas perde em semanas coladas no piso (repetir o dia anterior acerta tudo).
+  // Walk-forward de 361 dias reais (out/2025–out/2026), com o ajuste ao piso: a previsão errou
+  // 8–9% menos que o ingênuo nos 4 submercados (Diebold–Mariano p < 0,001); nas horas de piso
+  // recente empata (rMAE 0,98–1,03), e em semanas curtas coladas no piso pode perder.
   const rmaeNow = rmae(act, fL, fN);
   if (rmaeNow > 1)
     warnings.push(
-      `Nos últimos ${bt.actuals.length} dias a previsão errou ${Math.round((rmaeNow - 1) * 100)}% mais que repetir o dia anterior (rMAE ${rmaeNow.toFixed(2)}): o PLD ficou no piso em ${Math.round(regimeMae.floorShare * 100)}% das horas, regime em que o ingênuo acerta quase sempre. No histórico longo a combinação erra menos que o ingênuo: 5–7% em 150 dias (mai–out/2026) e 1–5% em 891 dias.`,
+      `Nos últimos ${bt.actuals.length} dias a previsão errou ${Math.round((rmaeNow - 1) * 100)}% mais que repetir o dia anterior (rMAE ${rmaeNow.toFixed(2)}): o PLD ficou no piso em ${Math.round(regimeMae.floorShare * 100)}% das horas, regime em que o ingênuo acerta quase sempre. Em um ano de teste (out/2025–out/2026) a previsão errou 8–9% menos que o ingênuo nos 4 submercados.`,
     );
   // QRA avaliado fora da amostra: ajusta na 1ª metade dos dias do backtest, mede na 2ª
   const cut = 24 * Math.floor(bt.actuals.length / 2);
@@ -241,7 +289,7 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   const futureDates = Array.from({ length: horizonDays }, (_, k) => addDays(lastDate, k + 1));
   const futureDows = futureDates.map((d) => new Date(`${d}T12:00:00Z`).getUTCDay());
   const fut = learForecast(model, dm.rows, futureDows, clip, capDailyMean);
-  const futPoint = combinePath(fut, dm.rows, futureDows);
+  const futPoint = combinePath(fut, dm.rows, futureDows, { hist: dayFloors, path: futureDates.map(floorOn) });
   const extended = [...dm.rows, ...fut];
   const naiveFut = futureDows.map((dow, k) => naiveForecast(extended.slice(0, dm.rows.length + k), dow));
   const qraNextDay = fut[0].map((f, h) => predictQRA(qra, [f, naiveFut[0][h]]).map(clipPld));
@@ -292,17 +340,36 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     // (postos) entre horas e dias — cópula empírica. Assim o centro e a dispersão de cada
     // hora batem com o erro observado (antes, a volta do espaço asinh deslocava as
     // trajetórias 27–67 R$/MWh para cima e inflava a variação intradiária).
-    const pools = errByH.map((e) => e.map((v, j) => v / hourScale[j % 24]).sort((a, b) => a - b));
-    for (let k = 1; k < pools.length; k++) if (pools[k].length < 24 * 5) pools[k] = pools[k - 1].map((v) => v * (growth[k] / (growth[k - 1] || 1)));
+    //
+    // Marginais separadas também pelo ESTADO da previsão (no piso × fora do piso): no piso o
+    // erro é 0 ou um salto para cima; fora dele é largo e simétrico. Com o PLD no piso em ~80%
+    // das horas (out/2026), misturar os dois dava erro 0 em metade das trajetórias até no pico
+    // da noite. Estado com poucos erros (< 3 dias de horas) usa a marginal conjunta.
+    const norm = (k: number, keep: (j: number) => boolean) => errByH[k].flatMap((v, j) => (keep(j) ? [v / hourScale[j % 24]] : [])).sort((a, b) => a - b);
+    // [conjunta, previsão fora do piso, previsão no piso]
+    const sets = [
+      errByH.map((_, k) => norm(k, () => true)),
+      errByH.map((_, k) => norm(k, (j) => !errAtFloorByH[k][j])),
+      errByH.map((_, k) => norm(k, (j) => errAtFloorByH[k][j])),
+    ];
+    for (const pools of sets) for (let k = 1; k < pools.length; k++) if (pools[k].length < 24 * 5) pools[k] = pools[k - 1].map((v) => v * (growth[k] / (growth[k - 1] || 1)));
+    const pools = sets[0];
     // os erros dos ~28 dias do backtest subestimam a dispersão fora da amostra nos horizontes
     // longos (validação real: 5–95% em D+7 ≈ 0,80): cada horizonte fica pelo menos tão largo
-    // quanto a banda conformal ADAPTATIVA publicada (meia-largura ACI × crescimento medido)
+    // quanto a banda conformal ADAPTATIVA publicada (meia-largura ACI × crescimento medido);
+    // o mesmo fator vale para as marginais por estado
     pools.forEach((pool, k) => {
       if (!pool.length) return;
       const q90 = quantile(pool.map(Math.abs), 0.9);
       const s = q90 > 0 ? Math.min(3, Math.max(1, (aci.halfWidth * growth[k]) / q90)) : 1;
-      if (s > 1) pools[k] = pool.map((v) => v * s);
+      if (s > 1) for (const set of sets) set[k] = set[k].map((v) => v * s);
     });
+    const futFloor = futureDates.map((d) => floorOn(d) * 1.001);
+    const poolAt = (t: number) => {
+      const k = Math.floor(t / 24);
+      const st = sets[learFlat[t] <= futFloor[k] ? 2 : 1][k];
+      return st.length >= 24 * 3 ? st : sets[0][k];
+    };
     const empirical = pools[0].length >= 24 * 8 && params.kappa > 0;
     if (!empirical && calibratedOn.startsWith("resíduos do backtest")) calibratedOn = "resíduos no espaço asinh (poucos dias de backtest)";
     const qf = (pool: number[], u: number) => {
@@ -316,36 +383,64 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
       const idx = dev.map((_, m) => m);
       for (let t = 0; t < steps; t++) {
         idx.sort((a, b) => dev[a][t] - dev[b][t]);
-        const pool = pools[Math.floor(t / 24)];
+        const pool = poolAt(t);
         idx.forEach((m, r) => (out[m][t] = clipPld(learFlat[t] + hourScale[t % 24] * qf(pool, (r + 0.5) / dev.length))));
       }
       return out.map((p) => capDailyMeans(p));
     };
     if (empirical) {
-      // Calibração em dois níveis, em D+1, por busca em grade:
-      //  - multiplicador do fator DIÁRIO → dispersão da média do dia = dayQ (conformal 90%);
-      //  - multiplicador de κ (com σ ajustado para manter a variância intradiária) → variação
-      //    total intradiária Σ|p_{h+1} − p_h| mediana = a dos dias reais recentes (sem isso as
-      //    trajetórias oscilavam ~1,5× mais que o PLD real e inflavam o valor da bateria).
-      const base = params.dayVar > 1e-9 ? params.dayVar : (params.sigma ** 2 / (2 * params.kappa)) || 1e-4;
+      // Calibração em D+1 por busca em grade. A cópula só usa os POSTOS, então o que conta é a
+      // parte da variância que vem do nível do dia (ρ: as horas do mesmo dia andam juntas), a
+      // persistência do desvio dentro do dia (κ) e se os saltos entram (j). Alvos, ambos no ERRO
+      // (trajetória − previsão) e sem escala, para não confundir a forma da previsão com ruído:
+      //  - dependência entre as horas do dia: Var(média do dia do erro) / média das Var horárias
+      //    (1 = as horas andam juntas; 1/24 = independentes), a dos erros reais de D+1;
+      //  - rugosidade Σ|e_{h+1} − e_h| mediana = a dos erros reais de D+1 no backtest.
+      // Antes o alvo era a faixa conformal da média do dia (dayQ) e a variação do PREÇO real: em
+      // 40 dias fora da amostra (set–out/2026) a média do dia caiu dentro da faixa 5–95% das
+      // trajetórias em só 78–80% dos dias em SE, S e NE.
       const target = dayQ[0];
       const tv = (a: number[]) => a.slice(1).reduce((acc, v, h) => acc + Math.abs(v - a[h]), 0);
-      const tvReal = quantile(dm.rows.slice(-28).map(tv), 0.5);
-      if (Number.isFinite(target) && target > 0) {
-        const pt0 = mean(learFlat.slice(0, 24));
-        let best = { m: params.dayVar / base, k: 1, err: Infinity };
+      const depOf = (E: number[][]) => {
+        const vH = mean(Array.from({ length: 24 }, (_, h) => variance(E.map((r) => r[h]))));
+        return vH > 0 ? variance(E.map((r) => mean(r))) / vH : NaN;
+      };
+      const errD1 = bt.actuals.map((a, d) => a.map((v, h) => v - bt.forecasts[d][h]));
+      const tvReal = quantile(errD1.map(tv), 0.5);
+      const depReal = errD1.length >= 10 ? depOf(errD1) : NaN;
+      if (Number.isFinite(target) && target > 0 && Number.isFinite(depReal) && depReal > 0) {
+        const pt = learFlat.slice(0, 24);
+        const pt0 = mean(pt);
+        const pjump = Math.min(0.5, params.lambda);
+        const ej2 = params.jumpMean ** 2 + params.jumpSd ** 2;
+        let best = { k: 1, j: 1, rho: 0, err: Infinity, q: NaN, tv: NaN, dep: NaN, dayVar: params.dayVar };
+        const logGap = (a: number, b: number) => (a > 0 && b > 0 ? Math.abs(Math.log(a / b)) : 5);
         for (const k of [0.03125, 0.0625, 0.125, 0.25, 0.5, 1]) {
-          for (const m of [0, 0.25, 0.5, 1, 2, 4, 8, 16, 32]) {
-            const trial = { ...params, kappa: params.kappa * k, sigma: params.sigma * Math.sqrt(k), dayVar: base * m };
-            const sim = mapPaths(simulateTwoFactor(trial, 24, 400, mulberry32(7)), 24);
-            const q = quantile(sim.map((p) => Math.abs(mean(p) - pt0)), 0.9);
-            const tvSim = quantile(sim.map(tv), 0.5);
-            const err = Math.abs(q - target) / target + (tvReal > 0 ? Math.abs(tvSim - tvReal) / tvReal : 0);
-            if (err < best.err) best = { m, k, err };
+          for (const j of [0, 1]) {
+            // variância estacionária do desvio intradiário (difusão + saltos) com κ·k
+            const a2 = Math.exp(-2 * params.kappa * k);
+            const vU = params.sigma ** 2 / (2 * params.kappa) + (j * pjump * ej2) / Math.max(1e-12, 1 - a2);
+            for (const rho of [0, 0.3, 0.6, 0.8, 0.9, 0.95, 0.98, 0.995]) {
+              const trial = { ...params, kappa: params.kappa * k, sigma: params.sigma * Math.sqrt(k), lambda: params.lambda * j, dayVar: (rho / (1 - rho)) * vU };
+              const sim = mapPaths(simulateTwoFactor(trial, 24, 400, mulberry32(7)), 24);
+              const res = sim.map((p) => p.map((v, h) => v - pt[h]));
+              const q = quantile(sim.map((p) => Math.abs(mean(p) - pt0)), 0.9);
+              const tvSim = quantile(res.map(tv), 0.5);
+              const depSim = depOf(res);
+              const err = logGap(depSim, depReal) + (tvReal > 0 ? logGap(tvSim, tvReal) : 0);
+              if (err < best.err) best = { k, j, rho, err, q, tv: tvSim, dep: depSim, dayVar: trial.dayVar };
+            }
           }
         }
-        params = { ...params, kappa: params.kappa * best.k, sigma: params.sigma * Math.sqrt(best.k), halfLife: params.halfLife / best.k, dayVar: base * best.m };
-        mrjd = { ...mrjd, kappaPerHour: params.kappa, halfLifeHours: params.halfLife, sigma: params.sigma };
+        params = { ...params, kappa: params.kappa * best.k, sigma: params.sigma * Math.sqrt(best.k), halfLife: params.halfLife / best.k, lambda: params.lambda * best.j, dayVar: best.dayVar };
+        mrjd = {
+          ...mrjd,
+          kappaPerHour: params.kappa,
+          halfLifeHours: params.halfLife,
+          sigma: params.sigma,
+          jumpsPerDay: params.lambda * 24,
+          fit: { dayQTarget: target, dayQSim: best.q, tvReal, tvSim: best.tv, depReal, depSim: best.dep },
+        };
       }
       paths = mapPaths(simulateTwoFactor(params, H, nPaths, mulberry32(20260925)), H);
     } else {
@@ -486,6 +581,11 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
     garch,
     mrjd,
     lear: { activeFeatures: model.selectedFeatures, nTrain: model.nTrain, calibrationDays },
+    dataQuality: {
+      windowDays: Math.min(90, dm.rows.length),
+      imputedDays: dm.imputed.filter((d) => d >= dm.dates[Math.max(0, dm.rows.length - 90)]).length,
+      recentImputed: dm.imputed.slice(-5),
+    },
     warnings,
     paths,
     publishedAhead,

@@ -252,6 +252,7 @@ export default function MetodologiaPage() {
               rows={[
                 ["Período hidrológico", regimes.estacao.map((r) => r.label).join(" · ")],
                 ["Reservatório (EAR)", regimes.reservatorio.map((r) => r.label).join(" · ")],
+                ["Piso recente", regimes.piso_recente.map((r) => r.label).join(" · ")],
                 ["Faixa de PLD", regimes.faixa_pld.map((r) => r.label).join(" · ")],
               ]}
             />

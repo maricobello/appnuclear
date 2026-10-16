@@ -17,8 +17,9 @@ jobs:
         run: |
           fail=0
           for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/renovaveis/historico" "/api/alertas" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
-                      "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval"; do
-            code=$(curl -s -o body.json -w '%{http_code}' --max-time 120 "$URL$path")
+                      "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval" "/api/fontes" "/api/auditoria/modelos"; do
+            # a auditoria dos modelos roda tudo no PLD real (até ~4 min na primeira do dia)
+            code=$(curl -s -o body.json -w '%{http_code}' --max-time 300 "$URL$path")
             echo "== $path → HTTP $code"
             python3 - "$path" <<'PY' || true
           import json, sys
@@ -73,6 +74,16 @@ jobs:
               print("   convenção de hora:", (d.get("hourCheck") or {}).get("ok"), "| balanço:", (d.get("netLoad") or {}).get("quality"))
           if path == "/api/status":
               print("  ", json.dumps(d)[:400])
+          if path == "/api/fontes":
+              print("   fontes:", d.get("counts"))
+              for x in d.get("sources") or []:
+                  if x.get("state") not in ("live", "off"):
+                      print("  ", x.get("id"), x.get("state"), "—", str(x.get("note") or "")[:160])
+          if path == "/api/auditoria/modelos":
+              print("   nota:", d.get("score"), d.get("counts"), "| registro:", ", ".join(f"{t['sub']} {t['days']}d" for t in d.get("trackRecord") or []))
+              for c in d.get("checks") or []:
+                  if c.get("status") != "pass":
+                      print("  ", c.get("status"), c.get("id"), "—", c.get("display"))
           PY
             if [ "$code" -ge 400 ]; then fail=1; fi
           done

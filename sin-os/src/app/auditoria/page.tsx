@@ -3,6 +3,7 @@
 import { Fragment, useMemo, useState } from "react";
 import { Bell, Bot, Database, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { EChart, type ChartOption } from "@/components/EChart";
+import { ModelAuditPanel } from "@/components/ModelAudit";
 import { Badge, Disclosure, ErrorBox, Loading, PageHeader, Panel, ScrollX, statusLabel, statusLevel, Table } from "@/components/ui";
 import type { AuditoriaResp, ConfiancaResp } from "@/lib/apiTypes";
 import { baseOption, C, line, timeAxis, valueAxis } from "@/lib/chart";
@@ -241,6 +242,8 @@ export default function AuditoriaPage() {
           </div>
         ) : null}
       </Panel>
+
+      <ModelAuditPanel />
 
       <Panel title="Relatório do agente de IA" subtitle={report ? `${report.model} · ${dateTime(report.createdAt)} · ${report.toolCalls.length} chamadas de ferramenta` : "Roda quando a auditoria detecta degradação, uma vez por dia ou manualmente com credencial"}>
         {report ? (

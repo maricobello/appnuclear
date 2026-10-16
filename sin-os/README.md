@@ -19,13 +19,15 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
 | **Renováveis & corte** | Corte de eólica e solar do ONS por dia, hora, submercado e motivo, cruzado com o PLD; histórico de 12 meses com revisões; curva do pato |
-| **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), alertas push + relatório do agente (Groq) com causa provável e ação |
+| **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
 | **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão) e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
 | **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
-mostra a idade do dado. As fontes brasileiras são publicadas em D−1/D+1 (PLD de amanhã sai à tarde); as
+mostra a idade do dado. O painel **APIs conectadas** (Sala de Comando) e a barra do modo Terminal mostram,
+a cada minuto, o estado de cada uma das 16 fontes — ao vivo, fonte alternativa, atrasada, fora do ar ou
+desligada (sem chave) — calculado dos mesmos dados em cache que as telas usam (`GET /api/fontes`). As fontes brasileiras são publicadas em D−1/D+1 (PLD de amanhã sai à tarde); as
 europeias e britânicas têm resolução de 15–30 min.
 
 ## APIs públicas integradas
@@ -173,6 +175,15 @@ alta/baixa). Tema **claro e escuro** seguindo o sistema operacional, com escolha
 recolhíveis ("Mostrar detalhes"). Movimento com [Motion](https://motion.dev), curto e amortecido, sempre
 desligado com "reduzir movimento".
 
+**Dois visuais**, escolhidos na barra lateral (Moderno · Terminal) e lembrados no navegador:
+
+- **Moderno** — o descrito acima.
+- **Terminal** — o SIN OS clássico: sempre escuro, densidade maior, números em Geist Mono, cartões com
+  borda, rótulos em caixa-alta e uma barra fixa no topo com o PLD da hora por submercado (variação contra
+  a mesma hora de ontem), o estado das APIs, o ativo BESS e o relógio de Brasília (no celular, uma faixa
+  curta com PLD e APIs). É o atributo `data-ui="terminal"` no `<html>`, aplicado antes da primeira pintura
+  (`src/lib/theme-boot.ts`): troca só tokens e regras de CSS, os componentes são os mesmos.
+
 Tokens em `src/app/globals.css` (claro e escuro); componentes em `src/components/ui.tsx` (Panel, Kpi,
 Stat, Segmented, Table, MetricRow, Disclosure, ScrollX, StatusTag) e `EChart.tsx`. Os gráficos são
 montados com a paleta escura de `src/lib/chart.ts` e convertidos para a variante clara no tema claro
@@ -289,10 +300,94 @@ commit da versão.
 ## Previsão por regime
 
 `GET /api/previsao/regimes?sub=SE` (painel "Erro por regime" na tela Previsão): walk-forward de 365 dias,
-cada dia previsto só com o histórico anterior, comparando a previsão publicada (LEAR ⊕ ingênuo) com o
-ingênuo por período hidrológico (úmido dez–abr, seco mai–nov), nível do reservatório do submercado (EAR
-abaixo de 40%, 40–60%, acima de 60%) e faixa do PLD realizado (piso, até R$ 150, R$ 150–300, acima de
-R$ 300). Calculado uma vez por dia e guardado no Firestore.
+cada dia previsto só com o histórico anterior, comparando a previsão publicada (LEAR ⊕ ingênuo, com o
+ajuste ao piso) com o ingênuo por período hidrológico (úmido dez–abr, seco mai–nov), nível do
+reservatório do submercado (EAR abaixo de 40%, 40–60%, acima de 60%), piso recente (a hora ficou no piso
+em 4+ dos 7 dias anteriores) e faixa do PLD realizado (piso, até R$ 150, R$ 150–300, acima de R$ 300), com
+Diebold–Mariano (HAC) no período todo. Calculado uma vez por dia e guardado no Firestore.
+
+Só estação, reservatório e piso recente são conhecidos antes de prever. A faixa do PLD realizado mostra
+onde o erro mora, mas não julga o modelo: separar pelo resultado favorece quem aposta no extremo (no piso,
+repetir o piso parece imbatível) — o "dilema do previsor" de Lerch, Thorarinsdottir, Ravazzolo & Gneiting
+(2017, *Statistical Science*).
+
+**Ajuste ao piso.** Com o PLD colado no piso, a mediana do preço é o próprio piso, e a mediana é a previsão
+que minimiza o erro absoluto. Se a hora ficou no piso em pelo menos 4 dos últimos 7 dias e a previsão
+combinada está a menos de R$ 50/MWh do piso, a previsão publicada é o piso (`FLOOR_SNAP` em
+`src/lib/market/forecast.ts`). Grade testada antes de escolher (fração de dias no piso 3/7–6/7 × distância
+R$ 25/50/100/∞), em 361 dias walk-forward no PLD real (out/2025–out/2026):
+
+| Submercado | rMAE antes | rMAE com o ajuste | MAE | Horas de piso recente (rMAE) | DM p (1 ano) |
+|---|---|---|---|---|---|
+| SE | 0,941 | 0,922 | −2,1% | 1,02 | 0,0002 |
+| S | 0,933 | 0,918 | −1,6% | 0,99 | 0,0001 |
+| NE | 0,930 | 0,914 | −1,8% | 0,98 | 0,0001 |
+| N | 0,923 | 0,910 | −1,4% | 1,03 | < 0,0001 |
+
+O ganho aparece nas duas metades do período; ajustar sem o limite de distância piorou o MAE em 2–3%.
+
+**Banda adaptativa à volatilidade (testada e não adotada).** Os erros fora da banda de 90% se agrupam
+(Christoffersen reprova: depois de uma hora fora, a mesma hora do dia seguinte sai de novo em ~20% das
+vezes, contra ~9%). Cinco variantes — escala EWMA do erro recente, sua raiz, escala pelo regime de piso da
+semana, escala pelo estado da previsão e combinações — foram testadas em 365 dias: as que corrigem o
+agrupamento pioram o *interval score* (regra de pontuação própria para intervalos) em 1–22%, porque alargam
+demais a banda depois de dias voláteis. A banda publicada continua a ACI com fator por hora, que tem
+cobertura de 90% e o melhor interval score; a auditoria mostra o agrupamento como reprovado.
+
+### Validação fora da amostra das faixas e dos cenários (out/2026)
+
+40 origens por submercado (06/09–16/10/2026), cada previsão refeita só com o PLD até a véspera e
+comparada com o dia seguinte (`buildForecast` sobre o painel cortado):
+
+| | SE | S | NE | N | Alvo |
+|---|---|---|---|---|---|
+| Banda horária publicada (ACI) | 0,904 | 0,904 | 0,907 | 0,898 | 0,90 |
+| Faixa da média do dia publicada (conformal) | 0,93 | 0,93 | 0,90 | 0,90 | 0,90 |
+| Monte Carlo, faixa 5–95% por hora | 0,926 | 0,925 | 0,929 | 0,917 | 0,90 |
+| Monte Carlo, faixa 5–95% da média do dia (antes) | 0,80 (0,72) | 0,75 (0,63) | 0,80 (0,78) | 0,93 (0,90) | 0,90 |
+| Oscilação no dia, trajetória ÷ real, mediana (antes) | 1,39 (2,15) | 1,97 (2,63) | 2,08 (2,37) | 1,69 (1,39) | 1 |
+| CRPS da média do dia, R$/MWh (antes) | 21,8 (22,2) | 20,7 (21,5) | 17,5 (17,3) | 18,3 (18,3) | menor é melhor |
+
+"Antes" = o código que estava em produção, nos mesmos 40 dias.
+
+As faixas que a tela publica estão calibradas. Os cenários do Monte Carlo acertam hora a hora, mas a faixa
+da média do dia é estreita em SE, S e NE (a média realizada fica abaixo dela em 13–15% dos dias, quase
+sempre dias inteiros no piso em que os cenários ficam poucos reais acima dele) e as trajetórias oscilam mais
+que o PLD real — por isso a opcionalidade (LSMC) e o teto por trajetória da bateria tendem a sair
+otimistas, e a tela de arbitragem avisa quando isso acontece.
+
+Nesta rodada a auditoria achou e corrigiu dois defeitos do Monte Carlo: as marginais misturavam horas com
+previsão no piso (erro quase sempre 0) e fora dele, e metade das trajetórias saía sem incerteza até no pico
+da noite; e o alvo de calibração usava a oscilação do PREÇO real, confundindo a forma da previsão com ruído.
+Agora as marginais são separadas por estado e a cópula é calibrada no erro (dependência entre as horas do
+dia e rugosidade).
+
+**Registro das previsões publicadas.** A cada dia novo, a previsão do primeiro dia previsto é gravada
+(Firestore, `forecast_log/{sub}`, últimos 90 dias) e depois conferida com o PLD que aconteceu: erro contra
+o ingênuo e cobertura da banda horária, da faixa da média do dia e do Monte Carlo. Entra na nota da
+auditoria a partir de 14 dias conferidos.
+
+## Auditoria dos modelos
+
+`GET /api/auditoria/modelos` (tela Agente auditor): roda todos os modelos sobre o PLD real e confere cada
+um contra um alvo fixo — aprovado, atenção ou reprovado; a nota é 100 × (aprovados + ½ atenção) / total.
+Recalculada no máximo a cada hora, com os mesmos caches das telas (`src/lib/audit/models.ts`).
+
+| Modelo | Critério | Alvo |
+|---|---|---|
+| Previsão | erro contra o ingênuo nas últimas 4 semanas | rMAE < 1 (reprova se for significativamente pior, DM p > 0,95, ou > 15% pior) |
+| Previsão | combinação contra o LEAR sozinho; erro cresce com o horizonte | combinação ≤ LEAR; D+7/D+1 ≥ 0,9 (sinal de vazamento) |
+| Bandas | cobertura da banda de 90%, Kupiec (com efeito de desenho diário), Christoffersen | 90% ± 3 p.p.; p ≥ 0,05 |
+| Quantis (QRA) | cobertura 5–95% fora da amostra | 90% ± 5 p.p. |
+| GARCH | estacionário | α+β < 0,99 (α ≈ 0 = volatilidade constante, válido) |
+| Cenários (MRJD) | dependência entre as horas do dia e rugosidade do erro, simuladas × reais | desvio ≤ 15% |
+| Previsões publicadas | erro do que foi publicado contra o ingênuo; banda horária; faixa da média do dia (a partir de 14 dias) | rMAE < 1; 90% ± 5 p.p.; 90% ± 10 p.p. |
+| HMM | probabilidades somam 1 | — |
+| Dados | último dia completo; dias faltando na fonte (90 dias); PLD no piso/teto da ANEEL; horas faltando | ontem ou hoje; ≤ 3%; 0 fora; < 1% |
+| Backtest de 1 ano | D+1 contra o ingênuo; pior regime conhecido antes de prever | rMAE < 1 e DM p < 0,05; ≤ 1,05 |
+| Bateria (LP) | despacho ótimo ≥ regra simples todo dia; ciclos | 0 dias abaixo; ≤ limite |
+| Arbitragem | captura da regra simples | entre 0% e 100% |
+| Auditor de APIs | detecta falhas injetadas | ≥ 90% |
 
 ## Agente auditor
 
@@ -438,7 +533,7 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente (Groq)
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, confianca, renovaveis (+historico), brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test), metodologia, health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, renovaveis (+historico), brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
 src/lib/methodology.ts  dicionário de dados e regras publicadas em /metodologia
 src/app/*/page.tsx  telas
 tests/              testes de validação

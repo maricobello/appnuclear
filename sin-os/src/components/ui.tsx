@@ -30,7 +30,7 @@ export function Panel({
     <section className={`card flex min-w-0 flex-col ${className}`}>
       <header className="flex flex-wrap items-start justify-between gap-x-4 gap-y-2 px-5 pb-2 pt-4">
         <div className="min-w-0">
-          <h2 className="text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>
+          <h2 className="panel-title text-[15px] font-semibold tracking-[-0.01em] text-ink">{title}</h2>
           {subtitle ? <p className="mt-0.5 text-[13px] leading-snug text-muted">{subtitle}</p> : null}
         </div>
         {right ? <div className="flex min-w-0 max-w-full flex-wrap items-center gap-2">{right}</div> : null}
@@ -376,7 +376,7 @@ export function Kpi({
         {warn ? <span className={`ml-auto h-2 w-2 shrink-0 rounded-full ${warn.dot}`} title={warn.label} aria-label={warn.label} /> : null}
       </div>
       <div className="mt-1 flex flex-wrap items-baseline gap-x-1.5">
-        <span className="text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
+        <span className="kpi-value text-[26px] font-semibold leading-tight tracking-[-0.02em] text-ink">
           <AnimatedNumber value={value} format={format} className="tnum" />
         </span>
         {unit ? <span className="text-[13px] text-muted">{unit}</span> : null}
@@ -628,7 +628,7 @@ export function PageHeader({ title, subtitle, right }: { title: string; subtitle
   return (
     <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
       <div className="min-w-0">
-        <h1 className="text-[28px] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[32px]">{title}</h1>
+        <h1 className="page-title text-[28px] font-bold leading-tight tracking-[-0.025em] text-ink sm:text-[32px]">{title}</h1>
         {subtitle ? <p className="mt-1 max-w-3xl text-[15px] leading-snug text-muted">{subtitle}</p> : null}
       </div>
       {right ? <div className="flex flex-wrap items-center gap-2">{right}</div> : null}

@@ -1,6 +1,7 @@
 import "server-only";
 import { cached } from "./cache";
 import { getBrazilBundle, getPld } from "./data";
+import { logForecast } from "./forecast-log";
 import { bessStudy, type BessParams } from "./market/bess-study";
 import { buildForecast, type ForecastInternal } from "./market/forecast";
 import type { Sub } from "./sources/types";
@@ -14,6 +15,9 @@ export async function getForecast(sub: Sub, horizonDays = 7): Promise<{ fc: Fore
   const { value } = await cached(`fc:${sub}:${horizonDays}:${lastTs}:${br.pld.simulated}`, 30 * 60_000, async () =>
     buildForecast(pld, sub, horizonDays, 1000),
   );
+  // registro das previsões publicadas (auditoria), só com PLD real. Espera no máximo 3 s: na
+  // Vercel o trabalho depois da resposta pode não terminar. Depois da 1ª vez no dia, é instantâneo.
+  if (!br.pld.simulated) await Promise.race([logForecast(value), new Promise((r) => setTimeout(r, 3000))]);
   return { fc: value, simulated: br.pld.simulated, fallback: br.pld.fallback ?? null };
 }
 

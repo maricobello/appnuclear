@@ -1,7 +1,8 @@
 import { learBacktest } from "../quant/lear";
+import { dieboldMariano, mae } from "../quant/metrics";
 import type { DailySubPanel, Sub, SubPanel } from "../sources/types";
 import { capDailyMean, PLD_LIMITS, toDayMatrix } from "./brazil";
-import { LEAR_WEIGHT } from "./forecast";
+import { FLOOR_SNAP, floorOn, LEAR_WEIGHT, snapToFloor } from "./forecast";
 
 /**
  * Backtest walk-forward da previsão de D+1 contra o ingênuo, separado por regime: período
@@ -9,9 +10,14 @@ import { LEAR_WEIGHT } from "./forecast";
  * PLD realizado. O MAE agrupado esconde onde o modelo ganha e onde perde; aqui fica explícito.
  *
  * Cada dia de teste usa só o histórico anterior a ele (re-estimação diária), igual à previsão
- * publicada: LEAR ⊕ ingênuo semanal com peso LEAR_WEIGHT.
+ * publicada: LEAR ⊕ ingênuo semanal com peso LEAR_WEIGHT e ajuste ao piso (FLOOR_SNAP).
+ *
+ * Estação, reservatório e "piso recente" são conhecidos na hora de prever (ex ante). A faixa do
+ * PLD é a do preço REALIZADO: separar pelo resultado favorece quem aposta no extremo — no piso,
+ * o ingênuo que repete o piso parece imbatível (o "dilema do previsor", Lerch et al., 2017,
+ * Statistical Science). Serve para mostrar onde o erro mora, não para julgar o modelo.
  */
-export type RegimeGroup = "estacao" | "reservatorio" | "faixa_pld";
+export type RegimeGroup = "estacao" | "reservatorio" | "piso_recente" | "faixa_pld";
 
 export interface RegimeBucket {
   group: RegimeGroup;
@@ -34,6 +40,8 @@ export interface RegimeBreakdownInput {
   /** EAR do submercado (% da capacidade) por data. */
   ear: Map<string, number>;
   floor: number;
+  /** Por dia e hora: a hora ficou no piso em pelo menos FLOOR_SNAP.minDays dos 7 dias anteriores (ex ante). */
+  floorRecent?: boolean[][];
 }
 
 export const SEASONS = [
@@ -44,6 +52,10 @@ export const EAR_BANDS = [
   { key: "ear_baixo", label: "Reservatório abaixo de 40%", max: 40 },
   { key: "ear_medio", label: "Reservatório entre 40% e 60%", max: 60 },
   { key: "ear_alto", label: "Reservatório acima de 60%", max: Infinity },
+] as const;
+export const FLOOR_RECENT = [
+  { key: "piso_sim", label: `Hora no piso em ${FLOOR_SNAP.minDays}+ dos 7 dias anteriores` },
+  { key: "piso_nao", label: "Hora fora do piso na última semana" },
 ] as const;
 export const PLD_BANDS = [
   { key: "piso", label: "PLD no piso" },
@@ -74,6 +86,7 @@ export function regimeBreakdown(inp: RegimeBreakdownInput): { buckets: RegimeBuc
       const en = Math.abs(a - inp.naive[i][h]);
       add(`estacao:${s}`, em, en);
       if (e) add(`reservatorio:${e}`, em, en);
+      if (inp.floorRecent) add(`piso_recente:${inp.floorRecent[i][h] ? "piso_sim" : "piso_nao"}`, em, en);
       add(`faixa_pld:${pldBand(a, inp.floor)}`, em, en);
       add("total", em, en);
     }
@@ -87,6 +100,7 @@ export function regimeBreakdown(inp: RegimeBreakdownInput): { buckets: RegimeBuc
   const buckets = [
     ...SEASONS.map((s) => mk("estacao", s.key, s.label)),
     ...EAR_BANDS.map((b) => mk("reservatorio", b.key, b.label)),
+    ...FLOOR_RECENT.map((b) => mk("piso_recente", b.key, b.label)),
     ...PLD_BANDS.map((b) => mk("faixa_pld", b.key, b.label)),
   ].filter((b) => b.hours > 0);
   return { buckets, overall: mk("estacao", "total", "Todos os dias") };
@@ -98,6 +112,8 @@ export interface RegimeBacktestResult {
   to: string;
   days: number;
   overall: RegimeBucket;
+  /** Diebold–Mariano (HAC) do MAE diário contra o ingênuo no período todo: p < 0,05 ⇒ o modelo é melhor. */
+  dm?: { statistic: number; pValue: number };
   buckets: RegimeBucket[];
   method: string;
 }
@@ -114,21 +130,25 @@ export function regimeBacktest(panel: SubPanel, sub: Sub, ear: DailySubPanel | n
   const earMap = new Map<string, number>();
   if (ear) ear.dates.forEach((d, i) => ear.values[sub][i] !== null && earMap.set(d, ear.values[sub][i] as number));
   const w = LEAR_WEIGHT;
-  const { buckets, overall } = regimeBreakdown({
-    dates: idx.map(({ d }) => dm.dates[d]),
-    actuals: idx.map(({ i }) => bt.actuals[i]),
-    model: idx.map(({ i }) => bt.forecasts[i].map((v, h) => w * v + (1 - w) * bt.naive[i][h])),
-    naive: idx.map(({ i }) => bt.naive[i]),
-    ear: earMap,
-    floor: PLD_LIMITS.min,
+  // dias anteriores com o piso de cada ano (D+1: o histórico é todo observado)
+  const prevOf = (d: number) => dm.rows.slice(Math.max(0, d - 7), d).map((row, j) => ({ row, floor: floorOn(dm.dates[Math.max(0, d - 7) + j]) }));
+  const actuals = idx.map(({ i }) => bt.actuals[i]);
+  const naive = idx.map(({ i }) => bt.naive[i]);
+  const model = idx.map(({ d, i }) => snapToFloor(bt.forecasts[i].map((v, h) => w * v + (1 - w) * bt.naive[i][h]), prevOf(d), floorOn(dm.dates[d])));
+  const floorRecent = idx.map(({ d }) => {
+    const prev = prevOf(d);
+    return Array.from({ length: 24 }, (_, h) => prev.filter((p) => p.row[h] <= p.floor * 1.001).length >= FLOOR_SNAP.minDays);
   });
+  const { buckets, overall } = regimeBreakdown({ dates: idx.map(({ d }) => dm.dates[d]), actuals, model, naive, ear: earMap, floor: PLD_LIMITS.min, floorRecent });
+  const dmt = dieboldMariano(actuals.map((a, k) => mae(a, model[k])), actuals.map((a, k) => mae(a, naive[k])));
   return {
     sub,
     from: dm.dates[idx[0].d],
     to: dm.dates[idx[idx.length - 1].d],
     days: idx.length,
     overall,
+    dm: { statistic: dmt.statistic, pValue: dmt.pValue },
     buckets,
-    method: `Walk-forward de ${idx.length} dias: cada dia é previsto só com o histórico anterior (LEAR re-estimado diariamente, janela de 90 dias), combinado ${Math.round(w * 100)}/${Math.round((1 - w) * 100)} com o ingênuo semanal, e comparado ao próprio ingênuo. Dias ausentes na fonte ficam de fora.`,
+    method: `Walk-forward de ${idx.length} dias: cada dia é previsto só com o histórico anterior (LEAR re-estimado diariamente, janela de 90 dias), combinado ${Math.round(w * 100)}/${Math.round((1 - w) * 100)} com o ingênuo semanal, com o ajuste ao piso, e comparado ao próprio ingênuo. Dias ausentes na fonte ficam de fora.`,
   };
 }

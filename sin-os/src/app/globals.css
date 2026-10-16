@@ -254,3 +254,104 @@ input[type="number"] {
 .md li {
   margin: 0.2rem 0;
 }
+
+/*
+ * Visual Terminal (o SIN OS clássico): escolhido na barra lateral, grava data-ui="terminal" no
+ * <html>. Paleta escura azulada, bordas finas, cantos de 6 px, números em fonte mono, rótulos em
+ * caixa-alta e a faixa de cotações no topo. Vale por cima do tema claro/escuro (sempre escuro).
+ * Contraste conferido: cinza secundário ≥ 4,7:1 e vermelho ≥ 4,9:1 em todas as superfícies.
+ */
+html:root[data-ui="terminal"] {
+  color-scheme: dark;
+  --page: #05080d;
+  --surface: #0a0e15;
+  --surface-2: #0e141d;
+  --surface-3: #141c28;
+  --border: rgba(148, 163, 184, 0.13);
+  --border-strong: rgba(148, 163, 184, 0.22);
+  --grid: #161f2c;
+  --axis: #243044;
+  --ink: #e9eef5;
+  --ink-2: #b6c0cd;
+  --muted: #7c8797;
+  --accent: #3b9eff;
+  --accent-fill: #1f6fd1;
+  --accent-2: #22d3ee;
+  --good: #2fbf71;
+  --warning: #f2b63a;
+  --serious: #f08a4b;
+  --critical: #ef5350;
+  --on-accent: #ffffff;
+  --seg-thumb: #1c2635;
+  --sub-se: #0a84ff;
+  --sub-s: #ff9f0a;
+  --sub-ne: #30d158;
+  --sub-n: #bf5af2;
+  --shadow: none;
+  --glass: rgba(5, 8, 13, 0.85);
+}
+
+[data-ui="terminal"] body {
+  font-family: var(--font-geist-sans), -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+  font-size: 13px;
+  letter-spacing: 0;
+}
+
+[data-ui="terminal"] .tnum,
+[data-ui="terminal"] .font-mono {
+  font-family: var(--font-geist-mono), "SF Mono", ui-monospace, Menlo, monospace;
+  letter-spacing: -0.01em;
+}
+
+[data-ui="terminal"] .card {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  box-shadow: none;
+}
+
+[data-ui="terminal"] .page-title {
+  font-size: 21px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+[data-ui="terminal"] .kpi-value {
+  font-size: 22px;
+}
+
+[data-ui="terminal"] .panel-title {
+  font-size: 13px;
+  letter-spacing: 0.01em;
+}
+
+[data-ui="terminal"] .nav-group,
+[data-ui="terminal"] .eyebrow {
+  font-size: 10.5px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+}
+
+/* faixa de cotações (topo) e marca do Terminal: só existem nesse visual */
+.terminal-bar,
+.terminal-strip,
+.terminal-only {
+  display: none;
+}
+[data-ui="terminal"] .terminal-only {
+  display: block;
+}
+@media (max-width: 1023.98px) {
+  [data-ui="terminal"] .terminal-strip {
+    display: flex;
+  }
+}
+@media (min-width: 1024px) {
+  [data-ui="terminal"] .terminal-bar {
+    display: flex;
+  }
+}
+[data-ui="terminal"] .sidebar-rail {
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+}

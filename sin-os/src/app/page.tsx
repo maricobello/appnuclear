@@ -17,6 +17,7 @@ import {
   type Range,
 } from "@/components/home/panels";
 import { Appear } from "@/components/motion";
+import { ApiStatusPanel } from "@/components/Sources";
 import { Kpi, PageHeader, Panel, Segmented, SimBanner } from "@/components/ui";
 import type { ArbitragemResp, AuditoriaLite, BessResp, BrasilResp, ClimaResp, PrevisaoResp, RenovaveisResp, AlertasResp } from "@/lib/apiTypes";
 import { assetQuery, useAsset } from "@/lib/asset";
@@ -159,6 +160,7 @@ export default function Home() {
           <EnaRow br={d} />
         </Panel>
       </div>
+      <ApiStatusPanel />
       <p className="px-1 text-[12px] text-muted">Fontes públicas: CCEE, ONS, Open-Meteo, BCB e Energy-Charts. Não é recomendação de investimento.</p>
     </div>
   );
