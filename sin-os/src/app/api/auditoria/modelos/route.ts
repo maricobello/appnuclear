@@ -10,7 +10,7 @@ export const maxDuration = 300;
 /** Depois disso a auditoria guardada é refeita em segundo plano (quem pediu recebe a guardada). */
 const FRESH_MS = 60 * 60_000;
 /** Sobe quando o formato muda: a guardada de outra versão é descartada. */
-const VERSION = 1;
+const VERSION = 2;
 type Stored = ModelAudit & { v?: number };
 let running: Promise<ModelAudit> | null = null;
 

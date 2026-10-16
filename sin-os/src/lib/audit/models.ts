@@ -37,7 +37,7 @@ export interface ModelAudit {
   /** Procedência do PLD usado (oficial ou estimado pelo CMO). */
   dataNote: string;
   /** Registro das previsões publicadas: dias já conferidos com o PLD realizado, por submercado. */
-  trackRecord: { sub: Sub; days: number; from: string | null; to: string | null }[];
+  trackRecord: { sub: Sub; logged: number; days: number; from: string | null; to: string | null }[];
   /** Dias conferidos a partir dos quais o registro entra na nota. */
   trackMinDays: number;
 }
@@ -442,7 +442,7 @@ export function auditModels(x: ModelAuditInput): ModelAudit {
   const score = Math.round((100 * (counts.pass + 0.5 * counts.warn)) / n);
   const trackRecord = SUBS.map((sub) => {
     const t = x.trackRecords?.[sub];
-    return { sub, days: t?.days ?? 0, from: t?.from ?? null, to: t?.to ?? null };
+    return { sub, logged: t?.logged ?? 0, days: t?.days ?? 0, from: t?.from ?? null, to: t?.to ?? null };
   });
   return { generatedAt: x.now, score, counts, checks, dataNote: x.pldSource, trackRecord, trackMinDays: TRACK_MIN_DAYS };
 }

@@ -55,6 +55,8 @@ export function appendLog(items: LoggedForecast[], entry: LoggedForecast, max = 
 }
 
 export interface TrackRecord {
+  /** Previsões gravadas, conferidas ou não (as do futuro aguardam o PLD acontecer). */
+  logged: number;
   /** Dias com previsão registrada e PLD realizado completo (não interpolado). */
   days: number;
   from: string | null;
@@ -99,6 +101,7 @@ export function evaluateTrackRecord(items: LoggedForecast[], dm: DayMatrix): Tra
   }
   const n = used.length;
   return {
+    logged: items.length,
     days: n,
     from: used[0] ?? null,
     to: used[n - 1] ?? null,

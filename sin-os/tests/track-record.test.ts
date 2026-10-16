@@ -39,6 +39,7 @@ describe("registro das previsões publicadas", () => {
     const items = [entry(19), entry(20), entry(21), entry(40)]; // dia 40 ainda não aconteceu
     const tr = evaluateTrackRecord(items, dm);
     expect(tr.days).toBe(3);
+    expect(tr.logged).toBe(4);
     expect(tr.from).toBe(date(19));
     expect(tr.hourCoverage).toBeCloseTo(2 / 3); // dia 20 (200) fora da banda 90–110
     expect(tr.dayCoverage).toBeCloseTo(2 / 3);
@@ -56,7 +57,7 @@ describe("registro das previsões publicadas", () => {
   });
 
   it("só entra na nota com dias suficientes", () => {
-    const tr = (days: number) => ({ days, from: date(0), to: date(days), mae: 10, maeNaive: 20, rmae: 0.5, hourCoverage: 0.9, dayCoverage: 0.9, mcDayCoverage: 0.8 });
+    const tr = (days: number) => ({ logged: days + 1, days, from: date(0), to: date(days), mae: 10, maeNaive: 20, rmae: 0.5, hourCoverage: 0.9, dayCoverage: 0.9, mcDayCoverage: 0.8 });
     const base = { now: Date.parse("2026-10-16T15:00:00Z"), forecasts: {}, regimes: {}, bess: null, arbitrage: null, selfEval: null, pld: null, limits: { min: 57.31, maxHourly: 1611.04 }, pldSource: "x" };
     expect(auditModels({ ...base, trackRecords: { SE: tr(TRACK_MIN_DAYS - 1) } }).checks.some((c) => c.id.startsWith("registro."))).toBe(false);
     const a = auditModels({ ...base, trackRecords: { SE: tr(TRACK_MIN_DAYS) } });

@@ -106,7 +106,7 @@ export function ModelAuditPanel() {
           {data.trackRecord?.some((t) => t.days < data.trackMinDays) ? (
             <p className="text-[13px] text-muted">
               Registro das previsões publicadas (o que a tela mostrou × o PLD que aconteceu):{" "}
-              {data.trackRecord.map((t) => `${t.sub} ${t.days} dia${t.days === 1 ? "" : "s"}`).join(" · ")}. Entra na nota a partir de {data.trackMinDays} dias conferidos.
+              {data.trackRecord.map((t) => `${t.sub} ${t.days} dia${t.days === 1 ? "" : "s"}${t.logged > t.days ? ` (+${t.logged - t.days} aguardando)` : ""}`).join(" · ")}. Entra na nota a partir de {data.trackMinDays} dias conferidos.
             </p>
           ) : null}
           {issues.length ? (
