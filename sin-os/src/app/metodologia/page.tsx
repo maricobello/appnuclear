@@ -10,12 +10,14 @@ const SECTIONS = [
   ["tempo", "Tempo e versão"],
   ["fontes", "Dicionário de dados"],
   ["auditor", "Regras do auditor"],
+  ["dados", "Dados faltantes e invalidação"],
   ["confianca", "Selo de confiança"],
   ["renovaveis", "Corte e balanço"],
   ["previsao", "Backtest por regime"],
   ["bess", "BESS"],
   ["alertas", "Alertas de mercado"],
   ["rede", "Modelo da rede"],
+  ["termicas", "Térmicas e ESS"],
 ] as const;
 
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -208,6 +210,29 @@ export default function MetodologiaPage() {
         </div>
       </section>
 
+      <section id="dados" className="scroll-mt-16">
+        <Panel title="Dados faltantes e invalidação" subtitle="O que acontece com cada lacuna, valor inválido, revisão e falha de fonte — números lidos das constantes do código">
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-ink">Dados faltantes</p>
+              <List items={m.dataPolicy.missing} />
+            </div>
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-ink">Quando um dado ou uma série é invalidado</p>
+              <List items={m.dataPolicy.invalidation} />
+            </div>
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-ink">Revisões e versões</p>
+              <List items={m.dataPolicy.revisions} />
+            </div>
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-ink">Fontes alternativas</p>
+              <List items={m.dataPolicy.fallbacks} />
+            </div>
+          </div>
+        </Panel>
+      </section>
+
       <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
         <section id="confianca" className="scroll-mt-16">
           <Panel title="Selo de confiança" subtitle="Detecta republicação silenciosa e dia incompleto">
@@ -298,6 +323,38 @@ export default function MetodologiaPage() {
                 <p className="mb-1 text-[13px] font-medium text-ink">Limites conhecidos</p>
                 <List items={m.grid.limits} />
               </div>
+            </div>
+          </div>
+        </Panel>
+      </section>
+
+      <section id="termicas" className="scroll-mt-16">
+        <Panel
+          title="Térmicas e ESS"
+          subtitle="Despacho por motivo do ONS × CVU do PMO, com a regra de ressarcimento da CCEE"
+          right={
+            <Link href="/termicas" className="text-[12px] text-accent hover:underline">
+              ver em Térmicas & encargos
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <List items={m.thermal.rules} />
+            </div>
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-ink">Conferência com a CCEE (R$ milhões na semana)</p>
+              <TextTable
+                head={["Boletim", "Unit commitment", "Constrained-off"]}
+                rows={m.thermal.validation.map((v) => [
+                  <a key={v.bulletin} className="text-accent hover:underline" href={v.url} target="_blank" rel="noreferrer">
+                    {v.bulletin} · {v.week}
+                  </a>,
+                  `${num(v.uc.model)} × ${num(v.uc.ccee)}`,
+                  `${num(v.off.model)} × ${num(v.off.ccee)}`,
+                ])}
+              />
+              <p className="mt-1 text-[12px] text-muted">modelo × CCEE</p>
             </div>
           </div>
         </Panel>

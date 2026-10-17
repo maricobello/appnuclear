@@ -1,4 +1,4 @@
-import { parquetReadObjects } from "hyparquet";
+import { parquetMetadata, parquetReadObjects } from "hyparquet";
 import { cached } from "../cache";
 import { interchangeRowFrom, PAIRS, type InterchangeRow } from "../market/interchange";
 import { balanceRowFrom, curtRowFrom, type BalanceRow, type CurtRow, type Tech } from "../market/renewables";
@@ -24,9 +24,19 @@ export const curtailmentUrl = (tech: Tech, y: number, m: number) =>
 export const balanceUrl = (y: number) => `${ONS_S3}/balanco_energia_subsistema_ho/BALANCO_ENERGIA_SUBSISTEMA_${y}.parquet`;
 export const interchangeUrl = (y: number) => `${ONS_S3}/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_${y}.parquet`;
 
-export async function readParquet(url: string): Promise<{ rows: Record<string, unknown>[]; probes: Probe[] }> {
+/**
+ * `columns` lê só essas colunas (arquivos largos, como o despacho térmico com 49 colunas). O ONS
+ * muda o esquema entre meses (coluna nova, coluna que some): pedimos só as que o arquivo tem, e
+ * a coluna ausente chega como indefinida para quem mapeia a linha.
+ */
+export async function readParquet(url: string, columns?: string[]): Promise<{ rows: Record<string, unknown>[]; probes: Probe[] }> {
   const { buf, probes } = await fetchBuffer(url, { timeoutMs: 60_000 });
-  const rows = (await parquetReadObjects({ file: buf })) as Record<string, unknown>[];
+  let cols = columns;
+  if (columns) {
+    const have = new Set(parquetMetadata(buf).schema.map((e) => e.name));
+    cols = columns.filter((c) => have.has(c));
+  }
+  const rows = (await parquetReadObjects({ file: buf, ...(cols ? { columns: cols } : {}) })) as Record<string, unknown>[];
   return { rows, probes };
 }
 
@@ -47,7 +57,7 @@ const notFound = (e: unknown) => probesOf(e).some((p) => p.status === 403 || p.s
  * publica D−1): 403/404 nele é tolerado; nos demais é erro.
  */
 /** `map` devolve null para linha inválida e undefined para linha ignorada de propósito (ex.: total SIN). */
-async function loadFiles<T>(urls: string[], map: (o: Record<string, unknown>) => T | null | undefined, key: string) {
+export async function loadFiles<T>(urls: string[], map: (o: Record<string, unknown>) => T | null | undefined, key: string, columns?: string[]) {
   const { value } = await cached(key, TTL, async () => {
     const probes: Probe[] = [];
     const rows: T[] = [];
@@ -55,7 +65,7 @@ async function loadFiles<T>(urls: string[], map: (o: Record<string, unknown>) =>
     let loaded = 0;
     for (let i = 0; i < urls.length; i++) {
       try {
-        const r = await readParquet(urls[i]);
+        const r = await readParquet(urls[i], columns);
         probes.push(...r.probes);
         loaded++;
         for (const o of r.rows) {
@@ -74,7 +84,7 @@ async function loadFiles<T>(urls: string[], map: (o: Record<string, unknown>) =>
   return value;
 }
 
-function qualityOf<T extends { ts: number }>(rows: T[], invalid: number, dailyTotals: number[], range: [number, number]): Quality {
+export function qualityOf<T extends { ts: number }>(rows: T[], invalid: number, dailyTotals: number[], range: [number, number]): Quality {
   const q = emptyQuality();
   q.points = rows.length;
   q.invalid = invalid;
@@ -84,7 +94,7 @@ function qualityOf<T extends { ts: number }>(rows: T[], invalid: number, dailyTo
   return q;
 }
 
-async function wrap<T>(id: SourceId, fn: () => Promise<{ data: T; quality: Quality; probes: Probe[] }>): Promise<SourceResult<T>> {
+export async function wrap<T>(id: SourceId, fn: () => Promise<{ data: T; quality: Quality; probes: Probe[] }>): Promise<SourceResult<T>> {
   try {
     const { data, quality, probes } = await fn();
     return { id, ok: true, data, probes, quality, simulated: false, fetchedAt: Date.now() };

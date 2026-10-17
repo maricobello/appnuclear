@@ -8,6 +8,7 @@ export type SourceId =
   | "ons_curtailment"
   | "ons_balanco"
   | "ons_intercambio"
+  | "ons_termica"
   | "energy_charts"
   | "elexon_mid"
   | "elexon_sysprice"

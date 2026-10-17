@@ -19,15 +19,16 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
 | **Rede elétrica** | Intercâmbio medido × programado nas 4 interligações (ONS, hora a hora) com a diferença de PLD entre os dois lados (quando a rede separou os preços); fluxo de potência AC diário do SIN montado só com dados do ONS: mapa de carregamento das linhas, as mais carregadas, N-1 e a validação contra o intercâmbio medido |
+| **Térmicas & encargos** | Geração de cada térmica por motivo do despacho (ONS), pilha de mérito com o CMO da hora (térmica marginal e quanto o CMO precisa subir para ligar a próxima) e o ESS estimado pela regra de ressarcimento da CCEE, em R$ e em R$/MWh consumido, conferido com os boletins InfoPLD |
 | **Renováveis & corte** | Corte de eólica e solar do ONS por dia, hora, submercado e motivo, cruzado com o PLD; histórico de 12 meses com revisões; curva do pato |
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
-| **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão) e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
+| **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão), política de dados faltantes e de invalidação de séries e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
 | **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
 mostra a idade do dado. O painel **APIs conectadas** (Sala de Comando) e a barra do modo Terminal mostram,
-a cada minuto, o estado de cada uma das 17 fontes — ao vivo, fonte alternativa, atrasada, fora do ar ou
+a cada minuto, o estado de cada uma das 18 fontes — ao vivo, fonte alternativa, atrasada, fora do ar ou
 desligada (sem chave) — calculado dos mesmos dados em cache que as telas usam (`GET /api/fontes`). As fontes brasileiras são publicadas em D−1/D+1 (PLD de amanhã sai à tarde); as
 europeias e britânicas têm resolução de 15–30 min.
 
@@ -38,7 +39,7 @@ Todas gratuitas e sem cadastro, exceto a EIA (chave gratuita, opcional).
 | Fonte | Dados | Uso |
 |---|---|---|
 | **CCEE — Dados Abertos** (CKAN) | PLD horário por submercado | preço de referência, alvo dos modelos |
-| **ONS — Dados Abertos** (S3 direto + CKAN) | CMO semi-horário (DESSEM), EAR, ENA, carga horária, corte de eólica/solar, balanço e intercâmbio entre subsistemas | formação do preço, fallback e auditoria do PLD, drivers hidrológicos, renováveis, rede |
+| **ONS — Dados Abertos** (S3 direto + CKAN) | CMO semi-horário (DESSEM), EAR, ENA, carga horária, corte de eólica/solar, balanço, intercâmbio entre subsistemas, despacho térmico por motivo e CVU do PMO | formação do preço, fallback e auditoria do PLD, drivers hidrológicos, renováveis, rede, térmicas e ESS |
 | **ONS — cadastros e operação** (S3, só no worker da rede) | linhas, subestações, transformadores, compensadores, unidades geradoras, geração por usina, fluxo programado dos elos CC | modelo e fluxo de potência AC do SIN |
 | **Energy-Charts** (Fraunhofer ISE) | preços day-ahead de 12 zonas europeias (limite de 2 req/min: o app atualiza 2 zonas por vez e guarda no Firestore) | arbitragem de bateria e de fronteira |
 | **Elexon BMRS** | Market Index Price e System Buy/Sell Price (GB) | preço de curto prazo e escassez |
@@ -327,6 +328,36 @@ python -m pytest grid/tests
 python grid/run.py --date auto --out rede.json        # --post https://sinos-iota.vercel.app para enviar
 ```
 
+## Térmicas & encargos (ESS)
+
+Tela `/termicas` e `GET /api/termicas?dias=7` (3–31). O ONS publica, hora a hora e por usina, a
+geração térmica classificada por motivo do despacho (ordem de mérito, inflexibilidade, unit
+commitment, razão elétrica, segurança energética, GFOM, substituição, exportação, reposição de perdas,
+reserva de potência) e o constrained-off; e o CVU de cada usina por semana operativa do PMO. Com isso:
+
+- **Pilha de mérito** por submercado na hora de maior geração térmica: usinas por CVU com a
+  disponibilidade declarada, o CMO da hora, a térmica marginal e quanto o CMO precisa subir para a
+  próxima ligar por mérito.
+- **ESS estimado** pela regra de ressarcimento da CCEE: max(0, CVU − PLD) × geração por unit
+  commitment, razão elétrica ou segurança energética, mais max(0, PLD − CVU) × constrained-off, hora
+  a hora, só para CVU > 0; e o mesmo valor por MWh consumido (carga do SIN nos mesmos dias).
+- **Conferências a cada leitura:** os motivos somados dão a geração de cada usina (diferença de
+  0,07% em out/2026) e toda a geração tem CVU da semana.
+
+Conferência com a CCEE (boletins InfoPLD, estimativa semanal do ESS), com o modelo rodado nos
+arquivos do ONS das mesmas semanas operativas e o PLD a partir do CMO limitado ao piso e ao teto:
+
+| Semana | Unit commitment (modelo × CCEE) | Constrained-off (modelo × CCEE) |
+|---|---|---|
+| 14 a 20/06/2025 (InfoPLD 716) | R$ 2,62 × 2,57 mi (+2%) | R$ 1,83 × 1,37 mi (+34%) |
+| 18 a 24/10/2025 (InfoPLD 734) | R$ 22,00 × 22,68 mi (−3%) | R$ 4,34 × 5,90 mi (−26%) |
+
+Nessas semanas o ONS registrou zero de geração por razão elétrica e por segurança energética, e a
+CCEE estimou R$ 1–3 mi nesses itens: vêm de componentes que o arquivo do ONS não mostra (deslocamento
+hidráulico, por exemplo), então eles saem pela regra mas sem validação. Geração por mérito com CVU
+acima do PLD fica fora (usinas com CCEAR por disponibilidade são cobertas pelo contrato). O teste
+`tests/real/thermal-live.test.ts` (`npm run eval:real`) refaz a conta e confere os números.
+
 ## Metodologia pública
 
 Tela `/metodologia` e `GET /api/metodologia` (JSON): para cada fonte, o arquivo ou rota lido, as colunas
@@ -428,6 +459,7 @@ da resposta (`after()`); só a primeira de todas espera o cálculo. O smoke test
 | Dados | último dia completo; dias faltando na fonte (90 dias); PLD no piso/teto da ANEEL; horas faltando | ontem ou hoje; ≤ 3%; 0 fora; < 1% |
 | Backtest de 1 ano | D+1 contra o ingênuo; pior regime conhecido antes de prever | rMAE < 1 e DM p < 0,05; ≤ 1,05 |
 | Bateria (LP) | despacho ótimo ≥ regra simples todo dia; ciclos | 0 dias abaixo; ≤ limite |
+| Térmicas e ESS | motivos do despacho somam a geração; geração com CVU da semana | ≤ 1%; ≥ 99% |
 | Rede elétrica | retrato em dia; fluxo AC nas 24 h; p3s × pandapower; balanço na barra de referência; usinas com barra; intercâmbio calculado × medido por interligação; N-1 resolvido; tensões plausíveis | ≤ 2 dias; 24/24; < 1 MW; ≤ 2% da carga; ≥ 95%; erro ≤ 15% (≤ 30% atenção); ≥ 99%; ≥ 95% entre 0,90 e 1,10 pu |
 | Arbitragem | captura da regra simples | entre 0% e 100% |
 | Auditor de APIs | detecta falhas injetadas | ≥ 90% |
@@ -576,8 +608,9 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente (Groq)
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, confianca, renovaveis (+historico), rede (+ingest), brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, renovaveis (+historico), rede (+ingest), termicas, brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
 src/lib/methodology.ts  dicionário de dados e regras publicadas em /metodologia
+src/lib/market/thermal.ts  despacho térmico por motivo, CVU por semana, ESS e pilha de mérito
 src/lib/grid/       retrato do fluxo de potência (esquema, armazenamento e a resposta de /api/rede)
 grid/               modelo da rede em Python (cadastros do ONS → pandapower → p3s), worker diário
 src/app/*/page.tsx  telas

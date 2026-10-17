@@ -4,6 +4,7 @@ import { cached } from "./cache";
 import { getBrazilBundle, getGlobalBundle, getWeatherBundle } from "./data";
 import { ccePiConfigured, fetchPldPI } from "./sources/ccee-pi";
 import { fetchBalance, fetchCurtailment, fetchInterchange } from "./sources/ons-renewables";
+import { fetchThermal } from "./sources/ons-thermal";
 import { SOURCE_LIST } from "./sources/registry";
 import type { SourceId, SourceResult } from "./sources/types";
 import { listAuditRuns } from "./store";
@@ -28,13 +29,14 @@ const piOff = (): SourceResult<unknown> => ({
  * consultar esta rota não dispara downloads além dos que as telas já fariam.
  */
 export async function getLiveStatus(budgetMs = 20_000): Promise<LiveStatus> {
-  const [br, gl, wx, curt, bal, ic, pi, runs] = await Promise.all([
+  const [br, gl, wx, curt, bal, ic, th, pi, runs] = await Promise.all([
     within(getBrazilBundle(), budgetMs),
     within(getGlobalBundle(), budgetMs),
     within(getWeatherBundle(), budgetMs),
     within(fetchCurtailment(14), budgetMs),
     within(fetchBalance(14), budgetMs),
     within(fetchInterchange(14), budgetMs),
+    within(fetchThermal(7), budgetMs),
     ccePiConfigured() ? within(cached("pld:pi", 10 * 60_000, () => fetchPldPI(14)).then((r) => r.value), budgetMs) : Promise.resolve(piOff()),
     listAuditRuns(1).catch(() => []),
   ]);
@@ -48,6 +50,7 @@ export async function getLiveStatus(budgetMs = 20_000): Promise<LiveStatus> {
     ons_curtailment: curt,
     ons_balanco: bal,
     ons_intercambio: ic,
+    ons_termica: th,
     energy_charts: gl?.eu,
     elexon_mid: gl?.ukMid,
     elexon_sysprice: gl?.ukSys,

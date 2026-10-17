@@ -17,6 +17,7 @@ export const VALID_RANGES: Record<SourceId, { range: [number, number]; unit: str
   ons_curtailment: { range: [0, 1_000_000] as [number, number], unit: "MWh/dia", why: "corte diário total" },
   ons_balanco: { range: [0, 120_000] as [number, number], unit: "MWmed", why: "carga horária no balanço" },
   ons_intercambio: { range: [0, 25_000] as [number, number], unit: "MWmed", why: "fluxo numa interligação; o maior já medido entre subsistemas fica perto de 13 GW" },
+  ons_termica: { range: [0, 40_000] as [number, number], unit: "MWmed", why: "geração térmica total do SIN na hora; a disponibilidade declarada fica perto de 25 GW" },
   energy_charts: { range: [-500, 4000] as [number, number], unit: "€/MWh", why: "preço mínimo e máximo harmonizados do SDAC" },
   elexon_mid: { range: [-1000, 6000] as [number, number], unit: "£/MWh", why: "faixa observada do índice de mercado" },
   elexon_sysprice: { range: [-1000, 10000] as [number, number], unit: "£/MWh", why: "preço de desequilíbrio pode disparar" },

@@ -3,6 +3,7 @@ import type { BessDay } from "../market/bess-study";
 import type { ForecastResult } from "../market/forecast";
 import type { RegimeBacktestResult } from "../market/regime-backtest";
 import { tinyMw } from "../fmt";
+import { THERMAL_CHECKS } from "../market/thermal";
 import { brtDate } from "../sources/time";
 import { TRACK_MIN_DAYS, type TrackRecord } from "./track-record";
 import { SUBS, type Sub } from "../sources/types";
@@ -62,6 +63,8 @@ export interface ModelAuditInput {
   trackRecords?: Partial<Record<Sub, TrackRecord>>;
   /** Retrato diário do modelo da rede (fluxo AC do worker) e a idade em dias (BRT). */
   grid?: { snapshot: GridSnapshot | null; ageDays: number | null } | null;
+  /** Conferências do despacho térmico por motivo × CVU (janela recente). */
+  thermal?: { identityMaxGap: number | null; cvuCoverage: number | null; to: string | null } | { error: string } | null;
 }
 
 /** Critérios do modelo da rede (fluxo de potência AC do SIN). */
@@ -453,6 +456,7 @@ export function auditModels(x: ModelAuditInput): ModelAudit {
   }
 
   if (x.grid !== undefined) gridChecks(x.grid, add);
+  if (x.thermal !== undefined) thermalChecks(x.thermal, add);
 
   const counts = { pass: 0, warn: 0, fail: 0 } as Record<ModelCheckStatus, number>;
   for (const c of checks) counts[c.status]++;
@@ -583,4 +587,36 @@ function gridChecks(g: ModelAuditInput["grid"], add: (c: ModelCheck) => void) {
       detail: `Só plausibilidade: o ONS não publica tensões medidas. Às ${v.tensao.hora}h a menor foi ${f(v.tensao.min, 3)} e a maior ${f(v.tensao.max, 3)} pu (reatores e capacitores manobráveis não estão no modelo).`,
     });
   }
+}
+
+function thermalChecks(t: ModelAuditInput["thermal"], add: (c: ModelCheck) => void) {
+  const model = "Térmicas e ESS";
+  if (!t || isFailed(t)) {
+    add({ id: "termicas.dados", model, sub: null, label: "Despacho térmico por motivo lido", value: null, display: "—", target: "ler", status: "warn", detail: t ? `Não foi possível ler agora: ${t.error}` : "Não lido nesta auditoria." });
+    return;
+  }
+  const gap = t.identityMaxGap;
+  add({
+    id: "termicas.identidade",
+    model,
+    sub: null,
+    label: "Motivos do despacho somam a geração",
+    value: gap,
+    display: gap === null ? "—" : pct(gap, 2),
+    target: `≤ ${pct(THERMAL_CHECKS.identityTol, 0)}`,
+    status: gap === null ? "warn" : upTo(gap, THERMAL_CHECKS.identityTol, 3 * THERMAL_CHECKS.identityTol),
+    detail: `Pior dia da janela até ${t.to ? t.to.split("-").reverse().join("/") : "—"}: a soma de mérito, inflexibilidade, unit commitment, restrição elétrica, segurança energética e demais motivos contra a geração verificada de cada usina (ONS).`,
+  });
+  const cov = t.cvuCoverage;
+  add({
+    id: "termicas.cvu",
+    model,
+    sub: null,
+    label: "Geração com CVU da semana operativa",
+    value: cov,
+    display: pct(cov),
+    target: `≥ ${pct(THERMAL_CHECKS.cvuCoverageMin, 0)}`,
+    status: cov === null ? "warn" : cov >= THERMAL_CHECKS.cvuCoverageMin ? "pass" : cov >= 0.95 ? "warn" : "fail",
+    detail: "Usina sem CVU no PMO da semana fica fora da estimativa do ESS e da pilha de mérito.",
+  });
 }

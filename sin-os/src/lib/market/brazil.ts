@@ -51,10 +51,12 @@ export interface DayMatrix {
 
 /** Maior lacuna de dias inteiros preenchida por interpolação; lacunas maiores quebram a série. */
 export const MAX_GAP_DAYS = 3;
+/** Horas faltando que um dia pode ter e ainda entrar na série (completadas pelos vizinhos). */
+export const MAX_GAP_HOURS = 2;
 
 /**
  * Converte um painel horário em matriz dia×hora (BRT) apenas com dias completos;
- * lacunas isoladas (≤2h) são interpoladas linearmente.
+ * dia com até MAX_GAP_HOURS horas faltando é completado pela média das horas vizinhas.
  */
 export function toDayMatrix(panel: SubPanel, sub: Sub): DayMatrix {
   const byDay = new Map<string, (number | null)[]>();
@@ -70,7 +72,7 @@ export function toDayMatrix(panel: SubPanel, sub: Sub): DayMatrix {
   for (const d of [...byDay.keys()].sort()) {
     const r = byDay.get(d)!;
     const missing = r.filter((v) => v === null).length;
-    if (missing > 2) continue;
+    if (missing > MAX_GAP_HOURS) continue;
     const filled = r.slice();
     for (let h = 0; h < 24; h++) {
       if (filled[h] !== null) continue;

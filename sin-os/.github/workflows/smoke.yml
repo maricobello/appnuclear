@@ -16,7 +16,7 @@ jobs:
       - name: Rotas de API
         run: |
           fail=0
-          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/renovaveis/historico" "/api/rede" "/api/alertas" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
+          for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/renovaveis/historico" "/api/rede" "/api/termicas" "/api/alertas" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
                       "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval" "/api/fontes" "/api/auditoria/modelos"; do
             # a auditoria dos modelos roda tudo no PLD real (até ~4 min na primeira do dia)
             code=$(curl -s -o body.json -w '%{http_code}' --max-time 300 "$URL$path")

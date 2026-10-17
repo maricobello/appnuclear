@@ -1,11 +1,13 @@
 import { AUDIT_THRESHOLDS, CHECK_WEIGHTS } from "./audit/checks";
 import { GRID_CHECKS } from "./audit/models";
+import { HISTORY_DAYS } from "./grid/snapshot";
 import { DEFAULT_THRESHOLDS } from "./audit/market-alerts";
 import { TRUST_RULES, TRUST_SOURCES } from "./audit/trust";
-import { PLD_LIMITS } from "./market/brazil";
+import { MAX_GAP_DAYS, MAX_GAP_HOURS, PLD_LIMITS } from "./market/brazil";
 import { FLOOR_SNAP, LEAR_WEIGHT } from "./market/forecast";
 import { EAR_BANDS, FLOOR_RECENT, PLD_BANDS, SEASONS } from "./market/regime-backtest";
 import { DECOUPLE_BRL, IDENTITY_TOL_MW } from "./market/interchange";
+import { CCEE_VALIDATION, THERMAL_CHECKS } from "./market/thermal";
 import { RENEWABLE_CHECKS } from "./market/renewables";
 import { VALID_RANGES } from "./sources/ranges";
 import { SOURCES } from "./sources/registry";
@@ -169,6 +171,26 @@ export const DATA_DICTIONARY: Record<SourceId, DictEntry> = {
     ],
     version: "arquivo anual relido a cada 3 h",
   },
+  ons_termica: {
+    files: [`${S3}/geracao_termica_despacho_2_ho/GERACAO_TERMICA_DESPACHO-2_AAAA_MM.parquet`, `${S3}/cvu_usitermica_se/CVU_USINA_TERMICA_AAAA.parquet`],
+    grain: "hora × usina térmica; CVU por semana operativa (sábado a sexta) e revisão do PMO",
+    time: "din_instante no relógio de Brasília gravado como UTC; semana operativa pelas datas de início e fim",
+    fields: [
+      { col: "val_verifgeracao", as: "gen", unit: "MWmed", note: "geração verificada total da usina" },
+      { col: "val_verifordemmerito · val_verifinflexpura", as: "mérito · inflexibilidade", unit: "MWmed", note: "a inflexibilidade embutida no mérito fica no mérito" },
+      { col: "val_verifunitcommitment · val_verifrazaoeletrica · val_verifgarantiaenergetica", as: "uc · elétrica · segurança", unit: "MWmed", note: "fora da ordem de mérito com direito a ESS" },
+      { col: "val_verifgfom · val_verifgsub · val_verifexportacao · val_verifreposicaoperdas · val_verifreservapotencia", as: "demais motivos", unit: "MWmed" },
+      { col: "val_verifconstrainedoff", as: "off", unit: "MWmed", note: "corte de usina despachada por mérito" },
+      { col: "val_progdisponibilidade", as: "avail", unit: "MWmed", note: "disponibilidade declarada na programação" },
+      { col: "cod_usinaplanejamento · val_cvu", as: "código · CVU", unit: "R$/MWh", note: "liga a usina ao CVU da semana" },
+    ],
+    steps: [
+      `os motivos somados têm de dar a geração da usina: dia com diferença acima de ${THERMAL_CHECKS.identityTol * 100}% é sinalizado`,
+      "CVU da semana operativa que contém o dia (revisão mais recente do PMO)",
+      "ESS = max(0, CVU − PLD) × geração fora da ordem de mérito (unit commitment, restrição elétrica, segurança energética) + max(0, PLD − CVU) × constrained-off, hora a hora, só para CVU > 0",
+    ],
+    version: "arquivo mensal relido a cada 3 h; o CVU muda a cada revisão semanal do PMO",
+  },
   energy_charts: {
     files: ["api.energy-charts.info/price?bzn=ZONA&start&end (12 zonas)"],
     grain: "15 min (SDAC) por zona",
@@ -293,6 +315,45 @@ export const CHECK_RULES: CheckRule[] = [
   },
 ];
 
+/**
+ * Política de dados faltantes e de invalidação de séries: o que acontece com cada lacuna, valor
+ * inválido, revisão e falha de fonte. Cada número sai da constante que o código aplica.
+ */
+export function dataPolicy() {
+  const c = T.completeness;
+  return {
+    missing: [
+      `Hora faltando no PLD ou no CMO: o dia entra na série com até ${MAX_GAP_HOURS} horas faltando, completadas pela média da hora anterior e da seguinte; com ${MAX_GAP_HOURS + 1} ou mais, o dia conta como ausente (regra abaixo).`,
+      `Dia inteiro faltando: até ${MAX_GAP_DAYS} dias seguidos são interpolados hora a hora entre os dias vizinhos e marcados como imputados. Dia imputado fica fora de toda métrica (backtest, erro contra o ingênuo, cobertura das bandas) e aparece como aviso na previsão.`,
+      `Lacuna maior que ${MAX_GAP_DAYS} dias quebra a série: nada é inventado, o modelo usa o trecho contínuo mais recente.`,
+      "Dia só fecha completo: PLD oficial é gravado só com as 24 horas dos 4 submercados; corte de eólica e solar só com as 48 meias horas; o modelo da rede só roda com a geração por usina e o balanço nas 24 horas.",
+      `Completude por fonte (auditor): pontos recebidos ÷ esperados na janela ≥ ${pct(c.passRatio)} aprova, ≥ ${pct(c.warnRatio)} fica em atenção, abaixo reprova.`,
+      `Selo de confiança: dia incompleto rebaixa para "média"; metade ou mais dos últimos ${TRUST_RULES.windowDays} dias incompletos, para "baixa".`,
+    ],
+    invalidation: [
+      "Registro sem submercado, sem data válida ou sem valor numérico é descartado e contado como inválido; o mesmo submercado e hora repetido é contado como duplicado.",
+      `Mais de ${pct(c.passInvalid)} de inválidos tira a fonte de "aprovada"; mais de ${pct(c.warnInvalid)}, reprova a completude.`,
+      `Valor fora da faixa plausível da fonte (tabela de faixas acima) conta na Validade: até ${pct(T.validity.warnOutside)} fora fica em atenção, acima disso reprova.`,
+      "Coluna essencial ausente derruba a coleta (fonte fora do ar); coluna secundária ausente fica em atenção no Schema.",
+      `Observação mais recente acima do SLA da fonte fica "atrasada"; acima de ${T.freshness.warnSlaFactor}× o SLA, reprova o Frescor.`,
+      "A flag de dado inválido do corte do ONS não é usada: ela não é atualizada depois que o agente contesta o corte.",
+      `Hora em que o balanço do ONS não fecha (geração − intercâmbio ≠ carga em mais de ${pct(RENEWABLE_CHECKS.identityTol)}) é apontada; a apurada do corte que não reproduz referência − geração (erro médio ≥ ${br(RENEWABLE_CHECKS.methodMaeMax)} MW) sinaliza mudança de método.`,
+      "Relatório do modelo da rede fora do esquema fechado é recusado na entrada (campo desconhecido é descartado, valor fora de faixa reprova); um retrato guardado em formato antigo é ignorado.",
+    ],
+    revisions: [
+      `Cada dia fechado vira uma impressão digital (valores arredondados a ${TRUST_RULES.decimals} casas, SHA-1). O mesmo dia com impressão diferente e não menos completo é uma revisão: registra pontos alterados, maior diferença e o valor anterior.`,
+      `Revisão de ${pct(TRUST_RULES.bigRevision)} ou mais em algum ponto, ou ${TRUST_RULES.manyRevisions} revisões em 30 dias, rebaixa o selo para "baixa".`,
+      "Histórico mensal do corte: arquivo do ONS republicado (Last-Modified novo) é relido e o total anterior do mês fica guardado como revisão.",
+      `O modelo da rede guarda o resumo dos últimos ${HISTORY_DAYS} dias; reprocessar o mesmo dia substitui o resumo dele.`,
+    ],
+    fallbacks: [
+      "PLD: CCEE (dados abertos) → PLD oficial gravado pelo coletor ou pela Plataforma de Integração → CMO do ONS limitado ao piso e ao teto da ANEEL, sempre marcado como estimado. Os dois nunca se misturam sem aviso na tela.",
+      "Coleta que falha reaproveita o último valor bom em memória por até 6 horas; a idade do dado continua visível em cada painel.",
+      "Dado simulado só existe no modo de demonstração ou como último recurso sinalizado; o smoke test diário reprova se qualquer rota da produção responder com dado simulado.",
+    ],
+  };
+}
+
 /** Bandas sem Infinity, para JSON. */
 const bands = () => {
   let lo = 0;
@@ -401,6 +462,26 @@ export function methodology(env: Record<string, string | undefined> = process.en
       "custos: o LCOS informado define o CAPEX implícito; OPEX fixo em % do CAPEX; VPL, TIR, payback e LCOS de equilíbrio saem do fluxo de caixa",
       "receita de capacidade (ex.: LRCAP) só entra se for informada (padrão 0), em R$/kW·ano, e aparece em linha separada da arbitragem: é premissa regulatória, não receita firme",
     ],
+    dataPolicy: dataPolicy(),
+    thermal: {
+      checks: THERMAL_CHECKS,
+      rules: [
+        "O ONS classifica cada hora de cada térmica por motivo: ordem de mérito (CVU abaixo do CMO), inflexibilidade declarada, unit commitment (rampa e tempo mínimo do DESSEM), razão elétrica, segurança energética (decisão do CMSE), GFOM, substituição, exportação, reposição de perdas e reserva de potência. Somados, dão a geração da usina.",
+        "ESS de restrição de operação e de segurança energética: max(0, CVU − PLD) × geração por unit commitment, razão elétrica ou segurança energética, hora a hora no submercado da usina.",
+        "ESS de constrained-off: max(0, PLD − CVU) × corte verificado da usina despachada por mérito.",
+        "Só térmicas com CVU não nulo; CVU do PMO da semana operativa (revisão mais recente). Rateio entre consumidores na proporção do consumo: a tela mostra o ESS dividido pela carga do SIN nos mesmos dias.",
+        "Fora da conta: geração por mérito com CVU acima do PLD (usinas com CCEAR por disponibilidade são cobertas pela receita do contrato), deslocamento hidráulico, serviços ancilares e importação — não aparecem nos arquivos do ONS usados.",
+        "Pilha de mérito: usinas do submercado ordenadas por CVU com a disponibilidade declarada na programação, na hora de maior geração térmica do último dia, contra o CMO da hora; a térmica marginal é a mais cara gerando por mérito.",
+      ],
+      validation: CCEE_VALIDATION.map((v) => ({
+        bulletin: v.bulletin,
+        url: v.url,
+        week: `${v.week.from.split("-").reverse().join("/")} a ${v.week.to.split("-").reverse().join("/")}`,
+        uc: { model: v.model.uc, ccee: v.ccee.uc },
+        off: { model: v.model.off, ccee: v.ccee.off },
+        cceeTotal: v.ccee.total,
+      })),
+    },
     grid: {
       checks: GRID_CHECKS,
       steps: [

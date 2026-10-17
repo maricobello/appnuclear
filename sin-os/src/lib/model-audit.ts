@@ -11,7 +11,9 @@ import { publicForecast } from "./market/forecast";
 import { loadForecastLog } from "./forecast-log";
 import { snapshotAgeDays } from "./grid/snapshot";
 import { loadGridSnapshot } from "./grid/store";
+import { thermalReport } from "./market/thermal";
 import { getRegimeBacktest } from "./regimes";
+import { fetchThermal } from "./sources/ons-thermal";
 import { getBessStudy, getForecast } from "./services";
 import { brtDate } from "./sources/time";
 import { SUBS, type Sub } from "./sources/types";
@@ -33,7 +35,7 @@ export async function buildModelAudit(now = Date.now()): Promise<ModelAudit> {
     return "error" in v ? null : v;
   };
 
-  const [regimes, bess, arb, grid] = await Promise.all([
+  const [regimes, bess, arb, grid, thermal] = await Promise.all([
     Promise.all(SUBS.map(async (s) => [s, await within(getRegimeBacktest(s), 150_000, `backtest por regime ${s}`)] as const)).then((e) => Object.fromEntries(e)),
     within(
       getBessStudy(toBessParams("SE", BESS_QUERY.parse({}))).then(({ study }) => ({ days: study.daily, maxCycles: study.params.maxCyclesPerDay })),
@@ -50,6 +52,15 @@ export async function buildModelAudit(now = Date.now()): Promise<ModelAudit> {
     loadGridSnapshot().then(
       (g) => ({ snapshot: g.snapshot, ageDays: g.snapshot ? snapshotAgeDays(g.snapshot.date, brtDate(now)) : null }),
       () => null,
+    ),
+    within(
+      fetchThermal(10, now).then((r) => {
+        if (!r.ok || !r.data) throw new Error(r.error ?? "sem dados");
+        const rep = thermalReport(r.data.rows, r.data.cvus, null, null, 7);
+        return { identityMaxGap: rep.checks.identityMaxGap, cvuCoverage: rep.checks.cvuCoverage, to: rep.to };
+      }),
+      60_000,
+      "despacho térmico",
     ),
   ]);
 
@@ -75,5 +86,6 @@ export async function buildModelAudit(now = Date.now()): Promise<ModelAudit> {
     pldSource: p.simulated ? "PLD simulado (fontes fora do ar)" : p.fallback ? "PLD estimado pelo CMO/DESSEM do ONS (a CCEE não responde ao servidor)" : (p.note ?? "PLD oficial da CCEE"),
     trackRecords,
     grid,
+    thermal,
   });
 }
