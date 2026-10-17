@@ -226,6 +226,10 @@ def test_published_combination_weights_and_band():
               {"mes": "2027-04", "cobertura": 1.0, "pld": {s: {"mean": 70.0, "p10": 60.0, "p50": 70.0, "p90": 80.0} for s in SUBS}}]
     d14 = {m["mes"]: {s: 100.0 for s in SUBS} for m in months}
     R.apply_combination(months, d14, w, res, dt.date(2026, 10, 17))
+    import run  # noqa: E402  (o log da rodada diária sai antes do envio: não pode quebrar)
+    lines = run.pld_lines(months[0])
+    assert lines[0].startswith("PLD publicado 2026-11") and lines[1].startswith("PLD do SDDP 2026-11") and "SE 90.0 (P10 85.0–P90 95.0)" in lines[1]
+    assert run.pld_lines({**months[0], "pld_previsto": None}) == lines[1:]
     for m in months:
         lim = R.limits(int(m["mes"][:4]))
         for s in SUBS:

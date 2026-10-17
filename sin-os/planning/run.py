@@ -108,9 +108,8 @@ def main() -> int:
     rep["calibracao_risco"] = risk_summary(cal, target, pure_key[0], pure) if cal else None
     Path(args.out).write_text(json.dumps(rep, ensure_ascii=False))
     print(f"relatório {len(json.dumps(rep)) / 1e3:.0f} kB · {time.time() - t0:.0f} s", flush=True)
-    m1 = rep["resultado"]["meses"][1] if len(rep["resultado"]["meses"]) > 1 else rep["resultado"]["meses"][0]
-    head, band = m1.get("pld_ponta") or m1["pld"], m1.get("pld_faixa") or {}
-    print("PLD " + m1["mes"] + ": " + " · ".join(f"{s} {head[s]['p50']} (P10 {(band.get(s) or head[s])['p10']}–P90 {(band.get(s) or head[s])['p90']})" for s in I.SUBS), flush=True)
+    for line in pld_lines(rep["resultado"]["meses"][1] if len(rep["resultado"]["meses"]) > 1 else rep["resultado"]["meses"][0]):
+        print(line, flush=True)
 
     if args.post:
         post(args.post, rep)
@@ -151,6 +150,16 @@ def previous_point(base_url: str) -> tuple[float, float] | None:
     except Exception as e:  # noqa: BLE001 — sem o palpite a busca só faz uma rodada a mais
         print(f"sem o ponto da rodada anterior ({e}); a busca parte do zero", flush=True)
         return None
+
+
+def pld_lines(m: dict) -> list[str]:
+    """Resumo do mês para o log: o PLD publicado (a combinação) e o do SDDP calibrado."""
+    head, band = m.get("pld_ponta") or m["pld"], m.get("pld_faixa") or {}
+    fmt = lambda q, b: f"{q['p50']} (P10 {b['p10']}–P90 {b['p90']})"  # noqa: E731
+    out = [f"PLD do SDDP {m['mes']}: " + " · ".join(f"{s} {fmt(head[s], band.get(s) or head[s])}" for s in I.SUBS)]
+    if m.get("pld_previsto"):
+        out.insert(0, f"PLD publicado {m['mes']} (peso do SDDP {m.get('peso_sddp')}): " + " · ".join(f"{s} {fmt(m['pld_previsto'][s], m['pld_previsto'][s])}" for s in I.SUBS))
+    return out
 
 
 def anchor_by_month(target: dict | None, dev: dict | None, months: list[dict]) -> dict[str, dict[str, float]]:
