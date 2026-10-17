@@ -471,7 +471,7 @@ export function methodology(env: Record<string, string | undefined> = process.en
         "ESS de constrained-off: max(0, PLD − CVU) × corte verificado da usina despachada por mérito.",
         "Só térmicas com CVU não nulo; CVU do PMO da semana operativa (revisão mais recente). Rateio entre consumidores na proporção do consumo: a tela mostra o ESS dividido pela carga do SIN nos mesmos dias.",
         "Fora da conta: geração por mérito com CVU acima do PLD (usinas com CCEAR por disponibilidade são cobertas pela receita do contrato), deslocamento hidráulico, serviços ancilares e importação — não aparecem nos arquivos do ONS usados.",
-        "Pilha de mérito: usinas do submercado ordenadas por CVU com a disponibilidade declarada na programação, na hora de maior geração térmica do último dia, contra o CMO da hora; a térmica marginal é a mais cara gerando por mérito.",
+        "Pilha de mérito: usinas do submercado ordenadas por CVU com a disponibilidade declarada na programação, na hora de maior geração térmica do último dia, contra o CMO da hora; a térmica marginal é a mais cara gerando por mérito com CVU até o CMO da hora (o ONS classifica o mérito na programação, e ≈ 20% da geração que ele chama de mérito tem CVU acima do CMO horário publicado).",
       ],
       validation: CCEE_VALIDATION.map((v) => ({
         bulletin: v.bulletin,
