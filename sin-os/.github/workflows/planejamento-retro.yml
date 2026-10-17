@@ -1,0 +1,88 @@
+name: Planejamento — retroanálise
+
+# Roda o caso como se fosse o dia 1º de cada mês do intervalo (um job por mês, em paralelo: cada um
+# faz o SDDP puro e a busca da aversão a risco implícita, como a rodada diária) e junta o resultado
+# em validacao.json (artefato). Para publicar, troque planning/validacao.json pelo artefato num
+# commit: a rodada diária lê o arquivo do repositório.
+on:
+  workflow_dispatch:
+    inputs:
+      first:
+        description: "Primeiro mês (AAAA-MM)"
+        default: "2025-01"
+      last:
+        description: "Último mês (AAAA-MM)"
+        default: "2026-09"
+
+permissions:
+  contents: read
+
+jobs:
+  meses:
+    runs-on: ubuntu-latest
+    outputs:
+      list: ${{ steps.m.outputs.list }}
+    steps:
+      - id: m
+        env:
+          FIRST: ${{ inputs.first }}
+          LAST: ${{ inputs.last }}
+        run: |
+          echo "$FIRST$LAST" | grep -Eq '^[0-9]{4}-[0-9]{2}[0-9]{4}-[0-9]{2}$' || { echo "meses inválidos"; exit 1; }
+          python3 -c "
+          import json, os
+          a, b = os.environ['FIRST'], os.environ['LAST']
+          y, m = map(int, a.split('-')); out = []
+          while f'{y:04d}-{m:02d}' <= b and len(out) < 36:
+              out.append(f'{y:04d}-{m:02d}'); y, m = (y + 1, 1) if m == 12 else (y, m + 1)
+          print('list=' + json.dumps(out))" >> "$GITHUB_OUTPUT"
+  mes:
+    needs: meses
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    strategy:
+      fail-fast: false
+      max-parallel: 12
+      matrix:
+        mes: ${{ fromJson(needs.meses.outputs.list) }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: planning/requirements.txt
+      - run: python -m pip install -r planning/requirements.txt
+      - name: Retroanálise de ${{ matrix.mes }}
+        env:
+          MES: ${{ matrix.mes }}
+        run: python planning/hindcast.py --from "$MES" --to "$MES" --out "retro-$MES.json"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: retro-${{ matrix.mes }}
+          path: retro-${{ matrix.mes }}.json
+          retention-days: 7
+  junta:
+    needs: mes
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: planning/requirements.txt
+      - run: python -m pip install -r planning/requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: retro-*
+          merge-multiple: true
+          path: retro
+      - name: Junta os meses e recalcula as métricas
+        run: python planning/hindcast.py --merge retro --out validacao.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: validacao
+          path: validacao.json
+          retention-days: 30

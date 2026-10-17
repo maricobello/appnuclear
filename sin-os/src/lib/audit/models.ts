@@ -1,4 +1,5 @@
 import type { GridSnapshot } from "../grid/snapshot";
+import type { PlanReport } from "../planning/report";
 import type { BessDay } from "../market/bess-study";
 import type { ForecastResult } from "../market/forecast";
 import type { RegimeBacktestResult } from "../market/regime-backtest";
@@ -65,7 +66,21 @@ export interface ModelAuditInput {
   grid?: { snapshot: GridSnapshot | null; ageDays: number | null } | null;
   /** Conferências do despacho térmico por motivo × CVU (janela recente). */
   thermal?: { identityMaxGap: number | null; cvuCoverage: number | null; to: string | null } | { error: string } | null;
+  /** Último relatório do planejamento (NovoModelo no worker) e a idade em dias. */
+  plan?: { report: PlanReport | null; ageDays: number | null } | null;
 }
+
+/** Critérios do planejamento (SDDP do NovoModelo sobre o caso montado com dados do ONS). */
+export const PLAN_CHECKS = {
+  /** Dias desde a rodada: o worker roda uma vez por dia. */
+  ageDays: { pass: 2, warn: 4 },
+  /** Variação relativa do limite inferior nas últimas 10 iterações (com CVaR é o critério de parada útil). */
+  lbStability: { pass: 0.02, warn: 0.05 },
+  /** Faixa plausível do fator de aproveitamento da ENA (fora dela o balanço hídrico medido não fecha). */
+  kRange: [0.7, 1.08] as const,
+  /** Cobertura da faixa P10–P90 na retroanálise (nominal 80%). */
+  coverage: { lo: 0.6, hi: 0.97 },
+} as const;
 
 /** Critérios do modelo da rede (fluxo de potência AC do SIN). */
 export const GRID_CHECKS = {
@@ -457,6 +472,7 @@ export function auditModels(x: ModelAuditInput): ModelAudit {
 
   if (x.grid !== undefined) gridChecks(x.grid, add);
   if (x.thermal !== undefined) thermalChecks(x.thermal, add);
+  if (x.plan !== undefined) planChecks(x.plan, add);
 
   const counts = { pass: 0, warn: 0, fail: 0 } as Record<ModelCheckStatus, number>;
   for (const c of checks) counts[c.status]++;
@@ -619,4 +635,107 @@ function thermalChecks(t: ModelAuditInput["thermal"], add: (c: ModelCheck) => vo
     status: cov === null ? "warn" : cov >= THERMAL_CHECKS.cvuCoverageMin ? "pass" : cov >= 0.95 ? "warn" : "fail",
     detail: "Usina sem CVU no PMO da semana fica fora da estimativa do ESS e da pilha de mérito.",
   });
+}
+
+function planChecks(pl: ModelAuditInput["plan"], add: (c: ModelCheck) => void) {
+  const model = "Planejamento (SDDP)";
+  if (!pl) {
+    add({ id: "planejamento.frescor", model, sub: null, label: "Relatório do planejamento lido", value: null, display: "—", target: "ler", status: "warn", detail: "Não foi possível ler o relatório guardado agora (armazenamento indisponível)." });
+    return;
+  }
+  const r = pl.report;
+  if (!r) {
+    add({ id: "planejamento.frescor", model, sub: null, label: "Relatório do planejamento recebido", value: null, display: "—", target: `≤ ${PLAN_CHECKS.ageDays.pass} dias`, status: "warn", detail: "O worker do GitHub Actions (.github/workflows/planejamento.yml) ainda não enviou o relatório: confira o segredo ADMIN_KEY no GitHub (mesmo valor da Vercel)." });
+    return;
+  }
+  const age = pl.ageDays;
+  add({
+    id: "planejamento.frescor",
+    model,
+    sub: null,
+    label: "Planejamento rodado em dia",
+    value: age,
+    display: age === null ? "—" : `${f(age, 1)} dia(s)`,
+    target: `≤ ${PLAN_CHECKS.ageDays.pass} dias`,
+    status: age === null ? "warn" : age <= PLAN_CHECKS.ageDays.pass ? "pass" : age <= PLAN_CHECKS.ageDays.warn ? "warn" : "fail",
+    detail: `Caso com dados do ONS até ${r.asof.split("-").reverse().join("/")}, ${r.caso.estagios} estágios mensais, ${r.resultado.cenarios} cenários simulados.`,
+  });
+  const lb = r.solver.lb_variacao_ultimas_10;
+  add({
+    id: "planejamento.convergencia",
+    model,
+    sub: null,
+    label: "Política do SDDP estabilizada",
+    value: lb,
+    display: lb === null ? "—" : pct(lb, 2),
+    target: `≤ ${pct(PLAN_CHECKS.lbStability.pass, 0)} nas últimas 10 iterações`,
+    status: lb === null ? "warn" : upTo(lb, PLAN_CHECKS.lbStability.pass, PLAN_CHECKS.lbStability.warn),
+    detail: `${r.solver.iterations} iterações com ${r.params.forward_passes} passes forward e ${r.params.openings} aberturas por estágio. Com CVaR o limite inferior mede o risco e o "superior" amostral é custo esperado, então o gap clássico não se aplica.`,
+  });
+  const ks = SUBS.map((s) => r.caso.aproveitamento_ena[s]);
+  const raw = ks.map((k) => k.k_bruto);
+  const inRange = raw.every((k) => k >= PLAN_CHECKS.kRange[0] && k <= PLAN_CHECKS.kRange[1]);
+  add({
+    id: "planejamento.balanco_hidrico",
+    model,
+    sub: null,
+    label: "Balanço hídrico medido fecha",
+    value: Math.min(...raw),
+    display: SUBS.map((s, i) => `${s} ${f(raw[i], 2)}`).join(" · "),
+    target: `k entre ${f(PLAN_CHECKS.kRange[0], 2)} e ${f(PLAN_CHECKS.kRange[1], 2)}`,
+    status: inRange ? "pass" : "warn",
+    detail: "k = (geração + energia vertida turbinável + variação da EAR) ÷ ENA armazenável, usina a usina nos últimos 24 meses (ONS). Fora da faixa, algum arquivo veio incompleto ou mudou de critério.",
+  });
+  const cal = r.calibracao_risco ?? null;
+  if (cal) {
+    const gap = Math.abs(cal.cmo - cal.alvo);
+    add({
+      id: "planejamento.calibracao_risco",
+      model,
+      sub: cal.sub,
+      label: "Valor da água calibrado no CMO do DESSEM",
+      value: gap,
+      display: `λ ${f(cal.lambda, 2)}${cal.piso_pp ? ` + piso ${f(cal.piso_pp, 0)} p.p.` : ""} · CMO ${f(cal.cmo, 0)} × alvo ${f(cal.alvo, 0)}`,
+      target: `|CMO − alvo| ≤ ${f(cal.tolerancia, 0)} R$/MWh`,
+      status: !cal.limite && gap <= cal.tolerancia ? "pass" : "warn",
+      detail: cal.limite
+        ? `A busca ficou no ${cal.limite} do caminho: nem ${cal.limite === "teto" ? "a aversão máxima (λ 0,99 com o piso do SE +40 p.p.)" : "o valor esperado puro (λ 0)"} leva o CMO do 1º estágio ao do DESSEM (${cal.alvo_fonte}). O preço publicado fica ${cal.limite === "teto" ? "abaixo" : "acima"} do nível oficial.`
+        : `O λ do CVaR${cal.piso_pp ? ` (saturado) e a elevação do piso do SE em ${f(cal.piso_pp, 1)} p.p.` : ""} que fazem o CMO do 1º estágio (mediana, ${cal.sub}) reproduzir o ${cal.alvo_fonte}, em ${cal.tentativas.length} rodadas do SDDP. O padrão da CPAMP é λ ${f(cal.lambda_padrao, 2)} sem piso extra.`,
+    });
+  }
+  const m = r.validacao?.metricas ?? null;
+  if (!m || !Object.keys(m).length) {
+    add({ id: "planejamento.retroanalise", model, sub: null, label: "Retroanálise publicada", value: null, display: "—", target: "publicada", status: "warn", detail: "Ainda não há retroanálise (planning/hindcast.py) no relatório." });
+    return;
+  }
+  for (const s of SUBS) {
+    const x = m[s];
+    if (!x) continue;
+    // O publicado é o PLD com ponta e a faixa calibrada; as métricas antigas valem para relatórios sem elas.
+    const mae = x.pld_mae_ponta ?? x.pld_mae_modelo;
+    const better = mae !== null && x.pld_mae_persistencia !== null ? mae / Math.max(1e-9, x.pld_mae_persistencia) : null;
+    add({
+      id: `planejamento.pld.${s}`,
+      model,
+      sub: s,
+      label: "PLD do mês seguinte vs. persistência",
+      value: better,
+      display: better === null ? "—" : `${f(mae, 1)} × ${f(x.pld_mae_persistencia, 1)} R$/MWh`,
+      target: "erro ≤ persistência",
+      status: better === null ? "warn" : better <= 1 ? "pass" : better <= 1.25 ? "warn" : "fail",
+      detail: `Erro médio absoluto do PLD mensal previsto (P50${x.pld_mae_ponta != null ? ", com a ponta horária" : ""}) no 1º dia de cada mês contra o realizado, em ${x.meses} meses; persistência = repetir o PLD do mês anterior. CMO do DECOMP no mesmo período: ${f(x.pld_mae_decomp, 1)} R$/MWh.`,
+    });
+    const cov = x.pld_cobertura_calibrada ?? x.pld_cobertura_p10_p90_ponta ?? x.pld_cobertura_p10_p90;
+    add({
+      id: `planejamento.faixa.${s}`,
+      model,
+      sub: s,
+      label: "PLD realizado dentro da faixa P10–P90",
+      value: cov,
+      display: pct(cov, 0),
+      target: `${pct(PLAN_CHECKS.coverage.lo, 0)}–${pct(PLAN_CHECKS.coverage.hi, 0)}`,
+      status: cov === null ? "warn" : cov >= PLAN_CHECKS.coverage.lo && cov <= PLAN_CHECKS.coverage.hi ? "pass" : cov >= PLAN_CHECKS.coverage.lo - 0.15 ? "warn" : "fail",
+      detail: `Faixa nominal de 80%${x.pld_cobertura_calibrada != null ? ` (a publicada, calibrada pelos erros dos outros meses; só a do modelo: ${pct(x.pld_cobertura_p10_p90_ponta ?? x.pld_cobertura_p10_p90, 0)})` : ""}. Armazenamento: erro médio de ${f(x.ear_mae_pp, 1)} p.p. na EAR do fim do mês, ${pct(x.ear_cobertura_p10_p90, 0)} dentro da faixa.`,
+    });
+  }
 }

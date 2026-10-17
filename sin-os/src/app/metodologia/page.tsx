@@ -18,6 +18,7 @@ const SECTIONS = [
   ["alertas", "Alertas de mercado"],
   ["rede", "Modelo da rede"],
   ["termicas", "Térmicas e ESS"],
+  ["planejamento", "Planejamento (SDDP)"],
 ] as const;
 
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -355,6 +356,42 @@ export default function MetodologiaPage() {
                 ])}
               />
               <p className="mt-1 text-[12px] text-muted">modelo × CCEE</p>
+            </div>
+          </div>
+        </Panel>
+      </section>
+
+      <section id="planejamento" className="scroll-mt-16">
+        <Panel
+          title="Planejamento (SDDP)"
+          subtitle="O NovoModelo de ONS, CCEE e EPE sobre um caso do SIN montado com dados abertos do ONS, todo dia"
+          right={
+            <Link href="/planejamento" className="text-[12px] text-accent hover:underline">
+              ver no Planejamento
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <List items={m.planning.steps} />
+            </div>
+            <div className="flex flex-col gap-3">
+              <div>
+                <p className="mb-1 text-[13px] font-medium text-ink">Parâmetros</p>
+                <List items={m.planning.params} />
+              </div>
+              <div>
+                <p className="mb-1 text-[13px] font-medium text-ink">Critérios na auditoria dos modelos</p>
+                <List items={m.planning.audit} />
+              </div>
+              <div>
+                <p className="mb-1 text-[13px] font-medium text-ink">Arquivos do ONS</p>
+                <List items={m.planning.data} />
+              </div>
+              <div>
+                <p className="mb-1 text-[13px] font-medium text-ink">Limites conhecidos</p>
+                <List items={m.planning.limits} />
+              </div>
             </div>
           </div>
         </Panel>

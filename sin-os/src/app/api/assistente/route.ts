@@ -10,6 +10,8 @@ import { getBessStudy, getForecast } from "@/lib/services";
 import { publicForecast } from "@/lib/market/forecast";
 import { SUBS } from "@/lib/sources/types";
 import { listAuditRuns } from "@/lib/store";
+import { planAgeDays } from "@/lib/planning/report";
+import { loadPlanReport } from "@/lib/planning/store";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -29,6 +31,10 @@ const deps: AssistantDeps = {
   latestAudit: async () => (await listAuditRuns(1))[0] ?? null,
   trust: () => buildTrustReport(),
   renewables: (days) => buildRenewablesReport(days),
+  plan: async () => {
+    const { report } = await loadPlanReport();
+    return { report, ageDays: report ? planAgeDays(report) : null };
+  },
   dataMode,
 };
 

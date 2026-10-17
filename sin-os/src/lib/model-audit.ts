@@ -11,6 +11,8 @@ import { publicForecast } from "./market/forecast";
 import { loadForecastLog } from "./forecast-log";
 import { snapshotAgeDays } from "./grid/snapshot";
 import { loadGridSnapshot } from "./grid/store";
+import { planAgeDays } from "./planning/report";
+import { loadPlanReport } from "./planning/store";
 import { thermalReport } from "./market/thermal";
 import { getRegimeBacktest } from "./regimes";
 import { fetchThermal } from "./sources/ons-thermal";
@@ -35,7 +37,7 @@ export async function buildModelAudit(now = Date.now()): Promise<ModelAudit> {
     return "error" in v ? null : v;
   };
 
-  const [regimes, bess, arb, grid, thermal] = await Promise.all([
+  const [regimes, bess, arb, grid, thermal, plan] = await Promise.all([
     Promise.all(SUBS.map(async (s) => [s, await within(getRegimeBacktest(s), 150_000, `backtest por regime ${s}`)] as const)).then((e) => Object.fromEntries(e)),
     within(
       getBessStudy(toBessParams("SE", BESS_QUERY.parse({}))).then(({ study }) => ({ days: study.daily, maxCycles: study.params.maxCyclesPerDay })),
@@ -62,6 +64,10 @@ export async function buildModelAudit(now = Date.now()): Promise<ModelAudit> {
       60_000,
       "despacho térmico",
     ),
+    loadPlanReport().then(
+      (p) => ({ report: p.report, ageDays: p.report ? planAgeDays(p.report, now) : null }),
+      () => null,
+    ),
   ]);
 
   const p = br.pld;
@@ -87,5 +93,6 @@ export async function buildModelAudit(now = Date.now()): Promise<ModelAudit> {
     trackRecords,
     grid,
     thermal,
+    plan,
   });
 }

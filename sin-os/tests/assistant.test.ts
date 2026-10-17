@@ -9,6 +9,11 @@ import { speakable, splitSentences } from "../src/lib/assistant/speech";
 import type { RenewablesReport } from "../src/lib/market/renewables-report";
 import { brtToUtc } from "../src/lib/sources/time";
 import { SUBS, type SourceResult, type SubPanel } from "../src/lib/sources/types";
+import { readFileSync } from "node:fs";
+import path from "node:path";
+import { PlanReportSchema } from "../src/lib/planning/report";
+
+const PLAN = PlanReportSchema.parse(JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/planejamento.json"), "utf8")));
 
 const ASSET: AssetCtx = { name: "BESS teste", sub: "SE", pow: 100, cap: 400, rte: 88, deg: 0.5, lcos: 312.45, wacc: 10, life: 20, opex: 2, ref: 1, maxc: 1, days: 365 };
 // 2026-09-27 15:30 BRT
@@ -51,6 +56,7 @@ function deps(pld: SourceResult<SubPanel>): AssistantDeps {
     latestAudit: async () => null,
     trust: async () => ({ totalRevisions30d: 2, windowDays: 10, seals: [{ source: "ons_carga", name: "Carga", monitored: true, level: "média", revisions30d: 2, reasons: ["2 dia(s) republicado(s)"] }] }),
     renewables: async (days) => RENEW(days),
+    plan: async () => ({ report: PLAN, ageDays: 0.4 }),
     dataMode: () => "live",
   };
 }
@@ -132,6 +138,18 @@ describe("ferramentas da Iara", () => {
     expect(r.faixa_gwh).toEqual({ piso_limitado_a_disponibilidade: 1849.3, oficial_ons: 1954.1 });
     expect(r.por_razao_gwh).toMatchObject({ "razão energética (sobra de energia)": 1457.6 });
     expect(r.pld_oficial).toBe(false);
+  });
+
+  it("planejamento_sddp: PLD mensal com faixa, média de 12 meses e retroanálise do submercado pedido", async () => {
+    const out = await executeTool("planejamento_sddp", { sub: "ne" }, { now: NOW, asset: ASSET }, deps(src(PLD)));
+    const r = out.result as { submercado: string; pld_mensal: { mes: string; p10: number; p50: number; p90: number }[]; dados_ate: string; nota: string };
+    expect(r.submercado).toContain("NE");
+    expect(r.dados_ate).toBe(PLAN.asof);
+    expect(r.pld_mensal).toHaveLength(PLAN.resultado.meses.length);
+    for (const m of r.pld_mensal) expect(m.p10).toBeLessThanOrEqual(m.p50 + 1e-9);
+    expect(r.nota).toContain("dados abertos do ONS");
+    const none = await executeTool("planejamento_sddp", {}, { now: NOW, asset: ASSET }, { ...deps(src(PLD)), plan: async () => ({ report: null, ageDays: null }) });
+    expect((none.result as { erro: string }).erro).toContain("indisponível");
   });
 
   it("ferramenta desconhecida vira erro, não exceção", async () => {

@@ -1,5 +1,5 @@
 import { AUDIT_THRESHOLDS, CHECK_WEIGHTS } from "./audit/checks";
-import { GRID_CHECKS } from "./audit/models";
+import { GRID_CHECKS, PLAN_CHECKS } from "./audit/models";
 import { HISTORY_DAYS } from "./grid/snapshot";
 import { DEFAULT_THRESHOLDS } from "./audit/market-alerts";
 import { TRUST_RULES, TRUST_SOURCES } from "./audit/trust";
@@ -507,6 +507,56 @@ export function methodology(env: Record<string, string | undefined> = process.en
         "transformadores com reatância presumida (12% na própria base): o cadastro do ONS não publica a impedância",
         "compensação série das linhas não está no cadastro: o corredor Norte–Sudeste sai mais pesado que o real e é o menos confiável",
         "reatores e capacitores manobráveis fora do modelo; tensões servem só como plausibilidade",
+      ],
+    },
+    planning: {
+      checks: PLAN_CHECKS,
+      steps: [
+        "solver: NovoModelo, o SDDP aberto de ONS, CCEE e EPE (programação dinâmica dual estocástica), sem modificação; o caso é montado e rodado todo dia no GitHub Actions",
+        "cada subsistema é um reservatório equivalente (como os REEs do NEWAVE): a ENA faz o papel da vazão com produtividade 1 MW/(m³/s), então 1 MWmês = 2,6298 hm³",
+        "só a ENA armazenável é água utilizável: o ONS a define como a ENA bruta menos o vertimento não turbinável das usinas a fio d'água, e a diferença acompanha esse vertimento medido usina a usina (correlação mensal de 0,95 a 0,997). Dentro dela, os REEs com EAR máxima abaixo de um mês da afluência média (Belo Monte, Itaipu, Madeira e Teles Pires) viram uma usina fio d'água — turbinável, sem estoque — e o resto entra no reservatório; as duas dividem a disponibilidade hidráulica medida usina a usina (média de 28 dias). A soma das ENAs por REE é conferida contra a do subsistema a cada rodada",
+        "aproveitamento: k = (geração + energia vertida turbinável + variação da EAR) ÷ ENA armazenável nos últimos 24 meses, usina a usina; multiplica a ENA e faz o papel das perdas, da evaporação e das retiradas que o deck oficial traz (perto de 0,95 no SE, 1,0 no N e no S, 0,79 no NE)",
+        "afluências: histórico diário de ENA desde 2000 reconstruído na configuração de usinas de hoje — a ENA publicada usa as usinas de cada época (a MLT do N dobrou com Belo Monte, a do SE subiu 55% com Madeira e Teles Pires), então cada dia entra pela % da MLT do dia × a MLT atual do mesmo mês —, agregado em janelas mensais alinhadas ao dia de início; o NovoModelo estima o PAR(p)-A com a maior ordem que aceita como estacionária em todas as estações (até 6) e, se nenhuma passar, o PAR(p) clássico; a correlação espacial dos resíduos é estimada junto",
+        "estágios: 60 mensais que começam no dia seguinte ao último dado (estações de um mês ancoradas nesse dia, sem estágio parcial), três patamares por posto da carga líquida do SIN (15% pesada, 50% média, 35% leve), CVaR nos estágios e desconto anual",
+        "envelope operativo: teto de armazenamento por mês do ano = maior EAR já operada naquele mês desde 2000 (+1 p.p.), acima do qual o modelo verte; piso = menor EAR já operada naquele mês, flexível, com penalidade igual ao CVU mais caro da frota (o modelo despacha toda térmica antes de violar, como no despacho por segurança energética, sem chegar ao déficit)",
+        "térmicas usina a usina dos últimos 28 dias do despacho do ONS: limite = disponibilidade programada média, mínimo = inflexibilidade média, custo = CVU da semana do PMO em vigor",
+        "defluência mínima: nos subsistemas sem fio d'água (S e NE), o reservatório equivalente não turbina + verte menos que o quantil de 1% da geração hidráulica diária do último ano (no NE, ~2,5 GW: a defluência mínima de Sobradinho e Xingó); abaixo disso só com penalidade de R$ 500/MWh, como nas flexibilizações da ANA em seca",
+        "carga e renováveis: média dos últimos 12 meses do balanço do ONS × índice sazonal médio de 3 anos × crescimento dos últimos 12 meses (renováveis com o ritmo caindo à metade a cada ano); o mês do ano anterior sozinho carregava o clima daquele ano. Pequenas usinas fora da ENA e térmicas fora do despacho abatem a carga; eólica e solar como fontes não controláveis com corte e incerteza pela dispersão ano a ano",
+        "interligações: limite em cada sentido = quantil 99,5% do fluxo medido no último ano, mais limites conjuntos de recebimento e exportação de cada subsistema pelo intercâmbio líquido medido",
+        "aversão a risco implícita: o caso aberto é mais folgado que o deck oficial (sem volumes mínimos operativos, restrições usina a usina nem a previsão de vazões do DECOMP) e, no λ padrão, dava CMO de R$ 18 em jun/2025 com o DESSEM a R$ 212; cada rodada roda o SDDP com o λ padrão e depois busca (secante protegida num índice em que a curva é quase reta, até 6 rodadas, partindo do ponto da rodada anterior) a aversão a risco com que o CMO do 1º estágio — mediana dos cenários, SE — reproduz o CMO médio do DESSEM nos 14 dias anteriores: primeiro o λ do CVaR até 0,99; se ele satura sem chegar ao alvo (dez/2025: CMO ≈ 0 com λ 0,99), o piso operativo do SE sobe até 40 p.p., o análogo do volume mínimo operativo dos modelos oficiais; o caso publicado é o calibrado e o puro aparece ao lado",
+        "PLD: CMO de cada patamar entre o piso e o teto horário da ANEEL do ano e média do estágio limitada ao teto estrutural, cenário a cenário; meses civis pela média dos estágios ponderada pelos dias. O PLD com ponta (a manchete) soma ao CMO de cada cenário os desvios horários do CMO do DESSEM dos 30 dias anteriores antes do piso e do teto",
+        "faixa publicada: a mais larga entre a P10–P90 dos cenários e a mediana mais os quantis 10% e 90% do erro da retroanálise no mesmo horizonte (conformal, interpolado entre horizontes); a cobertura é medida deixando cada mês de fora da calibração",
+        "sensibilidades (um SDDP completo cada, no λ implícito): sem aversão a risco, hidrologia 15% mais seca e carga 5% maior",
+        "retroanálise: o caso montado no dia 1º de cada mês passado só com o que estava publicado na véspera, com a mesma calibração do λ; o PLD previsto para os 6 meses seguintes é comparado com o realizado, com o SDDP sem calibração, com a persistência, com o CMO do DESSEM de 14 dias e com o CMO semanal do DECOMP",
+      ],
+      params: [
+        "custo de déficit de patamar único R$ 7.643,82/MWh (valor usado pela CPAMP)",
+        "CVaR α = 15% (recomendação da CPAMP); λ = 40% no SDDP puro e o implícito no caso publicado",
+        "taxa de desconto de 12% ao ano (a dos decks do PMO)",
+        "limites do PLD por ano civil (ANEEL); anos sem tabela usam os do último ano publicado",
+      ],
+      audit: [
+        `rodada com até ${PLAN_CHECKS.ageDays.pass} dias (até ${PLAN_CHECKS.ageDays.warn} atenção)`,
+        `limite inferior do SDDP variando até ${pct(PLAN_CHECKS.lbStability.pass)} nas últimas 10 iterações (até ${pct(PLAN_CHECKS.lbStability.warn)} atenção): com CVaR o gap clássico não se aplica`,
+        `fator de aproveitamento da ENA armazenável entre ${br(PLAN_CHECKS.kRange[0])} e ${br(PLAN_CHECKS.kRange[1])} em todos os subsistemas`,
+        "calibração: CMO do 1º estágio a menos de max(R$ 8, 8%) do CMO do DESSEM de 14 dias, com λ dentro de [0, 1] (no extremo é atenção)",
+        "retroanálise: erro do PLD mensal previsto (P50 com ponta, calibrado) menor ou igual ao da persistência (até 25% pior é atenção)",
+        `PLD realizado dentro da faixa publicada entre ${pct(PLAN_CHECKS.coverage.lo)} e ${pct(PLAN_CHECKS.coverage.hi)} dos meses (nominal 80%), cada mês medido pela calibração dos demais`,
+      ],
+      data: [
+        `${S3}/ena_subsistema_di/ENA_DIARIO_SUBSISTEMA_AAAA.csv|parquet (desde 2000)`,
+        `${S3}/ena_ree_di/ENA_DIARIO_REE_AAAA.csv|parquet e ear_ree_di (desde 2018)`,
+        `${S3}/ear_subsistema_di/EAR_DIARIO_SUBSISTEMA_AAAA.parquet (desde 2000)`,
+        `${S3}/energia_vertida_turbinavel_ho/ENERGIA_VERTIDA_TURBINAVEL_AAAA_MM.parquet`,
+        `${S3}/balanco_energia_subsistema_ho/BALANCO_ENERGIA_SUBSISTEMA_AAAA.parquet`,
+        `${S3}/geracao_termica_despacho_2_ho/GERACAO_TERMICA_DESPACHO-2_AAAA_MM.parquet e cvu_usitermica_se`,
+        `${S3}/intercambio_nacional_ho/INTERCAMBIO_NACIONAL_AAAA.parquet`,
+        `${S3}/cmo_tm (CMO semi-horário do DESSEM: ponta, calibração do λ e PLD realizado) e cmo_se (CMO semanal do DECOMP, na retroanálise)`,
+      ],
+      limits: [
+        "subsistemas agregados: sem cascatas usina a usina nem produtividade variável com a queda",
+        "manutenção programada futura das térmicas e expansão contratada (leilões) não entram; a frota é a dos últimos 28 dias",
+        "restrições elétricas internas aos submercados ficam de fora; as interligações usam o que já foi medido, não o limite operativo publicado",
       ],
     },
     limits: PLD_LIMITS,

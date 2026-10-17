@@ -6,6 +6,7 @@ import { latestBySub, PLD_LIMITS } from "../market/brazil";
 import { dayRow, dayStats } from "../market/pld-summary";
 import type { ForecastResult } from "../market/forecast";
 import { buildOpportunities, pickDay } from "../market/opportunities";
+import { headline12, headlineBand, headlinePld, type PlanReport } from "../planning/report";
 import { brtDate, brtHour } from "../sources/time";
 import { SUB_NAMES, SUBS, type DailySubPanel, type SourceResult, type Sub, type SubPanel } from "../sources/types";
 import type { ToolDef } from "./groq";
@@ -22,6 +23,7 @@ export const ROUTES = {
   "/sin": "SIN · Brasil",
   "/renovaveis": "Renováveis & corte",
   "/previsao": "Previsão",
+  "/planejamento": "Planejamento (SDDP)",
   "/arbitragem": "Arbitragem",
   "/bess": "BESS",
   "/carteira": "Carteira",
@@ -69,6 +71,8 @@ export interface AssistantDeps {
   latestAudit: () => Promise<AuditRun | null>;
   trust: () => Promise<{ totalRevisions30d: number; windowDays: number; seals: { source: string; name: string; monitored: boolean; level: string; revisions30d: number; reasons: string[] }[] }>;
   renewables: (days: number) => Promise<RenewablesReport>;
+  /** Último relatório do planejamento (NovoModelo no worker diário) e a idade em dias. */
+  plan: () => Promise<{ report: PlanReport | null; ageDays: number | null }>;
   dataMode: () => string;
 }
 
@@ -172,6 +176,15 @@ export const TOOL_DEFS: ToolDef[] = [
         properties: { dias: { type: "integer", minimum: 3, maximum: 31, description: "janela de dias fechados (padrão 14)" } },
         additionalProperties: false,
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "planejamento_sddp",
+      description:
+        "Planejamento da operação com o NovoModelo (o SDDP oficial de ONS, CCEE e EPE) rodado todo dia sobre dados abertos do ONS: PLD esperado mês a mês nos próximos 12 meses (mediana e faixa P10–P90 calibrada pela retroanálise), média de 12 meses, armazenamento projetado, risco de déficit, valor da água, aversão a risco implícita e o erro da retroanálise contra a persistência. Use para perguntas de médio prazo (próximos meses, fim do período seco, ano que vem); para as próximas horas e dias use previsao_pld.",
+      parameters: { type: "object", properties: { sub: SUB_ENUM }, additionalProperties: false },
     },
   },
   {
@@ -431,6 +444,44 @@ async function renovaveisCorte(args: Record<string, unknown>, _ctx: ToolCtx, dep
   };
 }
 
+async function planejamentoSddp(args: Record<string, unknown>, _ctx: ToolCtx, deps: AssistantDeps): Promise<ToolOutcome> {
+  const { report: r, ageDays } = await deps.plan();
+  if (!r) return { result: { erro: "relatório do planejamento indisponível agora (o worker diário ainda não enviou ou o armazenamento não respondeu)" } };
+  const sub = asSub(args.sub) ?? "SE";
+  const p12 = headline12(r)?.[sub] ?? null;
+  const v = r.validacao?.metricas[sub] ?? null;
+  const cal = r.calibracao_risco ?? null;
+  const st = r.resultado.estagios;
+  return {
+    result: {
+      submercado: `${sub} (${SUB_NAMES[sub]})`,
+      rodado_ha_dias: r2(ageDays),
+      dados_ate: r.asof,
+      solver: `${r.solver.nome} ${r.solver.versao}, ${r.solver.iterations} iterações`,
+      pld_mensal: r.resultado.meses.map((m) => ({
+        mes: m.mes,
+        cobertura_do_mes: m.cobertura,
+        p50: headlinePld(m)[sub].p50,
+        p10: headlineBand(m, sub).p10,
+        p90: headlineBand(m, sub).p90,
+        faixa_calibrada: headlineBand(m, sub).calibrada,
+      })),
+      pld_media_12_meses: p12 ? { media: p12.mean, p10: p12.p10, p90: p12.p90 } : null,
+      ear_hoje_pct: r.caso.armazenamento[sub].pct,
+      ear_fim_6o_estagio_pct: st[5]?.ear_fim_pct[sub] ?? null,
+      risco_deficit_pior_estagio: st.length ? Math.max(...st.map((x) => x.risco_deficit[sub])) : null,
+      valor_agua_hoje: st[0]?.valor_agua[sub].mean ?? null,
+      aversao_risco: cal
+        ? { lambda_implicito: cal.lambda, piso_se_elevado_pp: cal.piso_pp ?? 0, lambda_padrao: cal.lambda_padrao, alvo_cmo_dessem_14d: cal.alvo, cmo_obtido: cal.cmo, no_limite: cal.limite }
+        : `λ padrão ${r.params.cvar_lambda} (sem calibração nesta rodada)`,
+      retroanalise: v
+        ? { meses: v.meses, erro_medio_modelo: v.pld_mae_ponta ?? v.pld_mae_modelo, erro_medio_persistencia: v.pld_mae_persistencia, erro_medio_sem_calibracao: v.pld_mae_puro ?? null, cobertura_faixa_publicada: v.pld_cobertura_calibrada ?? null }
+        : "sem retroanálise publicada",
+      nota: "Caso montado só com dados abertos do ONS (reservatório equivalente por subsistema); o PLD com ponta soma os desvios horários recentes do DESSEM. É planejamento de médio prazo, não a previsão horária.",
+    },
+  };
+}
+
 function navegar(args: Record<string, unknown>): ToolOutcome {
   const rota = typeof args.rota === "string" && args.rota in ROUTES ? (args.rota as Route) : null;
   if (!rota) return { result: { erro: `rota desconhecida; use uma de ${Object.keys(ROUTES).join(", ")}` } };
@@ -478,6 +529,8 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return await confiancaDados(args, ctx, deps);
       case "renovaveis_corte":
         return await renovaveisCorte(args, ctx, deps);
+      case "planejamento_sddp":
+        return await planejamentoSddp(args, ctx, deps);
       case "navegar":
         return navegar(args);
       case "configurar_ativo":

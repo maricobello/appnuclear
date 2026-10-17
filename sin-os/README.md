@@ -19,12 +19,13 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
 | **Rede elétrica** | Intercâmbio medido × programado nas 4 interligações (ONS, hora a hora) com a diferença de PLD entre os dois lados (quando a rede separou os preços); fluxo de potência AC diário do SIN montado só com dados do ONS: mapa de carregamento das linhas, as mais carregadas, N-1 e a validação contra o intercâmbio medido |
+| **Planejamento (SDDP)** | O NovoModelo — o SDDP aberto de ONS, CCEE e EPE — rodado todo dia num caso do SIN montado só com dados abertos do ONS, com a aversão a risco calibrada pelo CMO recente do DESSEM: PLD esperado mês a mês com a ponta horária e faixa P10–P90 calibrada por horizonte, armazenamento contra o envelope que o ONS já operou, risco de déficit, valor da água, sensibilidades e a retroanálise de 21 meses contra o realizado, a persistência e o SDDP sem calibração |
 | **Térmicas & encargos** | Geração de cada térmica por motivo do despacho (ONS), pilha de mérito com o CMO da hora (térmica marginal e quanto o CMO precisa subir para ligar a próxima) e o ESS estimado pela regra de ressarcimento da CCEE, em R$ e em R$/MWh consumido, conferido com os boletins InfoPLD |
 | **Renováveis & corte** | Corte de eólica e solar do ONS por dia, hora, submercado e motivo, cruzado com o PLD; histórico de 12 meses com revisões; curva do pato |
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
 | **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão), política de dados faltantes e de invalidação de séries e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
-| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
+| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, planejamento de médio prazo (SDDP), estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
 mostra a idade do dado. O painel **APIs conectadas** (Sala de Comando) e a barra do modo Terminal mostram,
@@ -328,6 +329,48 @@ python -m pytest grid/tests
 python grid/run.py --date auto --out rede.json        # --post https://sinos-iota.vercel.app para enviar
 ```
 
+## Planejamento da operação: o NovoModelo (SDDP oficial) sobre dados abertos
+
+Tela `/planejamento`, `GET /api/planejamento` e a ferramenta `planejamento_sddp` da Iara.
+
+O [NovoModelo](https://github.com/ONS-CCEE-EPE/NovoModelo) é o SDDP aberto de ONS, CCEE e EPE. O caso
+oficial depende do deck do PMO; aqui `planning/` monta todo dia um caso do SIN só com arquivos públicos
+do ONS — um reservatório equivalente por subsistema com a ENA armazenável reconstruída na configuração
+de usinas de hoje, os REEs sem estoque como fio d'água, o fator de aproveitamento que fecha o balanço
+hídrico medido, a defluência mínima do São Francisco, o envelope de armazenamento que o ONS já operou,
+térmicas usina a usina com o CVU do PMO, carga e renováveis com sazonalidade de 3 anos e as
+interligações pelo fluxo medido — e roda o solver sem modificação (60 estágios mensais, 3 patamares,
+CVaR, 200 cenários). Roda no GitHub Actions (`.github/workflows/planejamento.yml`, 23:17 UTC) e envia o
+relatório para `POST /api/planejamento/ingest` (segredo `ADMIN_KEY`).
+
+**O que vai além do modelo proposto.** (1) *Aversão a risco implícita:* o caso aberto é mais folgado
+que o deck oficial e, no λ padrão, o SDDP errou o nível do preço de 2025–26 por centenas de reais; a
+cada rodada a aversão a risco é calibrada para que o CMO do 1º estágio reproduza o CMO do DESSEM das
+duas semanas anteriores (como a volatilidade implícita de uma opção) — o λ do CVaR e, quando ele
+satura, o piso de armazenamento do SE, o análogo do volume mínimo operativo —, e o SDDP leva essa
+leitura para o resto do horizonte com a física do caso. (2) *PLD com ponta:* o SDDP mensal não vê a ponta do fim da tarde;
+os desvios horários recentes do DESSEM entram antes do piso e do teto. (3) *Faixa calibrada por
+horizonte:* conformal sobre os erros da retroanálise em cada horizonte, com a cobertura medida deixando
+cada mês de fora. (4) *Retroanálise contínua* contra o realizado, a persistência, o DESSEM de 14 dias, o
+DECOMP e o próprio SDDP sem calibração.
+
+**Por que calibrar.** Sem a calibração, o SDDP errou o PLD do mês seguinte do SE em R$ 131/MWh em
+média de jan a nov/2025 (a persistência, repetir o mês anterior, errou R$ 55): a física bate — a EAR
+do fim do mês erra 4 p.p. —, mas o valor da água do caso aberto não é o oficial. Calibrado, jan/2025
+saiu R$ 65,7 contra R$ 63,5 realizados (o puro dava R$ 165) e jun/2025 R$ 222,9 contra R$ 226,9 (o
+puro, R$ 92). A retroanálise completa — jan/2025 a set/2026, seis horizontes, contra persistência,
+DESSEM de 14 dias, DECOMP e o SDDP puro — fica em `planning/validacao.json` e aparece na tela.
+
+Detalhes, decisões e o que a auditoria encontrou em [`planning/README.md`](planning/README.md).
+
+```bash
+python -m venv .venv && . .venv/bin/activate   # Python 3.12+
+pip install -r planning/requirements.txt
+python -m pytest planning/tests
+python planning/run.py --out planejamento.json   # --post https://sinos-iota.vercel.app para enviar
+python planning/hindcast.py --from 2025-01 --to 2026-09 --out planning/validacao.json
+```
+
 ## Térmicas & encargos (ESS)
 
 Tela `/termicas` e `GET /api/termicas?dias=7` (3–31). O ONS publica, hora a hora e por usina, a
@@ -608,11 +651,13 @@ src/lib/sources/    adaptadores das APIs + catálogo com SLAs + simulador sinali
 src/lib/market/     previsão (ensemble) e arbitragem sobre dados reais
 src/lib/audit/      checagens, execução e agente (Groq)
 src/lib/store.ts    Firestore (ou memória)
-src/app/api/        rotas: pld, confianca, renovaveis (+historico), rede (+ingest), termicas, brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
+src/app/api/        rotas: pld, confianca, renovaveis (+historico), rede (+ingest), planejamento (+ingest), termicas, brasil, previsao (+regimes), arbitragem, pld-mensal, global, clima, alertas, auditoria (+run, selfeval, alert-test, modelos), fontes, metodologia, health, status, assistente (+voz)
 src/lib/methodology.ts  dicionário de dados e regras publicadas em /metodologia
 src/lib/market/thermal.ts  despacho térmico por motivo, CVU por semana, ESS e pilha de mérito
 src/lib/grid/       retrato do fluxo de potência (esquema, armazenamento e a resposta de /api/rede)
 grid/               modelo da rede em Python (cadastros do ONS → pandapower → p3s), worker diário
+planning/           caso do SIN para o NovoModelo (dados do ONS → JSON/Parquet → SDDP), retroanálise e worker diário
+src/lib/planning/   relatório do planejamento (esquema, armazenamento e a resposta de /api/planejamento)
 src/app/*/page.tsx  telas
 tests/              testes de validação
 ```

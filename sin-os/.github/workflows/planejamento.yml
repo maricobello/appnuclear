@@ -1,0 +1,63 @@
+name: Planejamento (SDDP do NovoModelo)
+
+# Todo dia, depois que o ONS publica ENA, EAR, balanço e despacho do dia anterior (~22 h UTC),
+# monta o caso do SIN só com dados abertos, roda o NovoModelo (SDDP oficial de ONS/CCEE/EPE) e as
+# sensibilidades e envia o relatório para /api/planejamento/ingest do app.
+# Segredo: ADMIN_KEY (o mesmo valor cadastrado na Vercel). Sem ele, roda e só guarda o artefato.
+on:
+  workflow_dispatch:
+    inputs:
+      sens:
+        description: "Sensibilidades: all, none ou nomes separados por vírgula (neutro,seco,carga)"
+        default: all
+  schedule:
+    - cron: "17 23 * * *"
+  push:
+    branches: [main]
+    paths: ["planning/**", ".github/workflows/planejamento.yml"]
+
+concurrency:
+  group: planejamento
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  planejamento:
+    runs-on: ubuntu-latest
+    timeout-minutes: 150
+    env:
+      URL: ${{ vars.SIN_OS_URL || 'https://sinos-iota.vercel.app' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: planning/requirements.txt
+      - name: Dependências
+        run: python -m pip install -r planning/requirements.txt
+      - name: Testes (inclui um caso pequeno resolvido pelo NovoModelo)
+        run: python -m pytest -q planning/tests
+      - uses: actions/cache@v4
+        with:
+          path: ~/.cache/sin-plan
+          key: ons-plan-${{ github.run_id }}
+          restore-keys: ons-plan-
+      - name: Caso do dia, SDDP e sensibilidades
+        env:
+          ADMIN_KEY: ${{ secrets.ADMIN_KEY || secrets.CRON_SECRET }}
+          SENS: ${{ inputs.sens || 'all' }}
+        run: |
+          case "$SENS" in all|none) ;; *) echo "$SENS" | grep -Eq '^(neutro|seco|carga)(,(neutro|seco|carga))*$' || { echo "sensibilidades inválidas: $SENS"; exit 1; } ;; esac
+          post=()
+          if [ -n "$ADMIN_KEY" ]; then post=(--post "$URL"); else echo "::warning::sem ADMIN_KEY nos segredos do GitHub: o relatório fica só no artefato"; fi
+          python planning/run.py --out planejamento.json --sens "$SENS" "${post[@]}"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: planejamento-${{ github.run_id }}
+          path: planejamento.json
+          retention-days: 14
+          if-no-files-found: ignore

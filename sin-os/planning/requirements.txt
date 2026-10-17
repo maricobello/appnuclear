@@ -1,0 +1,6 @@
+# Versões conferidas juntas no caso do SIN (planning/tests roda o NovoModelo de verdade num caso pequeno).
+novomodelo-python==0.18.1
+numpy==2.5.4
+pandas==3.0.6
+pyarrow==26.0.0
+pytest==8.4.2

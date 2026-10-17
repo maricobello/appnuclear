@@ -113,6 +113,7 @@ export interface ConfiancaResp {
 export type { RenewablesReport as RenovaveisResp } from "./market/renewables-report";
 export type { GridReport as RedeResp } from "./grid/report";
 export type { ThermalReportResp as TermicasResp } from "./market/thermal-report";
+export type { PlanView as PlanejamentoResp } from "./planning/view";
 
 export interface AlertasResp {
   generatedAt: number;
