@@ -142,12 +142,16 @@ describe("ferramentas da Iara", () => {
 
   it("planejamento_sddp: PLD mensal com faixa, média de 12 meses e retroanálise do submercado pedido", async () => {
     const out = await executeTool("planejamento_sddp", { sub: "ne" }, { now: NOW, asset: ASSET }, deps(src(PLD)));
-    const r = out.result as { submercado: string; pld_mensal: { mes: string; p10: number; p50: number; p90: number }[]; dados_ate: string; nota: string };
+    const r = out.result as { submercado: string; pld_mensal: { mes: string; p10: number; p50: number; p90: number }[]; dados_ate: string; nota: string; retroanalise: Record<string, unknown> };
     expect(r.submercado).toContain("NE");
     expect(r.dados_ate).toBe(PLAN.asof);
     expect(r.pld_mensal).toHaveLength(PLAN.resultado.meses.length);
     for (const m of r.pld_mensal) expect(m.p10).toBeLessThanOrEqual(m.p50 + 1e-9);
     expect(r.nota).toContain("dados abertos do ONS");
+    // com a combinação, o publicado e o erro dele; o SDDP calibrado vai ao lado
+    expect(r.pld_mensal[1].p50).toBe(PLAN.resultado.meses[1].pld_previsto!.NE.p50);
+    expect(r.retroanalise).toMatchObject({ erro_medio_publicado: PLAN.validacao!.metricas.NE.pld_mae_combinado, cobertura_faixa_publicada: PLAN.validacao!.metricas.NE.pld_cobertura_combinado });
+    expect(r.nota).toContain("combina");
     const none = await executeTool("planejamento_sddp", {}, { now: NOW, asset: ASSET }, { ...deps(src(PLD)), plan: async () => ({ report: null, ageDays: null }) });
     expect((none.result as { erro: string }).erro).toContain("indisponível");
   });

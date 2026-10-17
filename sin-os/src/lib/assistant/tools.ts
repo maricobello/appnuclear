@@ -183,7 +183,7 @@ export const TOOL_DEFS: ToolDef[] = [
     function: {
       name: "planejamento_sddp",
       description:
-        "Planejamento da operação com o NovoModelo (o SDDP oficial de ONS, CCEE e EPE) rodado todo dia sobre dados abertos do ONS: PLD esperado mês a mês nos próximos 12 meses (mediana e faixa P10–P90 calibrada pela retroanálise), média de 12 meses, armazenamento projetado, risco de déficit, valor da água, aversão a risco implícita e o erro da retroanálise contra a persistência. Use para perguntas de médio prazo (próximos meses, fim do período seco, ano que vem); para as próximas horas e dias use previsao_pld.",
+        "Planejamento da operação com o NovoModelo (o SDDP oficial de ONS, CCEE e EPE) rodado todo dia sobre dados abertos do ONS: PLD publicado mês a mês nos próximos 12 meses (mediana e faixa P10–P90 calibradas pela retroanálise), média de 12 meses, armazenamento projetado, risco de déficit, valor da água, aversão a risco implícita e o erro da retroanálise contra a persistência e o DESSEM de 14 dias. Use para perguntas de médio prazo (próximos meses, fim do período seco, ano que vem); para as próximas horas e dias use previsao_pld.",
       parameters: { type: "object", properties: { sub: SUB_ENUM }, additionalProperties: false },
     },
   },
@@ -465,6 +465,7 @@ async function planejamentoSddp(args: Record<string, unknown>, _ctx: ToolCtx, de
         p10: headlineBand(m, sub).p10,
         p90: headlineBand(m, sub).p90,
         faixa_calibrada: headlineBand(m, sub).calibrada,
+        ...(m.pld_previsto ? { sddp_calibrado_p50: (m.pld_ponta ?? m.pld)[sub].p50, peso_sddp: m.peso_sddp ?? null } : {}),
       })),
       pld_media_12_meses: p12 ? { media: p12.mean, p10: p12.p10, p90: p12.p90 } : null,
       ear_hoje_pct: r.caso.armazenamento[sub].pct,
@@ -475,9 +476,17 @@ async function planejamentoSddp(args: Record<string, unknown>, _ctx: ToolCtx, de
         ? { lambda_implicito: cal.lambda, piso_se_elevado_pp: cal.piso_pp ?? 0, lambda_padrao: cal.lambda_padrao, alvo_cmo_dessem_14d: cal.alvo, cmo_obtido: cal.cmo, no_limite: cal.limite }
         : `λ padrão ${r.params.cvar_lambda} (sem calibração nesta rodada)`,
       retroanalise: v
-        ? { meses: v.meses, erro_medio_modelo: v.pld_mae_ponta ?? v.pld_mae_modelo, erro_medio_persistencia: v.pld_mae_persistencia, erro_medio_sem_calibracao: v.pld_mae_puro ?? null, cobertura_faixa_publicada: v.pld_cobertura_calibrada ?? null }
+        ? {
+            meses: v.meses,
+            erro_medio_publicado: v.pld_mae_combinado ?? v.pld_mae_ponta ?? v.pld_mae_modelo,
+            erro_medio_sddp_calibrado: v.pld_mae_ponta ?? v.pld_mae_modelo,
+            erro_medio_persistencia: v.pld_mae_persistencia,
+            erro_medio_dessem_14d: v.pld_mae_dessem14 ?? null,
+            erro_medio_sem_calibracao: v.pld_mae_puro ?? null,
+            cobertura_faixa_publicada: v.pld_cobertura_combinado ?? v.pld_cobertura_calibrada ?? null,
+          }
         : "sem retroanálise publicada",
-      nota: "Caso montado só com dados abertos do ONS (reservatório equivalente por subsistema); o PLD com ponta soma os desvios horários recentes do DESSEM. É planejamento de médio prazo, não a previsão horária.",
+      nota: `Caso montado só com dados abertos do ONS (reservatório equivalente por subsistema); o PLD com ponta soma os desvios horários recentes do DESSEM.${r.combinacao ? " O publicado combina, por horizonte, o SDDP calibrado com o CMO do DESSEM das 2 semanas anteriores, nos pesos que mais acertaram na retroanálise (o SDDP pesa no mês seguinte e pouco depois)." : ""} É planejamento de médio prazo, não a previsão horária.`,
     },
   };
 }
