@@ -6,7 +6,7 @@ import { Badge, Disclosure, Empty, ErrorBox, Kpi, Loading, MetricRow, PageHeader
 import type { PlanejamentoResp } from "@/lib/apiTypes";
 import { baseOption, C, categoryAxis, valueAxis } from "@/lib/chart";
 import { ago, brl, dayLabel, num, pct } from "@/lib/fmt";
-import { headline12, headlineBand, headlinePld, type Quant } from "@/lib/planning/report";
+import { headline12, headlineBand, headlinePld, sddp12, sddpPld, type Quant } from "@/lib/planning/report";
 import { SUB_NAMES, SUBS, type Sub } from "@/lib/sources/types";
 import { useApi } from "@/lib/useApi";
 
@@ -47,11 +47,13 @@ export default function PlanejamentoPage() {
   const realized = useMemo(() => new Map((data?.realized ?? []).map((x) => [x.mes, x])), [data]);
   const m1 = months.find((m) => m.cobertura >= 0.999 && r && m.mes > r.start.slice(0, 7)) ?? months[0] ?? null;
   const p12 = r ? (headline12(r)?.[sub] ?? null) : null;
+  const base12 = r ? (sddp12(r)?.[sub].mean ?? null) : null;
   const ponta = !!months[0]?.pld_ponta;
   const stages = useMemo(() => r?.resultado.estagios ?? [], [r]);
   const riskMax = stages.length ? Math.max(...stages.map((s) => s.risco_deficit[sub])) : null;
   const ear6 = stages[5]?.ear_fim_pct[sub] ?? null;
   const cal = r?.calibracao_risco ?? null;
+  const comb = r?.combinacao ?? null;
   const pure = useMemo(() => new Map((cal?.puro ?? []).map((x) => [x.mes, x.pld_p50])), [cal]);
 
   const pldChart = useMemo<ChartOption | null>(() => {
@@ -68,8 +70,10 @@ export default function PlanejamentoPage() {
       yAxis: valueAxis("R$/MWh"),
       series: [
         ...catBand("PLD P10–P90", lo, hi, C.series[0]),
-        { name: "PLD P50", type: "line", data: months.map((m) => headlinePld(m)[sub].p50), lineStyle: { width: 2, color: C.series[0] }, itemStyle: { color: C.series[0] }, symbolSize: 6 },
-        { name: "PLD médio", type: "line", data: months.map((m) => headlinePld(m)[sub].mean), lineStyle: { width: 1.5, type: [5, 4], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false },
+        { name: comb ? "PLD publicado (P50)" : "PLD P50", type: "line", data: months.map((m) => headlinePld(m)[sub].p50), lineStyle: { width: 2, color: C.series[0] }, itemStyle: { color: C.series[0] }, symbolSize: 6 },
+        comb
+          ? { name: "SDDP calibrado (P50)", type: "line", data: months.map((m) => sddpPld(m)[sub].p50), lineStyle: { width: 1.5, type: [5, 4], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false }
+          : { name: "PLD médio", type: "line", data: months.map((m) => headlinePld(m)[sub].mean), lineStyle: { width: 1.5, type: [5, 4], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false },
         ...(cal
           ? [{ name: `Sem calibração (λ ${num(cal.lambda_padrao, 2)})`, type: "line", data: months.map((m) => pure.get(m.mes)?.[sub] ?? null), lineStyle: { width: 1.2, type: [2, 3], color: C.series[3] }, itemStyle: { color: C.series[3] }, showSymbol: false }]
           : ponta
@@ -86,7 +90,7 @@ export default function PlanejamentoPage() {
         },
       ],
     });
-  }, [months, sub, realized, r, data?.pldOfficial, ponta, cal, pure]);
+  }, [months, sub, realized, r, data?.pldOfficial, ponta, cal, pure, comb]);
 
   const earChart = useMemo<ChartOption | null>(() => {
     if (!stages.length || !r) return null;
@@ -129,6 +133,9 @@ export default function PlanejamentoPage() {
     if (!v.length) return null;
     const cats = v.map((x) => monthLabel(x.mes));
     const head = (x: (typeof v)[number]) => x.sub[sub].previsto_pld_ponta ?? x.sub[sub].previsto_pld;
+    // com a combinação, faixa e P50 são os publicados (refeitos sem o próprio mês) e o SDDP calibrado vai tracejado
+    const pub = v.every((x) => x.sub[sub].publicado) ? (x: (typeof v)[number]) => x.sub[sub].publicado! : null;
+    const top = pub ?? head;
     return withLegend({
       ...baseOption(),
       tooltip: { ...baseOption().tooltip, trigger: "axis", valueFormatter: (x: number) => (x === null || x === undefined ? "—" : brl(x)) },
@@ -136,15 +143,16 @@ export default function PlanejamentoPage() {
       xAxis: categoryAxis(cats),
       yAxis: valueAxis("R$/MWh"),
       series: [
-        ...catBand("Previsto P10–P90", v.map((x) => head(x).p10), v.map((x) => head(x).p90), C.series[0]),
-        { name: "Previsto P50", type: "line", data: v.map((x) => head(x).p50), lineStyle: { width: 2, color: C.series[0] }, itemStyle: { color: C.series[0] }, symbolSize: 5 },
+        ...catBand(pub ? "Faixa publicada" : "Previsto P10–P90", v.map((x) => top(x).p10), v.map((x) => top(x).p90), C.series[0]),
+        { name: pub ? "Publicado (P50)" : "Previsto P50", type: "line", data: v.map((x) => top(x).p50), lineStyle: { width: 2, color: C.series[0] }, itemStyle: { color: C.series[0] }, symbolSize: 5 },
+        ...(pub ? [{ name: "SDDP calibrado (P50)", type: "line", data: v.map((x) => head(x).p50), lineStyle: { width: 1.5, type: [5, 4], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false }] : []),
         ...(v[0]?.sub[sub].previsto_puro != null
           ? [{ name: "Sem calibração (λ padrão)", type: "line", data: v.map((x) => x.sub[sub].previsto_puro ?? null), lineStyle: { width: 1.2, type: [2, 3], color: C.series[3] }, itemStyle: { color: C.series[3] }, showSymbol: false }]
           : v[0]?.sub[sub].previsto_pld_ponta
             ? [{ name: "SDDP sem ponta (P50)", type: "line", data: v.map((x) => x.sub[sub].previsto_pld.p50), lineStyle: { width: 1.2, type: [2, 3], color: C.series[3] }, itemStyle: { color: C.series[3] }, showSymbol: false }]
             : []),
         { name: "Realizado", type: "line", data: v.map((x) => x.sub[sub].realizado_pld), lineStyle: { width: 2, color: C.warning }, itemStyle: { color: C.warning }, symbolSize: 6 },
-        { name: "Persistência (mês anterior)", type: "line", data: v.map((x) => x.sub[sub].persistencia), lineStyle: { width: 1.2, type: [4, 3], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false },
+        ...(pub ? [] : [{ name: "Persistência (mês anterior)", type: "line", data: v.map((x) => x.sub[sub].persistencia), lineStyle: { width: 1.2, type: [4, 3], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false }]),
       ],
     });
   }, [r, sub]);
@@ -174,9 +182,22 @@ export default function PlanejamentoPage() {
           format={(v) => num(v, 2)}
           unit="R$/MWh"
           foot={m1 ? `P10 ${num(headlineBand(m1, sub).p10, 0)} · P90 ${num(headlineBand(m1, sub).p90, 0)}` : undefined}
-          source={ponta ? "mediana dos cenários; CMO do SDDP + desvios horários recentes do DESSEM, entre o piso e o teto da ANEEL" : "mediana dos cenários; CMO por patamar entre o piso e o teto da ANEEL"}
+          source={
+            comb && m1?.peso_sddp != null
+              ? `combinação calibrada na retroanálise: ${num(100 * m1.peso_sddp, 0)}% do SDDP calibrado e ${num(100 * (1 - m1.peso_sddp), 0)}% do CMO do DESSEM de 14 dias, com a ponta horária, entre o piso e o teto da ANEEL`
+              : ponta
+                ? "mediana dos cenários; CMO do SDDP + desvios horários recentes do DESSEM, entre o piso e o teto da ANEEL"
+                : "mediana dos cenários; CMO por patamar entre o piso e o teto da ANEEL"
+          }
         />
-        <Kpi label="PLD médio 12 meses" value={p12?.mean ?? null} format={(v) => num(v, 2)} unit="R$/MWh" foot={p12 ? `P10 ${num(p12.p10, 0)} · P90 ${num(p12.p90, 0)}` : undefined} source="média dos 12 meses civis inteiros à frente, cenário a cenário" />
+        <Kpi
+          label="PLD médio 12 meses"
+          value={p12?.mean ?? null}
+          format={(v) => num(v, 2)}
+          unit="R$/MWh"
+          foot={p12 ? `P10 ${num(p12.p10, 0)} · P90 ${num(p12.p90, 0)}` : undefined}
+          source={comb?.pld_12m ? "média dos 12 meses civis inteiros à frente do publicado (P10 e P90: média das faixas mensais)" : "média dos 12 meses civis inteiros à frente, cenário a cenário"}
+        />
         <Kpi label="EAR hoje" value={r ? r.caso.armazenamento[sub].pct : null} format={(v) => num(v, 1)} unit="%" foot={ear6 ? `6 meses: ${num(ear6.p50, 0)}% · P10 ${num(ear6.p10, 0)}` : undefined} source="energia armazenada (ONS) e a mediana simulada ao fim do 6º estágio" />
         <Kpi label="Risco de déficit" value={riskMax !== null ? 100 * riskMax : null} format={(v) => num(v, 1)} unit="% dos cenários" foot="pior mês em 13" source="fração dos cenários com déficit acima de 0,1% da carga, no pior dos 13 estágios" />
         <Kpi
@@ -192,16 +213,18 @@ export default function PlanejamentoPage() {
       <Panel
         title={`PLD esperado — ${SUB_NAMES[sub]}`}
         subtitle={
-          ponta
-            ? `Mediana dos cenários por mês civil, com a ponta horária do DESSEM${cal ? " e a aversão a risco calibrada pelo CMO recente" : ""}; faixa P10–P90${months[0]?.pld_faixa?.[sub]?.calibrada ? " calibrada pelos erros da retroanálise em cada horizonte" : ""}; pontilhado: ${cal ? "o mesmo SDDP no λ padrão" : "o PLD que sai só do SDDP mensal"}; pontos: PLD realizado (mês corrente até agora)`
-            : "Faixa P10–P90 e mediana dos cenários simulados, por mês civil; pontos: PLD realizado (mês corrente até agora)"
+          comb
+            ? "O publicado combina, mês a mês, o SDDP calibrado com o CMO do DESSEM das 2 semanas anteriores, nos pesos que mais acertaram na retroanálise (o SDDP pesa mais no mês seguinte); faixa P10–P90 pelos erros dessa combinação no mesmo horizonte; tracejado: o SDDP calibrado; pontilhado: o SDDP no λ padrão; pontos: PLD realizado (mês corrente até agora)"
+            : ponta
+              ? `Mediana dos cenários por mês civil, com a ponta horária do DESSEM${cal ? " e a aversão a risco calibrada pelo CMO recente" : ""}; faixa P10–P90${months[0]?.pld_faixa?.[sub]?.calibrada ? " calibrada pelos erros da retroanálise em cada horizonte" : ""}; pontilhado: ${cal ? "o mesmo SDDP no λ padrão" : "o PLD que sai só do SDDP mensal"}; pontos: PLD realizado (mês corrente até agora)`
+              : "Faixa P10–P90 e mediana dos cenários simulados, por mês civil; pontos: PLD realizado (mês corrente até agora)"
         }
       >
         {pldChart ? <EChart option={pldChart} height={320} label={`PLD esperado por mês em ${SUB_NAMES[sub]}`} dim={isValidating} /> : data ? <Empty label="Sem relatório do planejamento ainda." height={320} /> : <Loading height={320} />}
         {months.length ? (
           <Table
             label="PLD e CMO esperados por mês"
-            head={["Mês", "PLD P10", "PLD P50", "PLD médio", "PLD P90", cal ? "Sem calibração" : "SDDP sem ponta", "CMO médio", "Realizado"]}
+            head={["Mês", "PLD P10", "PLD P50", comb ? "SDDP calibrado" : "PLD médio", "PLD P90", cal ? "Sem calibração" : "SDDP sem ponta", "CMO médio", "Realizado"]}
             align={["left", "right", "right", "right", "right", "right", "right", "right"]}
             rows={months.map((m) => [
               <span key="m">
@@ -210,7 +233,7 @@ export default function PlanejamentoPage() {
               </span>,
               num(headlineBand(m, sub).p10, 2),
               <b key="p">{num(headlinePld(m)[sub].p50, 2)}</b>,
-              num(headlinePld(m)[sub].mean, 2),
+              num(comb ? sddpPld(m)[sub].p50 : headlinePld(m)[sub].mean, 2),
               num(headlineBand(m, sub).p90, 2),
               num(cal ? (pure.get(m.mes)?.[sub] ?? null) : m.pld[sub].p50, 2),
               num(m.cmo[sub].mean, 2),
@@ -253,17 +276,17 @@ export default function PlanejamentoPage() {
         >
           <Table
             label="Sensibilidades do PLD"
-            head={["Cenário", m1 ? `PLD ${monthLabel(m1.mes)} P50` : "PLD M+1", "Δ", "PLD 12 meses (média)", "Δ"]}
+            head={["Cenário", m1 ? `SDDP ${monthLabel(m1.mes)} P50` : "SDDP M+1", "Δ", "SDDP 12 meses (média)", "Δ"]}
             align={["left", "right", "right", "right", "right"]}
             rows={[
-              ["Caso base", num(m1 ? headlinePld(m1)[sub].p50 : null, 2), "", num(p12?.mean, 2), ""],
+              ["Caso base", num(m1 ? sddpPld(m1)[sub].p50 : null, 2), "", num(base12, 2), ""],
               ...r.sensibilidades.map((s) => {
                 const sm = s.meses.find((x) => x.mes === m1?.mes);
-                const s12 = headline12({ resultado: { ...r.resultado, pld_12m: s.pld_12m, pld_12m_ponta: s.pld_12m_ponta } })?.[sub].mean ?? null;
-                const v1 = sm ? headlinePld(sm)[sub].p50 : null;
-                const b1 = m1 ? headlinePld(m1)[sub].p50 : null;
+                const s12 = sddp12({ resultado: { pld_12m: s.pld_12m, pld_12m_ponta: s.pld_12m_ponta } })?.[sub].mean ?? null;
+                const v1 = sm ? sddpPld(sm)[sub].p50 : null;
+                const b1 = m1 ? sddpPld(m1)[sub].p50 : null;
                 const d1 = v1 != null && b1 != null ? v1 - b1 : null;
-                const d12 = s12 !== null && p12?.mean != null ? s12 - p12.mean : null;
+                const d12 = s12 !== null && base12 != null ? s12 - base12 : null;
                 return [s.rotulo, num(v1, 2), d1 === null ? "—" : `${d1 >= 0 ? "+" : ""}${num(d1, 2)}`, num(s12, 2), d12 === null ? "—" : `${d12 >= 0 ? "+" : ""}${num(d12, 2)}`];
               }),
             ]}
@@ -275,29 +298,22 @@ export default function PlanejamentoPage() {
           <div className={`grid grid-cols-1 gap-x-8 gap-y-3 ${metrics ? "xl:grid-cols-2" : ""}`}>
           <div className="min-w-0">
           {valChart ? <EChart option={valChart} height={300} label={`Retroanálise do PLD em ${SUB_NAMES[sub]}`} dim={isValidating} /> : data ? <Empty label="Retroanálise ainda não publicada." height={300} /> : <Loading height={300} />}
-          {metrics?.horizonte?.length ? (
-            <Table
-              label="Erro médio do PLD por horizonte"
-              head={["Horizonte", "Modelo", "Sem calibração", "Persistência", "DESSEM 14 d", "Meses"]}
-              align={["left", "right", "right", "right", "right", "right"]}
-              rows={metrics.horizonte.map((x) => [
-                x.h === 0 ? "mês seguinte" : `${x.h + 1}º mês`,
-                <b key="m">{num(x.mae_modelo, 1)}</b>,
-                num(x.mae_puro, 1),
-                num(x.mae_persistencia, 1),
-                num(x.mae_dessem14, 1),
-                String(x.n),
-              ])}
-            />
-          ) : null}
           </div>
           {metrics ? (
             <div className="flex min-w-0 flex-col">
+              {metrics.pld_mae_combinado != null ? (
+                <MetricRow
+                  label="Erro médio do PLD — publicado (combinação)"
+                  value={brl(metrics.pld_mae_combinado)}
+                  tone={metrics.pld_mae_persistencia !== null && metrics.pld_mae_combinado <= metrics.pld_mae_persistencia ? "good" : "warning"}
+                  hint="pesos e faixa calibrados sem o mês avaliado"
+                />
+              ) : null}
               {metrics.pld_mae_ponta != null ? (
                 <MetricRow
-                  label={`Erro médio do PLD — ${metrics.pld_mae_puro != null ? "modelo calibrado" : "modelo com ponta"} (P50)`}
+                  label={`Erro médio do PLD — ${metrics.pld_mae_puro != null ? "SDDP calibrado" : "modelo com ponta"} (P50)`}
                   value={brl(metrics.pld_mae_ponta)}
-                  tone={metrics.pld_mae_persistencia !== null && metrics.pld_mae_ponta <= metrics.pld_mae_persistencia ? "good" : "warning"}
+                  tone={metrics.pld_mae_combinado != null ? "muted" : metrics.pld_mae_persistencia !== null && metrics.pld_mae_ponta <= metrics.pld_mae_persistencia ? "good" : "warning"}
                   hint={`viés ${brl(metrics.pld_vies_ponta ?? null)}`}
                 />
               ) : (
@@ -307,8 +323,12 @@ export default function PlanejamentoPage() {
               <MetricRow label="Erro médio — persistência" value={brl(metrics.pld_mae_persistencia)} tone="muted" hint="repetir o PLD do mês anterior" />
               {metrics.pld_mae_dessem14 != null ? <MetricRow label="Erro médio — CMO do DESSEM de 14 dias" value={brl(metrics.pld_mae_dessem14)} tone="muted" hint="a média das 2 semanas anteriores, com a ponta" /> : null}
               <MetricRow label="Erro médio — CMO do DECOMP (ONS)" value={brl(metrics.pld_mae_decomp)} tone="muted" hint="o CMO semanal publicado durante o mês, limitado ao piso e ao teto" />
-              {metrics.pld_cobertura_calibrada != null ? (
-                <MetricRow label="PLD realizado dentro da faixa publicada" value={pct(100 * metrics.pld_cobertura_calibrada, 0)} hint="calibrada pelos erros dos outros meses; o esperado é perto de 80%" />
+              {(metrics.pld_cobertura_combinado ?? metrics.pld_cobertura_calibrada) != null ? (
+                <MetricRow
+                  label="PLD realizado dentro da faixa publicada"
+                  value={pct(100 * (metrics.pld_cobertura_combinado ?? metrics.pld_cobertura_calibrada)!, 0)}
+                  hint="calibrada pelos erros dos outros meses; o esperado é perto de 80%"
+                />
               ) : null}
               <MetricRow
                 label={metrics.pld_cobertura_calibrada != null ? "Dentro de P10–P90 só do modelo" : "PLD realizado dentro de P10–P90"}
@@ -321,6 +341,23 @@ export default function PlanejamentoPage() {
             </div>
           ) : null}
           </div>
+          {metrics?.horizonte?.length ? (
+            <div className="mt-5">
+            <Table
+              label="Erro médio do PLD por horizonte"
+              head={metrics.horizonte.some((x) => x.mae_combinado != null) ? ["Horizonte", "Publicado", "SDDP calibrado", "Sem calibração", "Persistência", "DESSEM 14 d", "Meses"] : ["Horizonte", "Modelo", "Sem calibração", "Persistência", "DESSEM 14 d", "Meses"]}
+              align={["left", "right", "right", "right", "right", "right", "right"]}
+              rows={metrics.horizonte.map((x, _, all) => [
+                x.h === 0 ? "mês seguinte" : `${x.h + 1}º mês`,
+                ...(all.some((y) => y.mae_combinado != null) ? [<b key="c">{num(x.mae_combinado ?? null, 1)}</b>, num(x.mae_modelo, 1)] : [<b key="m">{num(x.mae_modelo, 1)}</b>]),
+                num(x.mae_puro, 1),
+                num(x.mae_persistencia, 1),
+                num(x.mae_dessem14, 1),
+                String(x.n),
+              ])}
+            />
+            </div>
+          ) : null}
       </Panel>
       <Panel title="Como a previsão mudou" subtitle="PLD do mês seguinte e média de 12 meses em cada rodada diária">
           {histChart ? <EChart option={histChart} height={260} label="Histórico das rodadas do planejamento" dim={isValidating} /> : data ? <Empty label="O histórico aparece a partir da segunda rodada." height={200} /> : <Loading height={200} />}

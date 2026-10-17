@@ -41,7 +41,9 @@ TARGET_SUB = "SE"
 #: Aceita o ponto quando o CMO do 1º estágio fica a menos de max(abs, rel × alvo) do alvo.
 TOL_ABS = 8.0
 TOL_REL = 0.08
-MAX_RUNS = 6
+MAX_RUNS = 8
+#: Maior passo de extrapolação em v (um salto ao extremo desperdiça rodada: o CMO é escada de CVU).
+STEP_MAX = 2.0
 #: Fim da 1ª etapa: λ = 1 é CVaR puro e satura (o CMO para de responder).
 LAM_MAX = 0.99
 #: 2ª etapa: p.p. de elevação do piso do SE por unidade de v, e o máximo.
@@ -132,14 +134,14 @@ def implied_risk(cmo_at: Callable[[float, float], float], target: float, start: 
                 cand = b + (target - tried[b]) / slope
             else:  # sem resposta: vai ao fim do λ; já no fim (λ saturado), sobe o piso 10 p.p.
                 cand = V_LAM if b < V_LAM - 1e-6 else b + 1.0
-            cand = min(max(cand, b + 0.2), V_MAX)
+            cand = min(max(cand, b + 0.2), b + STEP_MAX, V_MAX)
         else:  # todos acima: desce pela reta dos dois menores (ou vai ao valor esperado)
             if 0.0 in tried:
                 return result(0.0, "piso")
             a, b = sorted(above)[:2] if len(above) >= 2 else (above[0], None)
             slope = (tried[b] - tried[a]) / (b - a) if b is not None and b > a else 0.0
             cand = a - (tried[a] - target) / slope if slope > 1e-6 else 0.0
-            cand = max(min(cand, a - 0.2), 0.0)
+            cand = max(min(cand, a - 0.2), a - STEP_MAX, 0.0)
         lam, flp = point(cand)
         nxt = index(lam, flp)
         if nxt in tried:  # a secante caiu num ponto já rodado: não há o que refinar

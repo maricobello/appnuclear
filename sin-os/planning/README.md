@@ -29,7 +29,7 @@ python -m pytest -q planning/tests                                              
 | Estágios | 60 mensais ancorados no dia de início (sem estágio parcial), 3 patamares pela carga líquida do SIN, CVaR α 15%, desconto 12% a.a., déficit R$ 7.643,82/MWh |
 | Aversão a risco | **Implícita** (`sin_plan/calibrate.py`): o λ do CVaR e, se ele satura, a elevação do piso do SE que fazem o CMO do 1º estágio (mediana, SE) reproduzir o CMO médio do DESSEM nos 14 dias anteriores; o SDDP no λ padrão (0,40) sai ao lado |
 | PLD com ponta | CMO de cada cenário + desvios horários do CMO do DESSEM dos 30 dias anteriores, depois piso, teto horário e teto estrutural |
-| Faixa publicada | A mais larga entre a P10–P90 dos cenários e a mediana mais os quantis do erro da retroanálise no mesmo horizonte (conformal) |
+| PLD publicado | Combinação, por horizonte, do P50 do SDDP calibrado com o CMO do DESSEM das 2 semanas anteriores (com a ponta) congelado, nos pesos que mais acertaram na retroanálise; faixa P10–P90 pelos quantis do erro dessa combinação no mesmo horizonte |
 
 ## Por que calibrar a aversão a risco
 
@@ -48,8 +48,26 @@ que a curva CMO × λ é quase reta. Em alguns meses nem o CVaR extremo cria esc
 ajuda); então o piso operativo do SE sobe até 40 p.p., o análogo do volume mínimo operativo dos
 modelos oficiais. O λ vem antes porque, onde os dois chegam ao alvo, ele erra menos o resto do
 horizonte e o armazenamento (jun/2025: λ 0,93 → PLD do SE de R$ 223 a 182 até nov e EAR de jun a
-69,9%; piso +35 p.p. com λ 0,40 → R$ 264 a 135 e 71,8%; realizado R$ 227 a 296 e 66,5%). A busca
-parte do ponto da rodada anterior e costuma fechar em 2–3 rodadas do SDDP.
+69,9%; piso +35 p.p. com λ 0,40 → R$ 264 a 135 e 71,8%; realizado R$ 227 a 296 e 66,5%).
+
+A busca parte do ponto da rodada anterior (a de 16/10/2026 fechou em 3 rodadas do SDDP: λ 0,51, CMO
+R$ 50 contra R$ 48). Na retroanálise, com um mês entre um ponto e o seguinte, foram 5,5 rodadas em
+média e 15 dos 21 meses ficaram dentro da tolerância; nos outros 6 o CMO do caso salta entre degraus
+de CVU e a busca para no ponto mais próximo (R$ 25 do alvo, em média). O λ implícito ficou entre 0 e
+0,56 no período úmido de 2025, subiu a 0,93 em jun/2025 e ficou em 0,99 com o piso do SE elevado
+(+3 a +30 p.p.) de jul/2025 a jan/2026 e em mar–abr/2026 — meses de preço alto com os reservatórios
+em nível médio, em que o valor da água oficial ficou muito acima do que o caso aberto enxerga.
+
+## Por que o publicado é uma combinação
+
+A calibração acerta o nível do mês seguinte, mas a trajetória do SDDP depois dele não acompanhou o
+preço de 2025–26: o caso aberto guarda água a mais quando a aversão a risco sobe e projeta preços
+caindo, enquanto o oficial ficou alto por mais de um ano. A retroanálise mede isso horizonte a
+horizonte e escolhe o peso do SDDP contra a âncora mais simples que existe — o CMO do DESSEM das duas
+semanas anteriores, com a ponta, repetido — sem deixar o peso crescer com o horizonte. O resultado é
+honesto: o SDDP pesa 0,30 no mês seguinte, 0,25 no outro e 0,09 do 3º mês em diante, e a tela mostra
+as duas curvas. A física do caso (armazenamento, risco de déficit, valor da água, sensibilidades)
+segue vindo só do SDDP.
 
 ## O que a auditoria encontrou e corrigiu
 
@@ -79,17 +97,53 @@ véspera, roda o SDDP no λ padrão e calibrado, e compara o PLD dos 6 meses seg
 anterior), com o CMO do DESSEM de 14 dias com a ponta e com o CMO semanal do DECOMP publicado
 durante o mês. A cobertura da faixa é medida deixando cada mês de fora da calibração.
 
-| PLD do SE, mês seguinte | Calibrado | SDDP puro (λ 0,40) | DESSEM 14 dias | Realizado |
-|---|---|---|---|---|
-| jan/2025 | R$ 65,7 (λ 0,00) | R$ 164,9 | R$ 65,7 | R$ 63,5 |
-| jun/2025 | R$ 222,9 (λ 0,93) | R$ 92,2 | R$ 215,0 | R$ 226,9 |
+21 meses, de jan/2025 a set/2026. Erro médio absoluto do PLD do mês seguinte (R$/MWh):
 
-Em jun/2025 o S, o NE e o N também ficaram a menos de R$ 4 do realizado. Sem calibração, de jan a
-nov/2025, o erro médio do PLD do mês seguinte foi de R$ 131 no SE, 146 no S, 109 no NE e 123 no N,
-contra R$ 55, 57, 31 e 31 da persistência — com a EAR do fim do mês errando só 4 p.p. no SE. A
-retroanálise completa com a calibração (jan/2025 a set/2026) fica no arquivo `validacao.json` desta
-pasta (gerado por `hindcast.py`): a rodada diária lê dele as métricas e os quantis do erro por
-horizonte que calibram a faixa.
+| | SE | S | NE | N |
+|---|---|---|---|---|
+| **Publicado** (combinação, pesos e faixa fora da amostra) | **40,8** | **52,9** | **25,7** | **26,3** |
+| SDDP calibrado (P50 com ponta) | 43,5 | 47,1 | 35,5 | 31,0 |
+| NovoModelo sem calibração (λ 0,40) | 128,2 | 147,6 | 107,8 | 116,3 |
+| Persistência (PLD do mês anterior) | 47,4 | 59,9 | 38,8 | 39,7 |
+| DESSEM de 14 dias com ponta | 39,6 | 55,8 | 24,8 | 28,0 |
+| DECOMP publicado durante o mês¹ | 27,5 | 18,6 | 35,4 | 112,2 |
+| Cobertura da faixa P10–P90 publicada (nominal 80%) | 76% | 76% | 71% | 71% |
+
+¹ Não é previsão: sai ao longo do próprio mês, com revisões semanais; fica como referência.
+
+No SE, por horizonte:
+
+| SE | 1º mês | 2º | 3º | 4º | 5º | 6º |
+|---|---|---|---|---|---|---|
+| Publicado | 40,8 | 72,5 | 76,9 | 85,5 | 91,7 | 101,9 |
+| SDDP calibrado | 43,5 | 79,2 | 119,2 | 137,7 | 141,6 | 149,3 |
+| Sem calibração | 128,2 | 133,3 | 140,7 | 133,9 | 134,5 | 133,3 |
+| Persistência | 47,4 | 68,3 | 74,8 | 84,2 | 92,8 | 100,2 |
+| DESSEM de 14 dias | 39,6 | 67,4 | 74,3 | 83,9 | 89,9 | 99,1 |
+| Cobertura publicada | 76% | 80% | 68% | 72% | 76% | 63% |
+
+O que os números dizem:
+
+* **A calibração é o que torna o SDDP útil.** No mês seguinte ela corta o erro do NovoModelo sobre o
+  caso aberto em 66% a 73%, e o SDDP calibrado sozinho já erra menos que a persistência nos quatro
+  submercados. Exemplos: jan/2025 saiu R$ 65,7 contra R$ 63,5 realizados (sem calibração, R$ 164,9);
+  jun/2025, R$ 222,9 contra R$ 226,9 (sem calibração, R$ 92,2).
+* **O publicado fica 12% a 34% abaixo da persistência no mês seguinte e no nível do DESSEM de 14
+  dias** (de 6% melhor a 4% pior conforme o submercado — com 21 meses, empate). Do 2º ao 6º mês o
+  publicado fica perto da persistência (de R$ 8 melhor a R$ 4,5 pior) e ninguém a bate com folga.
+* **A trajetória do SDDP depois do 1º mês cai rápido demais** (viés de −37 R$/MWh no 2º mês a −102 no
+  6º, no SE): com a aversão a risco alta o caso guarda água e projeta preços em queda, enquanto o
+  oficial ficou alto por mais de um ano. Por isso o peso dele no publicado cai para 0,09.
+* **Armazenamento.** A EAR do fim do mês erra 4,7 p.p. no SE (viés +4,3: o caso guarda mais que a
+  operação real), 4,3 no NE, 8,7 no N e 14,0 no S, cujo reservatório equivalente é pequeno e oscila
+  muito.
+* **Faixa.** 71% a 76% de cobertura contra 80% nominais: com o mês avaliado fora, sobram no máximo
+  20 para calibrar cada um e os quantis do erro saem estreitos; refazer a retroanálise com mais meses
+  é o caminho para chegar aos 80%.
+
+A rodada diária lê de `validacao.json` (gerado por `hindcast.py`) as métricas, os pesos da
+combinação e os quantis do erro por horizonte. Para refazer a retroanálise em paralelo, um job por
+mês, há `.github/workflows/planejamento-retro.yml` (o resultado sai como artefato).
 
 ## Limitações
 

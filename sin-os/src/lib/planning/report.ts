@@ -26,8 +26,12 @@ const MonthSchema = z.object({
   pld: bySub(QuantSchema),
   /** PLD com ponta: CMO do estágio + desvios horários recentes do DESSEM, entre piso e teto (a manchete). */
   pld_ponta: bySub(QuantSchema).optional(),
-  /** Faixa publicada: a mais larga entre a do modelo e a da retroanálise (conformal). */
+  /** Faixa do SDDP: a mais larga entre a dos cenários e a da retroanálise (conformal). */
   pld_faixa: bySub(z.object({ p10: nn, p90: nn, calibrada: z.boolean() })).optional(),
+  /** O publicado: peso(h) × P50 do SDDP calibrado + (1 − peso(h)) × DESSEM de 14 dias congelado, com a
+   *  faixa dos quantis do erro dessa combinação na retroanálise. */
+  pld_previsto: bySub(z.object({ p10: nn, p50: nn, p90: nn })).optional(),
+  peso_sddp: n.min(0).max(1).optional(),
 });
 const Pld12Schema = z.union([bySub(QuantSchema), z.object({}).strict()]);
 
@@ -153,6 +157,17 @@ export const PlanReportSchema = z.object({
     })
     .nullable()
     .optional(),
+  /** Combinação publicada: pesos do SDDP por horizonte, quantis do erro, a âncora e a média de 12 meses. */
+  combinacao: z
+    .object({
+      pesos: z.array(z.object({ h: int.min(0).max(24), peso: n.min(0).max(1), n: int })).min(1).max(24),
+      residuo: z.record(text(2), z.array(z.object({ h: int.min(0).max(24), p10: n, p90: n, n: int })).max(24)),
+      ancora: bySub(n),
+      pld_12m: bySub(z.object({ p10: n, p50: n, p90: n })).nullable(),
+      fonte: text(300),
+    })
+    .nullable()
+    .optional(),
   /** Aversão a risco implícita: o λ do CVaR (e, se ele satura, a elevação do piso do SE) que faz o
    *  CMO do 1º estágio reproduzir o CMO recente do DESSEM. */
   calibracao_risco: z
@@ -210,6 +225,9 @@ export const PlanReportSchema = z.object({
           pld_cobertura_p10_p90_ponta: nn.optional(),
           /** Faixa publicada (calibrada), com cada mês medido pela calibração dos demais. */
           pld_cobertura_calibrada: nn.optional(),
+          /** O publicado (combinação), com pesos e faixa calibrados sem o mês avaliado. */
+          pld_mae_combinado: nn.optional(),
+          pld_cobertura_combinado: nn.optional(),
           /** SDDP no λ padrão, sem calibração, e o CMO do DESSEM de 14 dias com a ponta (referências). */
           pld_mae_puro: nn.optional(),
           pld_mae_dessem14: nn.optional(),
@@ -227,6 +245,8 @@ export const PlanReportSchema = z.object({
                 mae_dessem14: nn,
                 vies_modelo: nn,
                 cobertura_modelo: nn,
+                mae_combinado: nn.optional(),
+                cobertura_combinado: nn.optional(),
               }),
             )
             .max(24)
@@ -243,6 +263,8 @@ export const PlanReportSchema = z.object({
               z.object({
                 previsto_pld: QuantSchema,
                 previsto_pld_ponta: QuantSchema.optional(),
+                /** O publicado (a combinação) refeito com pesos e faixa calibrados sem o próprio mês. */
+                publicado: z.object({ p10: nn, p50: nn, p90: nn }).optional(),
                 previsto_puro: nn.optional(),
                 dessem14: nn.optional(),
                 realizado_pld: nn,
@@ -285,14 +307,31 @@ export const HISTORY_RUNS = 90;
 /** O worker roda uma vez por dia; acima disso o relatório está atrasado. */
 export const PLAN_STALE_DAYS = 2;
 
-/** PLD que a tela usa como manchete: com ponta quando o relatório traz, senão o do SDDP. */
-export const headlinePld = (m: PlanReport["resultado"]["meses"][number]) => m.pld_ponta ?? m.pld;
-/** Faixa P10–P90 publicada: a calibrada pela retroanálise quando existe, senão a do modelo. */
-export const headlineBand = (m: PlanReport["resultado"]["meses"][number], s: "SE" | "S" | "NE" | "N") =>
-  m.pld_faixa?.[s] ?? { p10: headlinePld(m)[s].p10, p90: headlinePld(m)[s].p90, calibrada: false };
-export const headline12 = (r: Pick<PlanReport, "resultado">) => {
+type PlanMonth = PlanReport["resultado"]["meses"][number];
+type Sub4 = "SE" | "S" | "NE" | "N";
+const SUB4 = ["SE", "S", "NE", "N"] as const;
+const quantOf = (x: { p10: number | null; p50: number | null; p90: number | null }, mean: number | null = null): Quant => ({ mean, p10: x.p10, p50: x.p50, p90: x.p90 });
+
+/** PLD do SDDP (cenários): com ponta quando o relatório traz. */
+export const sddpPld = (m: PlanMonth) => m.pld_ponta ?? m.pld;
+/** PLD publicado: a combinação calibrada na retroanálise quando o relatório traz, senão o do SDDP
+ *  (a combinação não tem média de cenários: `mean` vem nulo). */
+export const headlinePld = (m: PlanMonth): Record<Sub4, Quant> =>
+  m.pld_previsto ? (Object.fromEntries(SUB4.map((s) => [s, quantOf(m.pld_previsto![s])])) as Record<Sub4, Quant>) : sddpPld(m);
+/** Faixa P10–P90 publicada: a da combinação; sem ela, a do SDDP calibrada pela retroanálise; senão a dos cenários. */
+export const headlineBand = (m: PlanMonth, s: Sub4) =>
+  m.pld_previsto
+    ? { p10: m.pld_previsto[s].p10, p90: m.pld_previsto[s].p90, calibrada: true }
+    : (m.pld_faixa?.[s] ?? { p10: sddpPld(m)[s].p10, p90: sddpPld(m)[s].p90, calibrada: false });
+/** Média dos 12 meses civis inteiros do SDDP (cenário a cenário). */
+export const sddp12 = (r: { resultado: Pick<PlanReport["resultado"], "pld_12m" | "pld_12m_ponta"> }) => {
   const x = r.resultado.pld_12m_ponta && "SE" in r.resultado.pld_12m_ponta ? r.resultado.pld_12m_ponta : r.resultado.pld_12m;
   return "SE" in x ? x : null;
+};
+/** Média dos 12 meses publicada: a da combinação (média dos P50 mensais, faixa pela média dos P10/P90). */
+export const headline12 = (r: { resultado: Pick<PlanReport["resultado"], "pld_12m" | "pld_12m_ponta">; combinacao?: PlanReport["combinacao"] }) => {
+  const c = r.combinacao?.pld_12m;
+  return c ? (Object.fromEntries(SUB4.map((s) => [s, quantOf(c[s], c[s].p50)])) as Record<Sub4, Quant>) : sddp12(r);
 };
 
 export function summarizePlan(r: PlanReport): PlanSummary {

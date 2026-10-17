@@ -711,8 +711,9 @@ function planChecks(pl: ModelAuditInput["plan"], add: (c: ModelCheck) => void) {
   for (const s of SUBS) {
     const x = m[s];
     if (!x) continue;
-    // O publicado é o PLD com ponta e a faixa calibrada; as métricas antigas valem para relatórios sem elas.
-    const mae = x.pld_mae_ponta ?? x.pld_mae_modelo;
+    // O publicado é a combinação (SDDP calibrado + DESSEM de 14 dias) e a faixa dela; as métricas antigas
+    // valem para relatórios sem a combinação.
+    const mae = x.pld_mae_combinado ?? x.pld_mae_ponta ?? x.pld_mae_modelo;
     const better = mae !== null && x.pld_mae_persistencia !== null ? mae / Math.max(1e-9, x.pld_mae_persistencia) : null;
     add({
       id: `planejamento.pld.${s}`,
@@ -723,9 +724,9 @@ function planChecks(pl: ModelAuditInput["plan"], add: (c: ModelCheck) => void) {
       display: better === null ? "—" : `${f(mae, 1)} × ${f(x.pld_mae_persistencia, 1)} R$/MWh`,
       target: "erro ≤ persistência",
       status: better === null ? "warn" : better <= 1 ? "pass" : better <= 1.25 ? "warn" : "fail",
-      detail: `Erro médio absoluto do PLD mensal previsto (P50${x.pld_mae_ponta != null ? ", com a ponta horária" : ""}) no 1º dia de cada mês contra o realizado, em ${x.meses} meses; persistência = repetir o PLD do mês anterior. CMO do DECOMP no mesmo período: ${f(x.pld_mae_decomp, 1)} R$/MWh.`,
+      detail: `Erro médio absoluto do PLD mensal ${x.pld_mae_combinado != null ? "publicado (combinação com pesos calibrados sem o mês avaliado)" : `previsto (P50${x.pld_mae_ponta != null ? ", com a ponta horária" : ""})`} no 1º dia de cada mês contra o realizado, em ${x.meses} meses; persistência = repetir o PLD do mês anterior.${x.pld_mae_dessem14 != null ? ` DESSEM de 14 dias: ${f(x.pld_mae_dessem14, 1)} R$/MWh.` : ""} CMO do DECOMP no mesmo período: ${f(x.pld_mae_decomp, 1)} R$/MWh.`,
     });
-    const cov = x.pld_cobertura_calibrada ?? x.pld_cobertura_p10_p90_ponta ?? x.pld_cobertura_p10_p90;
+    const cov = x.pld_cobertura_combinado ?? x.pld_cobertura_calibrada ?? x.pld_cobertura_p10_p90_ponta ?? x.pld_cobertura_p10_p90;
     add({
       id: `planejamento.faixa.${s}`,
       model,
@@ -735,7 +736,7 @@ function planChecks(pl: ModelAuditInput["plan"], add: (c: ModelCheck) => void) {
       display: pct(cov, 0),
       target: `${pct(PLAN_CHECKS.coverage.lo, 0)}–${pct(PLAN_CHECKS.coverage.hi, 0)}`,
       status: cov === null ? "warn" : cov >= PLAN_CHECKS.coverage.lo && cov <= PLAN_CHECKS.coverage.hi ? "pass" : cov >= PLAN_CHECKS.coverage.lo - 0.15 ? "warn" : "fail",
-      detail: `Faixa nominal de 80%${x.pld_cobertura_calibrada != null ? ` (a publicada, calibrada pelos erros dos outros meses; só a do modelo: ${pct(x.pld_cobertura_p10_p90_ponta ?? x.pld_cobertura_p10_p90, 0)})` : ""}. Armazenamento: erro médio de ${f(x.ear_mae_pp, 1)} p.p. na EAR do fim do mês, ${pct(x.ear_cobertura_p10_p90, 0)} dentro da faixa.`,
+      detail: `Faixa nominal de 80%${(x.pld_cobertura_combinado ?? x.pld_cobertura_calibrada) != null ? ` (a publicada, calibrada pelos erros dos outros meses; só a dos cenários do SDDP: ${pct(x.pld_cobertura_p10_p90_ponta ?? x.pld_cobertura_p10_p90, 0)})` : ""}. Armazenamento: erro médio de ${f(x.ear_mae_pp, 1)} p.p. na EAR do fim do mês, ${pct(x.ear_cobertura_p10_p90, 0)} dentro da faixa.`,
     });
   }
 }

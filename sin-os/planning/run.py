@@ -97,8 +97,14 @@ def main() -> int:
     resid = results.residual_quantiles(validation)
     for r in [base["report"], *sens]:
         results.calibrated_band(r["meses"], resid, cs.start)
+    # o publicado: SDDP calibrado combinado com o DESSEM de 14 dias congelado, pesos da retroanálise
+    weights = results.blend_weights(validation)
+    comb_resid = results.combination_residuals(validation, weights)
+    d14 = anchor_by_month(target, dev, base["report"]["meses"])
+    results.apply_combination(base["report"]["meses"], d14, weights, comb_resid, cs.start)
     rep = compose(cs, base, sens, f.sources, time.time() - t0, Path(args.validation), dev)
     rep["calibracao"] = {"residuo": resid, "fonte": "retroanálise (planning/validacao.json): erro do PLD por horizonte, P10 e P90"} if resid else None
+    rep["combinacao"] = combination_summary(weights, comb_resid, d14, base["report"]) if weights and d14 else None
     rep["calibracao_risco"] = risk_summary(cal, target, pure_key[0], pure) if cal else None
     Path(args.out).write_text(json.dumps(rep, ensure_ascii=False))
     print(f"relatório {len(json.dumps(rep)) / 1e3:.0f} kB · {time.time() - t0:.0f} s", flush=True)
@@ -145,6 +151,27 @@ def previous_point(base_url: str) -> tuple[float, float] | None:
     except Exception as e:  # noqa: BLE001 — sem o palpite a busca só faz uma rodada a mais
         print(f"sem o ponto da rodada anterior ({e}); a busca parte do zero", flush=True)
         return None
+
+
+def anchor_by_month(target: dict | None, dev: dict | None, months: list[dict]) -> dict[str, dict[str, float]]:
+    """PLD com ponta do CMO médio do DESSEM nos 14 dias anteriores, congelado em todos os meses (com o
+    piso e o teto de cada ano): a âncora da combinação publicada."""
+    if not target or not dev:
+        return {}
+    out = {}
+    for m in months:
+        lim = results.limits(int(m["mes"][:4]))
+        out[m["mes"]] = {s: round(float(results.ponta_pld(np.array([target[s]]), dev[s], lim)[0]), 2) for s in I.SUBS}
+    return out
+
+
+def combination_summary(weights: list[dict], resid: dict, d14: dict, rep: dict) -> dict:
+    """Pesos e erros da combinação, a âncora e a média dos 12 meses civis inteiros do publicado."""
+    full = [m for m in rep["meses"] if m["cobertura"] >= 0.999 and "pld_previsto" in m][:12]
+    avg = {s: {k: round(float(np.mean([m["pld_previsto"][s][k] for m in full])), 2) for k in ("p10", "p50", "p90")} for s in I.SUBS} if len(full) == 12 else None
+    first = next(iter(d14.values()))
+    return {"pesos": weights, "residuo": resid, "ancora": first, "pld_12m": avg,
+            "fonte": "peso do SDDP calibrado contra o DESSEM de 14 dias congelado, por horizonte, que minimiza o erro da retroanálise (planning/validacao.json); faixa pelos quantis do erro da combinação"}
 
 
 def risk_summary(cal: dict, target: dict, lam0: float, pure: dict) -> dict:
@@ -226,10 +253,14 @@ def load_validation(p: Path) -> dict | None:
     if not p.exists():
         return None
     v = json.loads(p.read_text())
+    # o publicado do mês seguinte refeito sem o próprio mês, como na métrica da combinação
+    pub = {m: {s: next(({k: round(x[k], 2) if x[k] is not None else None for k in ("p10", "p50", "p90")} for x in pts if x["h"] == 0), None)
+               for s, pts in subs.items()} for m, subs in results.combination_loo(v).items()}
     return {"metricas": v.get("metricas", {}), "meses": [
         {"mes": r["mes"], **({"lambda": r["calibracao"]["lambda"], "piso_pp": r["calibracao"].get("piso_pp", 0.0)} if r.get("calibracao") else {}),
          "sub": {s: {"previsto_pld": r["sub"][s]["previsto"]["pld"],
                                      **({"previsto_pld_ponta": r["sub"][s]["previsto"]["pld_ponta"]} if "pld_ponta" in r["sub"][s]["previsto"] else {}),
+                                     **({"publicado": pub[r["mes"]][s]} if pub.get(r["mes"], {}).get(s) else {}),
                                      **({"previsto_puro": r["sub"][s]["puro"]["pld_ponta"]["p50"]} if "puro" in r["sub"][s] else {}),
                                      **({"dessem14": r["sub"][s]["mercado"]["dessem14_ponta"]} if "mercado" in r["sub"][s] else {}),
                                      "realizado_pld": r["sub"][s]["realizado"]["pld"],

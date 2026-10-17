@@ -200,6 +200,54 @@ def test_implied_risk_path_brackets_and_limits():
         K.target_cmo(hc, dt.date(2026, 3, 1))
 
 
+def test_published_combination_weights_and_band():
+    rng = np.random.default_rng(7)
+    rows = []
+    for i in range(18):
+        mes = f"{2025 + (i // 12)}-{i % 12 + 1:02d}"
+        real0 = 150 + 50 * np.sin(i / 3)
+        sub, hz = {}, []
+        for s in SUBS:
+            sub[s] = {"mercado": {"dessem14_ponta": real0 + rng.normal(0, 10)}}
+        for h in range(6):
+            real = real0 + 20 * h
+            hz.append({"h": h, "mes": mes, "realizado": {s: real for s in SUBS},
+                       # o SDDP acerta o 1º mês e erra cada vez mais depois; a âncora congela o nível
+                       "pld_ponta": {s: {"p10": None, "p50": real + (0 if h == 0 else 80 * h), "p90": None} for s in SUBS}})
+        rows.append({"mes": mes, "sub": sub, "horizonte": hz})
+    val = {"meses": rows}
+    w = R.blend_weights(val)
+    assert [x["h"] for x in w] == list(range(6))
+    assert w[0]["peso"] > 0.5 and all(a["peso"] >= b["peso"] for a, b in zip(w, w[1:]))  # não cresce com o horizonte
+    assert R._nonincreasing([0.2, 0.5, 0.1]) == [0.35, 0.35, 0.1]
+    res = R.combination_residuals(val, w)
+    assert set(res) == set(SUBS) and len(res["SE"]) == 6
+    months = [{"mes": "2026-11", "cobertura": 1.0, "pld": {s: {"mean": 90.0, "p10": 85.0, "p50": 90.0, "p90": 95.0} for s in SUBS}},
+              {"mes": "2027-04", "cobertura": 1.0, "pld": {s: {"mean": 70.0, "p10": 60.0, "p50": 70.0, "p90": 80.0} for s in SUBS}}]
+    d14 = {m["mes"]: {s: 100.0 for s in SUBS} for m in months}
+    R.apply_combination(months, d14, w, res, dt.date(2026, 10, 17))
+    for m in months:
+        lim = R.limits(int(m["mes"][:4]))
+        for s in SUBS:
+            q = m["pld_previsto"][s]
+            assert lim["min"] <= q["p10"] <= q["p50"] <= q["p90"] <= lim["max_h"]
+        assert 0 <= m["peso_sddp"] <= 1
+    # mais longe, mais peso na âncora
+    assert months[1]["peso_sddp"] <= months[0]["peso_sddp"]
+    # sem retroanálise não há combinação
+    bare = [{"mes": "2026-11", "cobertura": 1.0, "pld": {s: {"mean": 90.0, "p10": 85.0, "p50": 90.0, "p90": 95.0} for s in SUBS}}]
+    R.apply_combination(bare, d14, R.blend_weights(None), {}, dt.date(2026, 10, 17))
+    assert "pld_previsto" not in bare[0]
+    # fora da amostra: cada mês da retroanálise refeito com pesos e faixa calibrados sem ele
+    loo = R.combination_loo(val)
+    r0 = rows[4]
+    w0 = R.blend_weights(val, exclude=r0["mes"])
+    x = loo[r0["mes"]]["SE"][0]
+    assert x["p50"] == w0[0]["peso"] * r0["horizonte"][0]["pld_ponta"]["SE"]["p50"] + (1 - w0[0]["peso"]) * r0["sub"]["SE"]["mercado"]["dessem14_ponta"]
+    assert [y["h"] for y in loo[r0["mes"]]["SE"]] == list(range(6)) and x["p10"] <= x["p50"] <= x["p90"]
+    assert R.combination_loo(None) == {}
+
+
 def test_interchange_sign():
     raw = pd.DataFrame({
         "din_instante": ["2026-01-01 00:00:00"] * 2,

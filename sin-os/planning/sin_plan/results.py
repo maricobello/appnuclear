@@ -134,6 +134,135 @@ def calibrated_band(months: list[dict], resid: dict[str, list[dict]], start: dt.
         m["pld_faixa"] = band
 
 
+#: Combinação publicada: peso do SDDP calibrado contra o DESSEM de 14 dias congelado, por horizonte.
+BLEND_GRID = np.linspace(0.0, 1.0, 21)
+BLEND_HORIZONS = 6
+BLEND_MIN_N = 12
+
+
+def _blend_points(rows: list[dict], h: int, exclude: str | None = None) -> list[tuple]:
+    """(P50 do SDDP, DESSEM 14 d com ponta, realizado, submercado, mês) no horizonte h da retroanálise."""
+    out = []
+    for r in rows:
+        if r["mes"] == exclude:
+            continue
+        hz = r.get("horizonte") or []
+        if len(hz) <= h:
+            continue
+        for s in I.SUBS:
+            real, p50 = hz[h]["realizado"][s], hz[h]["pld_ponta"][s]["p50"]
+            d14 = r["sub"][s].get("mercado", {}).get("dessem14_ponta")
+            if real is not None and p50 is not None and d14 is not None:
+                out.append((p50, d14, real, s, r["mes"]))
+    return out
+
+
+def _nonincreasing(ws: list[float]) -> list[float]:
+    """Regressão isotônica (blocos adjacentes) que não deixa o peso crescer com o horizonte."""
+    stack: list[list[float]] = []
+    for w in ws:
+        stack.append([w, 1])
+        while len(stack) > 1 and stack[-1][0] > stack[-2][0]:
+            w2, n2 = stack.pop()
+            w1, n1 = stack.pop()
+            stack.append([(w1 * n1 + w2 * n2) / (n1 + n2), n1 + n2])
+    return [round(w, 3) for w, n in stack for _ in range(int(n))]
+
+
+def blend_weights(validation: dict | None, exclude: str | None = None) -> list[dict]:
+    """Peso do SDDP calibrado na combinação com o DESSEM de 14 dias congelado, por horizonte: o que
+    minimiza o erro médio absoluto na retroanálise (submercados juntos), sem crescer com o horizonte.
+    Na retroanálise de 2025–26 o SDDP só ajuda no mês seguinte; depois a âncora erra menos."""
+    rows = (validation or {}).get("meses", [])
+    fits = []
+    for h in range(BLEND_HORIZONS):
+        pts = _blend_points(rows, h, exclude)
+        if len(pts) < BLEND_MIN_N:
+            break
+        m, d, y = (np.array([p[i] for p in pts], dtype=float) for i in range(3))
+        mae = [np.mean(np.abs(w * m + (1 - w) * d - y)) for w in BLEND_GRID]
+        fits.append((h, float(BLEND_GRID[int(np.argmin(mae))]), len(pts)))
+    ws = _nonincreasing([w for _, w, _ in fits])
+    return [{"h": h, "peso": w, "n": n} for (h, _, n), w in zip(fits, ws)]
+
+
+def combination_residuals(validation: dict | None, weights: list[dict], exclude: str | None = None, min_n: int = 8) -> dict[str, list[dict]]:
+    """Quantis 10% e 90% do erro (realizado − combinação) por submercado e horizonte."""
+    rows = (validation or {}).get("meses", [])
+    out: dict[str, list[dict]] = {}
+    for s in I.SUBS:
+        res = []
+        for wh in weights:
+            r = [real - (wh["peso"] * p50 + (1 - wh["peso"]) * d14) for p50, d14, real, ss, _ in _blend_points(rows, wh["h"], exclude) if ss == s]
+            if len(r) < min_n:
+                break
+            res.append({"h": wh["h"], "p10": round(float(np.quantile(r, 0.10)), 2), "p90": round(float(np.quantile(r, 0.90)), 2), "n": len(r)})
+        if res:
+            out[s] = res
+    return out
+
+
+def combination_loo(validation: dict | None) -> dict[str, dict[str, list[dict]]]:
+    """A combinação publicada (`apply_combination`) refeita em cada mês da retroanálise com os pesos e
+    os quantis do erro calibrados sem esse mês: {mês: {submercado: [{"h", "p10", "p50", "p90",
+    "realizado"}]}}, sem arredondar (a faixa fica None sem quantis)."""
+    rows = (validation or {}).get("meses", [])
+    out: dict[str, dict[str, list[dict]]] = {}
+    for r in rows:
+        ws = blend_weights(validation, exclude=r["mes"])
+        if not ws:
+            continue
+        resid = combination_residuals(validation, ws, exclude=r["mes"])
+        for s in I.SUBS:
+            d14 = r["sub"][s].get("mercado", {}).get("dessem14_ponta")
+            if d14 is None:
+                continue
+            rs, pts = resid.get(s) or [], []
+            for h, x in enumerate(r.get("horizonte") or []):
+                p50 = x["pld_ponta"][s]["p50"]
+                if p50 is None:
+                    continue
+                w = ws[min(h, len(ws) - 1)]["peso"]
+                c, lim = w * p50 + (1 - w) * d14, limits(int(x["mes"][:4]))
+                q = rs[min(h, len(rs) - 1)] if rs else None
+                pts.append({"h": h, "p10": max(lim["min"], min(c + q["p10"], c)) if q else None, "p50": c,
+                            "p90": min(lim["max_h"], max(c + q["p90"], c)) if q else None, "realizado": x["realizado"][s]})
+            out.setdefault(r["mes"], {})[s] = pts
+    return out
+
+
+def _at(rows: list[dict], h: float, key: str) -> float:
+    i = min(int(np.floor(h)), len(rows) - 1)
+    j = min(i + 1, len(rows) - 1)
+    w = 0.0 if i == j else h - i
+    return (1 - w) * rows[i][key] + w * rows[j][key]
+
+
+def apply_combination(months: list[dict], d14: dict[str, dict[str, float]], weights: list[dict], resid: dict[str, list[dict]], start: dt.date) -> None:
+    """Escreve `pld_previsto`, o PLD publicado: peso(h) × P50 do SDDP calibrado + (1 − peso(h)) × o
+    DESSEM de 14 dias com a ponta (`d14[mês][submercado]`), com a faixa dos quantis do erro da
+    combinação no mesmo horizonte, entre o piso e o teto do ano."""
+    if not weights:
+        return
+    for m in months:
+        head = m.get("pld_ponta") or m["pld"]
+        mm = dt.date.fromisoformat(m["mes"] + "-01")
+        lim, h = limits(mm.year), horizon_of(mm, start)
+        w = _at(weights, h, "peso")
+        out = {}
+        for s in I.SUBS:
+            p, d = head[s]["p50"], (d14.get(m["mes"]) or {}).get(s)
+            if p is None or d is None:
+                break
+            c = w * p + (1 - w) * d
+            rs = resid.get(s) or []
+            lo, hi = (c + _at(rs, h, "p10"), c + _at(rs, h, "p90")) if rs else (head[s]["p10"], head[s]["p90"])
+            out[s] = {"p10": round(max(lim["min"], min(lo, c)), 2), "p50": round(c, 2), "p90": round(min(lim["max_h"], max(hi, c)), 2)}
+        else:
+            m["pld_previsto"] = out
+            m["peso_sddp"] = round(w, 3)
+
+
 def limits(year: int) -> dict:
     known = sorted(PLD_LIMITS)
     y = max([k for k in known if k <= year], default=known[0])
@@ -324,7 +453,7 @@ def report(case: C.Case, sim: Sim, months_out: int = 13) -> dict:
         first[s] = {name: _q(sim.cmo_block[s][:, 0, i]) for i, (name, _) in enumerate(I.BLOCKS)}
     # média dos próximos 12 meses civis completos (o que o mercado negocia como "A+1 rolante")
     def avg12(rows: list) -> dict:
-        full = [(m, v) for m, v, cov in rows if cov >= 0.999][1:13]
+        full = [(m, v) for m, v, cov in rows if cov >= 0.999][:12]
         return {s: _q(np.mean([v[s] for _, v in full], axis=0)) for s in I.SUBS} if len(full) == 12 else {}
 
     out = {"meses": mo, "estagios": stg, "primeiro_estagio_patamares": first, "pld_12m": avg12(pld_m), "cenarios": sim.scenarios}

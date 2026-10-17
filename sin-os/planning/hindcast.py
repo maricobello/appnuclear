@@ -202,6 +202,7 @@ def metrics(rows: list[dict]) -> dict:
     puro, o DESSEM de 14 dias com ponta e o DECOMP; cobertura das faixas (a do modelo e a publicada,
     calibrada fora da amostra); EAR do fim de M; e o erro por horizonte (M a M+5)."""
     out = {}
+    comb = combination_loo(rows) if any("horizonte" in r for r in rows) else {}
     for s in I.SUBS:
         ok_rows = [x for x in rows if x["sub"][s]["realizado"]["pld"] is not None and x["sub"][s]["realizado"]["horas"] >= MIN_HOURS]
         r = [x["sub"][s] for x in ok_rows]
@@ -238,14 +239,34 @@ def metrics(rows: list[dict]) -> dict:
             "pld_mae_dessem14": mae(d14, real),
             "ear_mae_pp": mae(e50, e_real), "ear_vies_pp": round(float((e50[ok] - e_real[ok]).mean()), 2) if ok.any() else None,
             "ear_cobertura_p10_p90": round(float(((e_real[ok] >= e10[ok]) & (e_real[ok] <= e90[ok])).mean()), 3) if ok.any() else None,
-            "horizonte": horizon_metrics(rows, s),
+            "horizonte": horizon_metrics(rows, s, comb.get(s, {})),
         }
+        if comb.get(s, {}).get(0):
+            out[s]["pld_mae_combinado"] = comb[s][0]["mae"]
+            out[s]["pld_cobertura_combinado"] = comb[s][0]["cobertura"]
     return out
 
 
-def horizon_metrics(rows: list[dict], s: str) -> list[dict]:
+def combination_loo(rows: list[dict]) -> dict[str, dict[int, dict]]:
+    """Erro médio e cobertura da faixa da combinação publicada (results.apply_combination) por
+    submercado e horizonte, com pesos e quantis do erro calibrados sem o mês avaliado."""
+    loo = results.combination_loo({"meses": rows})
+    out: dict[str, dict[int, dict]] = {}
+    for s in I.SUBS:
+        out[s] = {}
+        for h in range(EVAL_HORIZONS):
+            pts = [x for m in loo.values() for x in m.get(s, []) if x["h"] == h and x["realizado"] is not None]
+            hit = [x["p10"] <= x["realizado"] <= x["p90"] for x in pts if x["p10"] is not None]
+            if len(pts) >= 3:
+                out[s][h] = {"mae": round(float(np.mean([abs(x["p50"] - x["realizado"]) for x in pts])), 2),
+                             "cobertura": round(float(np.mean(hit)), 3) if hit else None}
+    return out
+
+
+def horizon_metrics(rows: list[dict], s: str, comb: dict[int, dict] | None = None) -> list[dict]:
     """Erro médio do P50 por horizonte h (mês M+h previsto no 1º dia de M) contra a persistência e o
-    DESSEM de 14 dias congelados (os dois repetem o último valor conhecido para todo h)."""
+    DESSEM de 14 dias congelados (os dois repetem o último valor conhecido para todo h), e o da
+    combinação publicada calibrada sem o mês avaliado."""
     out = []
     for h in range(EVAL_HORIZONS):
         trip = []
@@ -259,9 +280,11 @@ def horizon_metrics(rows: list[dict], s: str) -> list[dict]:
         if len(trip) < 3:
             continue
         p50, p10, p90, pure, pers, d14, real = (arr(list(c)) for c in zip(*trip))
+        c = (comb or {}).get(h) or {}
         out.append({"h": h, "n": len(trip), "mae_modelo": mae(p50, real), "mae_puro": mae(pure, real), "mae_persistencia": mae(pers, real),
                     "mae_dessem14": mae(d14, real), "vies_modelo": round(float(np.nanmean(p50 - real)), 2),
-                    "cobertura_modelo": round(float(((real >= p10) & (real <= p90)).mean()), 3)})
+                    "cobertura_modelo": round(float(((real >= p10) & (real <= p90)).mean()), 3),
+                    "mae_combinado": c.get("mae"), "cobertura_combinado": c.get("cobertura")})
     return out
 
 

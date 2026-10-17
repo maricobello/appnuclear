@@ -349,17 +349,21 @@ cada rodada a aversão a risco é calibrada para que o CMO do 1º estágio repro
 duas semanas anteriores (como a volatilidade implícita de uma opção) — o λ do CVaR e, quando ele
 satura, o piso de armazenamento do SE, o análogo do volume mínimo operativo —, e o SDDP leva essa
 leitura para o resto do horizonte com a física do caso. (2) *PLD com ponta:* o SDDP mensal não vê a ponta do fim da tarde;
-os desvios horários recentes do DESSEM entram antes do piso e do teto. (3) *Faixa calibrada por
-horizonte:* conformal sobre os erros da retroanálise em cada horizonte, com a cobertura medida deixando
-cada mês de fora. (4) *Retroanálise contínua* contra o realizado, a persistência, o DESSEM de 14 dias, o
-DECOMP e o próprio SDDP sem calibração.
+os desvios horários recentes do DESSEM entram antes do piso e do teto. (3) *PLD publicado calibrado
+fora da amostra:* uma combinação, por horizonte, do SDDP calibrado com o CMO do DESSEM das duas semanas
+anteriores congelado, com os pesos e a faixa P10–P90 tirados dos erros da retroanálise (o peso não cresce
+com o horizonte; a cobertura é medida deixando cada mês de fora). (4) *Retroanálise* contra o realizado,
+a persistência, o DESSEM de 14 dias, o DECOMP e o próprio SDDP sem calibração.
 
-**Por que calibrar.** Sem a calibração, o SDDP errou o PLD do mês seguinte do SE em R$ 131/MWh em
-média de jan a nov/2025 (a persistência, repetir o mês anterior, errou R$ 55): a física bate — a EAR
-do fim do mês erra 4 p.p. —, mas o valor da água do caso aberto não é o oficial. Calibrado, jan/2025
-saiu R$ 65,7 contra R$ 63,5 realizados (o puro dava R$ 165) e jun/2025 R$ 222,9 contra R$ 226,9 (o
-puro, R$ 92). A retroanálise completa — jan/2025 a set/2026, seis horizontes, contra persistência,
-DESSEM de 14 dias, DECOMP e o SDDP puro — fica em `planning/validacao.json` e aparece na tela.
+**Por que calibrar e combinar.** No λ padrão, o NovoModelo sobre o caso aberto errou o PLD do mês
+seguinte em R$ 108 a 148/MWh em média de jan/2025 a set/2026, conforme o submercado (a persistência,
+repetir o mês anterior, errou R$ 39 a 60): a física bate — a EAR do fim do mês do SE erra 4,7 p.p. —,
+mas o valor da água do caso aberto não é o oficial. Calibrado, o erro cai para R$ 31 a 47 (−66% a
+−73%). O PLD publicado erra R$ 26 a 53 no mês seguinte: 12% a 34% abaixo da persistência em todos os
+submercados e no nível do DESSEM de 14 dias, com a faixa P10–P90 cobrindo 71% a 76% dos meses. Depois
+do 1º mês a trajetória do SDDP cai rápido demais (o caso aberto guarda água quando a aversão a risco
+sobe) e o peso dele no publicado vai de 0,30 a 0,09; a tela mostra as duas curvas. A retroanálise
+completa — 21 meses, seis horizontes — fica em `planning/validacao.json` e aparece na tela.
 
 Detalhes, decisões e o que a auditoria encontrou em [`planning/README.md`](planning/README.md).
 

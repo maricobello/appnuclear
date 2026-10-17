@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 vi.mock("server-only", () => ({}));
 
 import { auditModels, PLAN_CHECKS } from "@/lib/audit/models";
-import { headlineBand, headlinePld, HISTORY_RUNS, mergePlanHistory, planAgeDays, PlanReportSchema, summarizePlan, type PlanReport } from "@/lib/planning/report";
+import { headline12, headlineBand, headlinePld, HISTORY_RUNS, mergePlanHistory, planAgeDays, PlanReportSchema, sddpPld, summarizePlan, type PlanReport } from "@/lib/planning/report";
 
 const fixture = () => JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/planejamento.json"), "utf8"));
 const SUBS = ["SE", "S", "NE", "N"] as const;
@@ -36,6 +36,13 @@ describe("relatório do planejamento (worker do NovoModelo)", () => {
         expect(q.p10!).toBeLessThanOrEqual(q.p50!);
         expect(q.p50!).toBeLessThanOrEqual(q.p90!);
       }
+    // retroanálise: o publicado de cada mês, refeito sem ele, dentro da própria faixa
+    for (const v of r.validacao!.meses)
+      for (const s of SUBS) {
+        const q = v.sub[s].publicado!;
+        expect(q.p10!).toBeLessThanOrEqual(q.p50!);
+        expect(q.p50!).toBeLessThanOrEqual(q.p90!);
+      }
     // armazenamento simulado nunca passa do teto operativo do mês
     for (const e of r.resultado.estagios) {
       const cal = String(new Date(Date.parse(e.fim) - 86400_000).getUTCMonth() + 1);
@@ -43,13 +50,35 @@ describe("relatório do planejamento (worker do NovoModelo)", () => {
     }
   });
 
-  it("faixa publicada: a calibrada pela retroanálise quando existe, senão a do modelo", () => {
+  it("faixa publicada: a da combinação; sem ela, a do SDDP calibrada pela retroanálise; senão a dos cenários", () => {
     const r = PlanReportSchema.parse(fixture());
     const m = r.resultado.meses[1];
-    const plain = { ...m, pld_faixa: undefined };
-    expect(headlineBand(plain, "SE")).toEqual({ p10: headlinePld(m).SE.p10, p90: headlinePld(m).SE.p90, calibrada: false });
-    const wide = { ...m, pld_faixa: { SE: { p10: 57.31, p90: 400, calibrada: true }, S: { p10: 1, p90: 2, calibrada: true }, NE: { p10: 1, p90: 2, calibrada: true }, N: { p10: 1, p90: 2, calibrada: true } } };
-    expect(headlineBand(wide, "SE")).toEqual({ p10: 57.31, p90: 400, calibrada: true });
+    expect(headlineBand(m, "SE")).toEqual({ p10: m.pld_previsto!.SE.p10, p90: m.pld_previsto!.SE.p90, calibrada: true });
+    const sddp = { ...m, pld_previsto: undefined };
+    expect(headlineBand(sddp, "SE")).toEqual(m.pld_faixa!.SE);
+    const plain = { ...sddp, pld_faixa: undefined };
+    expect(headlineBand(plain, "SE")).toEqual({ p10: sddpPld(m).SE.p10, p90: sddpPld(m).SE.p90, calibrada: false });
+  });
+
+  it("o publicado é a combinação quando o relatório traz: P50, faixa, 12 meses e o resumo do histórico", () => {
+    const raw = fixture();
+    const q = (p50: number) => ({ p10: p50 - 10, p50, p90: p50 + 30 });
+    raw.resultado.meses = raw.resultado.meses.map((m: Record<string, unknown>) => ({ ...m, pld_previsto: { SE: q(150), S: q(149), NE: q(120), N: q(130) }, peso_sddp: 0.3 }));
+    raw.combinacao = {
+      pesos: [{ h: 0, peso: 0.3, n: 84 }, { h: 1, peso: 0.2, n: 84 }],
+      residuo: { SE: [{ h: 0, p10: -50, p90: 45, n: 21 }] },
+      ancora: { SE: 140, S: 139, NE: 110, N: 120 },
+      pld_12m: { SE: q(155), S: q(154), NE: q(125), N: q(135) },
+      fonte: "teste",
+    };
+    const r = PlanReportSchema.parse(raw);
+    const m = r.resultado.meses[1];
+    expect(headlinePld(m).SE).toEqual({ mean: null, p10: 140, p50: 150, p90: 180 });
+    expect(headlineBand(m, "NE")).toEqual({ p10: 110, p90: 150, calibrada: true });
+    expect(sddpPld(m).SE.p50).toBe(r.resultado.meses[1].pld_ponta!.SE.p50);
+    expect(headline12(r)?.SE).toEqual({ mean: 155, p10: 145, p50: 155, p90: 185 });
+    expect(summarizePlan(r).m1.SE).toBe(150);
+    expect(() => PlanReportSchema.parse({ ...raw, combinacao: { ...raw.combinacao, pesos: [{ h: 0, peso: 1.5, n: 1 }] } })).toThrow();
   });
 
   it("reprova relatório fora de faixa ou com fonte fora do bucket do ONS", () => {
@@ -68,7 +97,7 @@ describe("relatório do planejamento (worker do NovoModelo)", () => {
     const r = PlanReportSchema.parse(fixture());
     const s = summarizePlan(r);
     expect(s.mes > r.start.slice(0, 7)).toBe(true);
-    // a manchete é o PLD com ponta quando o relatório traz
+    // a manchete é o publicado (a combinação, que já leva a ponta)
     const m = r.resultado.meses.find((x) => x.mes === s.mes)!;
     expect(m.pld_ponta).toBeDefined();
     expect(s.m1.SE).toBe(headlinePld(m).SE.p50);
