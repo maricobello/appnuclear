@@ -1,13 +1,15 @@
-name: Auditoria de APIs (15 min)
+name: Auditoria de APIs (2 h)
 
 # O plano Hobby da Vercel só permite cron diário. Este workflow chama a rota de
-# auditoria a cada 15 min de graça. Opcional, em Settings → Secrets and variables → Actions:
+# auditoria a cada 2 h: com o repositório privado, o GitHub Actions grátis tem 2.000 min/mês
+# e cada execução conta 1 min (a cada 15 min seriam ~2.900). Para voltar aos 15 min sem custo,
+# use um agendador externo (ex.: cron-job.org) com POST e o header Authorization abaixo. Opcional, em Settings → Secrets and variables → Actions:
 #   Variable  SIN_OS_URL   = outra URL (padrão: produção https://sinos-iota.vercel.app)
 #   Secret    ADMIN_KEY    = o mesmo valor do ADMIN_KEY da Vercel (ou CRON_SECRET, se usar esse)
 #   Sem o secret, com ADMIN_KEY/CRON_SECRET cadastrado na Vercel, a rota responde 401.
 on:
   schedule:
-    - cron: "*/15 * * * *"
+    - cron: "7 */2 * * *"
   workflow_dispatch:
 
 jobs:

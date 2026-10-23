@@ -12,6 +12,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       URL: ${{ vars.SIN_OS_URL || 'https://sinos-iota.vercel.app' }}
+      # a plataforma exige login; o robô entra com o mesmo segredo da Vercel
+      TOKEN: ${{ secrets.ADMIN_KEY || secrets.CRON_SECRET }}
     steps:
       - name: Rotas de API
         run: |
@@ -19,7 +21,7 @@ jobs:
           for path in "/api/status" "/api/health" "/api/pld" "/api/pld/coletor" "/api/confianca" "/api/renovaveis" "/api/renovaveis/historico" "/api/rede" "/api/termicas" "/api/planejamento" "/api/alertas" "/api/brasil" "/api/global" "/api/clima" "/api/auditoria" \
                       "/api/previsao?sub=SE" "/api/previsao?sub=NE" "/api/arbitragem?sub=SE" "/api/bess" "/api/pld-mensal" "/api/auditoria/selfeval" "/api/fontes" "/api/auditoria/modelos"; do
             # a auditoria dos modelos roda tudo no PLD real (até ~4 min na primeira do dia)
-            code=$(curl -s -o body.json -w '%{http_code}' --max-time 300 "$URL$path")
+            code=$(curl -s -o body.json -w '%{http_code}' --max-time 300 -H "Authorization: Bearer $TOKEN" "$URL$path")
             echo "== $path → HTTP $code"
             python3 - "$path" <<'PY' || true
           import json, sys
@@ -104,7 +106,7 @@ jobs:
       - name: Iara (Groq online?)
         if: always()
         run: |
-          curl -s --max-time 30 "$URL/api/assistente" > iara.json || true
+          curl -s --max-time 30 -H "Authorization: Bearer $TOKEN" "$URL/api/assistente" > iara.json || true
           python3 - <<'PY'
           import json
           try:

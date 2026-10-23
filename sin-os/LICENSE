@@ -1,0 +1,15 @@
+Copyright (c) 2026 maricobello. Todos os direitos reservados.
+
+Este software, incluindo código-fonte, modelos, calibrações, parâmetros, dados derivados,
+documentação e interface (o "Software"), é propriedade exclusiva do titular acima.
+
+Nenhuma licença é concedida. Sem autorização prévia e por escrito do titular, é proibido
+copiar, reproduzir, modificar, adaptar, traduzir, criar obras derivadas, distribuir, sublicenciar,
+vender, alugar, hospedar para terceiros, descompilar ou usar o Software, no todo ou em parte,
+inclusive para treinar ou alimentar sistemas de inteligência artificial ou para construir produto
+concorrente. O acesso à plataforma hospedada não transfere nenhum direito sobre o Software.
+
+Componentes de terceiros mantêm as licenças próprias (por exemplo, o NovoModelo, Apache-2.0, usado
+como dependência em planning/). Esta licença não se aplica a eles.
+
+Proteção legal: Lei nº 9.609/1998 (programa de computador) e Lei nº 9.610/1998 (direitos autorais).

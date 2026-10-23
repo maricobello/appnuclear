@@ -6,6 +6,26 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 
 > Não é recomendação de investimento. Os valores de arbitragem são estimativas de modelos.
 
+> **Software proprietário.** Código, modelos, calibrações e dados derivados são de uso restrito; nenhuma
+> licença é concedida (veja [`LICENSE`](LICENSE)). A plataforma só abre com código de acesso.
+
+## Acesso restrito
+
+Todas as telas e APIs exigem login (`src/proxy.ts`); sem sessão, a página vai para `/entrar` e a API
+responde 401. Em produção, sem configuração, tudo fica fechado.
+
+- **Dono:** entra com a `ADMIN_KEY` que já está na Vercel.
+- **Convidados:** `node scripts/novo-acesso.mjs nome` gera um código só para a pessoa e a linha
+  `nome:hash` para a variável `ACCESS_CODES` na Vercel (separe pessoas com vírgula). A Vercel guarda só
+  o hash. Para tirar o acesso, apague a entrada e faça redeploy: a sessão da pessoa cai na hora.
+- **Sessão:** cookie HttpOnly assinado (HMAC-SHA256), 7 dias. `SESSION_SECRET` (opcional) assina as
+  sessões; trocá-lo derruba todas.
+- **Limites:** 5 tentativas erradas de código por IP a cada 15 min; 400 requisições de API por usuário
+  a cada 10 min (uso normal fica muito abaixo; varrer as APIs para copiar dados, não).
+- **Robôs** (GitHub Actions, coletor da CCEE, cron da Vercel) entram pelos próprios segredos
+  (`Authorization: Bearer ADMIN_KEY/CRON_SECRET`, `x-coletor-key`).
+- Nenhum buscador ou robô de IA indexa a plataforma (`robots.txt` e `X-Robots-Tag`).
+
 ## O que tem
 
 | Tela | O que faz |
@@ -577,12 +597,13 @@ radares e as exportações ficam fora do git porque o repositório é público. 
 2. Framework: Next.js (detectado). Root Directory, build e output ficam no padrão.
 3. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
    `CRON_SECRET`, `ADMIN_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`,
-   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara e agente auditor), `ASSISTANT_ACCESS_CODE`. `DATA_MODE=live` garante que
+   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara e agente auditor), `ASSISTANT_ACCESS_CODE`, `ACCESS_CODES` e
+   `SESSION_SECRET` (acesso, acima). Sem `ADMIN_KEY` nem `ACCESS_CODES`, a produção fica fechada. `DATA_MODE=live` garante que
    nenhuma tela mostra dado simulado (fonte fora do ar aparece como erro).
    Dá para adicionar depois e fazer redeploy.
 4. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.
 5. Abra **Agente auditor → Rodar auditoria** para a primeira execução.
-6. A auditoria a cada 15 min roda pelo GitHub Actions contra a produção. Se criar `CRON_SECRET` na Vercel,
+6. A auditoria a cada 2 h roda pelo GitHub Actions contra a produção. Se criar `CRON_SECRET` na Vercel,
    cadastre o mesmo valor como segredo `CRON_SECRET` no GitHub (e `SIN_OS_URL` se mudar o domínio).
 
 ## Firebase (Firestore) — passo a passo

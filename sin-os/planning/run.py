@@ -143,7 +143,9 @@ def previous_point(base_url: str) -> tuple[float, float] | None:
     if not base_url:
         return None
     try:
-        with urllib.request.urlopen(base_url.rstrip("/") + "/api/planejamento", timeout=30) as resp:
+        token = os.environ.get("ADMIN_KEY") or os.environ.get("CRON_SECRET") or ""
+        req = urllib.request.Request(base_url.rstrip("/") + "/api/planejamento", headers={"Authorization": f"Bearer {token}"} if token else {})
+        with urllib.request.urlopen(req, timeout=30) as resp:
             cal = (json.loads(resp.read()).get("report") or {}).get("calibracao_risco") or {}
         lam, fl = cal.get("lambda"), cal.get("piso_pp", 0.0)
         return (float(lam), float(fl or 0.0)) if lam is not None and 0 <= float(lam) <= 1 else None

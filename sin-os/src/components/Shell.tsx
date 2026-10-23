@@ -13,6 +13,7 @@ import {
   Flame,
   Gauge,
   Globe,
+  LogOut,
   Menu,
   Monitor,
   Moon,
@@ -146,6 +147,19 @@ const VISUALS: { value: UiMode; label: string; title: string }[] = [
   { value: "terminal", label: "Terminal", title: "Visual clássico do SIN OS: escuro, denso, com faixa de cotações e relógio no topo" },
 ];
 
+/** Encerra a sessão (o cookie é HttpOnly: só a rota consegue apagá-lo). */
+function LogoutButton() {
+  const sair = async () => {
+    await fetch("/api/acesso", { method: "DELETE" }).catch(() => null);
+    window.location.assign(new URL("/entrar", window.location.origin).href); // recarrega: limpa o estado da sessão
+  };
+  return (
+    <button type="button" onClick={sair} className="flex min-h-9 items-center justify-center gap-1.5 rounded-[10px] text-[12px] font-medium text-muted transition-colors hover:bg-surface-2 hover:text-ink">
+      <LogOut size={14} aria-hidden /> Sair
+    </button>
+  );
+}
+
 /** Moderno × Terminal (o visual clássico). */
 function VisualSwitch() {
   const current = useUiMode();
@@ -229,6 +243,7 @@ function Sidebar({ current, iara, onIara, onNavigate, onClose }: { current?: str
         <SystemStatus onNavigate={onNavigate} />
         <VisualSwitch />
         <AppearanceSwitch />
+        <LogoutButton />
       </div>
     </div>
   );
@@ -330,6 +345,12 @@ function TerminalBar() {
 
 export function Shell({ children }: { children: ReactNode }) {
   const path = usePathname();
+  // a tela de entrada não carrega menu nem dados (as APIs exigem login)
+  if (path === "/entrar") return <MotionRoot>{children}</MotionRoot>;
+  return <AppShell path={path}>{children}</AppShell>;
+}
+
+function AppShell({ children, path }: { children: ReactNode; path: string }) {
   const [open, setOpen] = useState(false);
   const [iara, setIara] = useState(false);
   const current = ALL.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
