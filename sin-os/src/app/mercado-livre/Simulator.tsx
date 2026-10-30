@@ -52,11 +52,21 @@ const money = (v: number | null | undefined) => {
   const a = Math.abs(v);
   return a >= 1e6 ? `R$ ${num(v / 1e6, 2)} mi` : a >= 1e3 ? `R$ ${num(v / 1e3, 0)} mil` : brl(v, 0);
 };
+/** Número digitado: aceita 1.234,56, 1234,56 e 1234.56. */
+const numIn = (s: string) => {
+  const t = s.trim();
+  if (!t) return NaN;
+  return Number(t.includes(",") ? t.replace(/\./g, "").replace(",", ".") : t);
+};
+/** Preço digitado abaixo de R$ 10 só pode estar em R$/kWh: vira R$/MWh. */
+const inKwh = (v: number) => v > 0 && v < 10;
+const perMwh = (v: number) => (inKwh(v) ? v * 1000 : v);
+
 /** Milhares de reais com sinal, curto (cabe no rodapé do indicador). */
 const kMoney = (v: number) => `${v < 0 ? "−" : ""}${num(Math.abs(v) / 1000, 0)} mil`;
-const pctIn = (s: string, fallback = 0) => {
+const pctIn = (s: string, fallback = 0, max = 1) => {
   const v = Number(s.replace(",", "."));
-  return Number.isFinite(v) && v >= 0 ? v / 100 : fallback;
+  return Number.isFinite(v) && v >= 0 ? Math.min(max, v / 100) : fallback;
 };
 
 const BETAS = [
@@ -163,17 +173,9 @@ interface Result {
 function hourProfile(st: Stats, inp: StatsInput): Result["profile"] {
   const days = inp.cal.days.length;
   const load = new Array(24).fill(0);
-  const dev = new Array(24).fill(0);
-  for (let d = 0; d < days; d++)
-    for (let h = 0; h < 24; h++) {
-      load[h] += inp.load[d * 24 + h] / days;
-      dev[h] += inp.loadSide.dev[d * 24 + h] / days;
-    }
-  const dm = dev.reduce((a, b) => a + b, 0) / 24;
-  let level = 0;
-  for (let s = 0; s < st.n; s++) for (let m = 0; m < st.M; m++) level += (st.levelsLoad[s][m] * inp.cal.hours[m]) / inp.cal.total / st.n;
-  const floor = Math.min(...inp.loadSide.lims.map((l) => l.min));
-  return { load: load.map((x) => Math.round(x * 1000) / 1000), price: dev.map((x) => Math.round(Math.max(floor, level + x - dm))) };
+  for (let d = 0; d < days; d++) for (let h = 0; h < 24; h++) load[h] += inp.load[d * 24 + h] / days;
+  // PLD de cada hora do dia na média dos dias e dos cenários, como foi calculado (piso, tetos e recentragem)
+  return { load: load.map((x) => Math.round(x * 1000) / 1000), price: Array.from(st.hourSum, (x) => Math.round(x / (st.done * days))) };
 }
 
 function analyse(
@@ -280,11 +282,11 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
     }
   }, [raw, unit]);
   const fromCurve = useMemo(() => (parsed.curve ? { stats: curveStats(parsed.curve), ...contractLoad(parsed.curve, cal) } : null), [parsed.curve, cal]);
-  const mwTypical = Math.max(0.01, Number(avgMw.replace(",", ".")) || 0);
+  const mwTypical = Math.max(0.01, numIn(avgMw) || 0);
   const load = useMemo(() => (source === "csv" && fromCurve ? fromCurve.load : typicalLoad(kind, mwTypical, cal)), [source, fromCurve, kind, mwTypical, cal]);
 
   const contractSub = subC === "mesmo" || subC === sub ? null : subC;
-  const corrNum = Number(corrIn.replace(",", "."));
+  const corrNum = numIn(corrIn);
   const unc = { annual: pctIn(uncA), monthly: pctIn(uncM), priceCorr: Number.isFinite(corrNum) ? Math.min(1, Math.max(-1, corrNum)) : 0 };
   const crossRho = contractSub ? (data.correlacao?.[sub]?.[contractSub] ?? null) : null;
   const statsInput = useMemo<StatsInput | null>(() => {
@@ -306,13 +308,14 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
   const { st, progress } = useStats(statsInput);
 
   const fair = useMemo(() => (st ? fairPrices(st) : null), [st]);
-  const typed = Number(priceIn.replace(",", "."));
-  const price = priceIn.trim() && Number.isFinite(typed) && typed > 0 ? typed : fair ? Math.round(fair.flat) : null;
+  const typed = perMwh(numIn(priceIn));
+  // vazio = o PLD médio esperado dos próprios cenários, sem arredondar (arredondado, o contrato já nasceria com vantagem)
+  const price = Number.isFinite(typed) && typed > 0 ? typed : fair ? Math.round(fair.flat * 100) / 100 : null;
   const flex = pctIn(flexIn);
-  const losses = pctIn(lossIn);
-  const recovery = Math.min(1, pctIn(recIn));
+  const losses = pctIn(lossIn, 0, 0.5);
+  const recovery = pctIn(recIn);
   const lim = pctIn(seasonLim, 0.15);
-  const volFixed = Number(volIn.replace(",", "."));
+  const volFixed = numIn(volIn);
   const plan = useMemo(
     () => ({ volume: volMode === "fixo" && Number.isFinite(volFixed) && volFixed >= 0 && volIn.trim() ? volFixed : null, season, seasonLimit: season === "flat" ? 0 : lim }),
     [volMode, volFixed, volIn, season, lim],
@@ -418,8 +421,9 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
       xAxis: categoryAxis(res.exposure.map((e) => monthLabel(e.mes))),
       yAxis: valueAxis("R$ mil"),
       series: [
-        { name: "Exposição esperada (EE)", type: "bar", data: res.exposure.map((e) => e.ee / 1000), itemStyle: { color: C.series[0], borderRadius: [4, 4, 0, 0] }, barMaxWidth: 26 },
-        { name: "Exposição potencial (PFE 95%)", type: "line", data: res.exposure.map((e) => e.pfe / 1000), lineStyle: { width: 2, color: C.critical }, itemStyle: { color: C.critical }, symbolSize: 5 },
+        { name: "Esperada (EE)", type: "bar", data: res.exposure.map((e) => e.ee / 1000), itemStyle: { color: C.series[0], borderRadius: [4, 4, 0, 0] }, barMaxWidth: 26 },
+        { name: "Potencial (PFE 95%)", type: "line", data: res.exposure.map((e) => e.pfe / 1000), lineStyle: { width: 2, color: C.critical }, itemStyle: { color: C.critical }, symbolSize: 5 },
+        { name: "Sem recontratar", type: "line", data: res.exposure.map((e) => e.pfeSpot / 1000), lineStyle: { width: 1.5, type: [4, 3], color: C.ink2 }, itemStyle: { color: C.ink2 }, showSymbol: false },
       ],
     } as ChartOption;
   }, [res]);
@@ -445,14 +449,16 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
     setSource("csv");
   };
 
-  const encargos = encIn.trim() ? Number(encIn.replace(",", ".")) : essPerMwh !== null ? Math.round(essPerMwh * 100) / 100 : 0;
+  const encargos = encIn.trim() ? numIn(encIn) : essPerMwh !== null ? Math.round(essPerMwh * 100) / 100 : 0;
   const enc = Number.isFinite(encargos) ? encargos : 0;
-  const teNum = Number(te.replace(",", "."));
-  const acrEnergy = res ? res.energy / (1 + losses) : null; // no regulado as perdas já estão na tarifa
-  const acr = res && acrEnergy !== null && te.trim() && Number.isFinite(teNum) && teNum > 0 ? acrEnergy * (teNum + data.bandeiras[bandeira]) : null;
+  const teIn = perMwh(numIn(te));
+  const teKwh = inKwh(numIn(te));
+  const acrEnergy = res ? res.energy / (1 + res.contract.losses) : null; // no regulado as perdas já estão na tarifa
+  const acr = res && acrEnergy !== null && Number.isFinite(teIn) && teIn > 0 ? acrEnergy * (teIn + data.bandeiras[bandeira]) : null;
   const acl = res ? res.total.mean + res.energy * enc : null;
   const aclBad = res ? res.opt.risk.cvar * res.energy + res.energy * enc : null;
   const peakPfe = res?.exposure.length ? Math.max(...res.exposure.map((e) => e.pfe)) : null;
+  const peakEe = res?.exposure.length ? Math.max(...res.exposure.map((e) => e.ee)) : null;
   const avg = res?.avg ?? (st ? avgLoadMw(st) * (1 + losses) : null);
   const eqDays = data.horaria?.[sub];
 
@@ -533,8 +539,17 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
           <Field label="Submercado do contrato" hint={contractSub ? `correlação com ${sub}: ${crossRho !== null ? num(crossRho, 2) : "padrão 0,90"} (variações mensais do PLD)` : "Outro submercado: você fica com o spread"}>
             <Select value={subC} onChange={setSubC} options={[{ value: "mesmo" as const, label: `O mesmo (${sub})` }, ...SUBS.filter((s) => s !== sub).map((s) => ({ value: s, label: `${s} — ${SUB_NAMES[s]}` }))]} />
           </Field>
-          <Field label="Preço do contrato (R$/MWh)" hint={fairShown ? `Vazio = PLD médio esperado (${brl(fairShown.flat)}); conforme a carga: ${brl(fairShown.loadInContractSub)}` : undefined}>
-            <input className={inputCls} inputMode="decimal" placeholder={fairShown ? String(Math.round(fairShown.flat)) : ""} value={priceIn} onChange={(e) => setPriceIn(e.target.value)} />
+          <Field
+            label="Preço do contrato (R$/MWh)"
+            hint={
+              inKwh(numIn(priceIn))
+                ? `Lido como R$/kWh: ${brl(typed)}/MWh`
+                : fairShown
+                  ? `Vazio = PLD médio esperado (${brl(fairShown.flat)}); conforme a carga: ${brl(fairShown.loadInContractSub)}`
+                  : undefined
+            }
+          >
+            <input className={inputCls} inputMode="decimal" placeholder={fairShown ? num(fairShown.flat, 2) : ""} value={priceIn} onChange={(e) => setPriceIn(e.target.value)} />
           </Field>
           <Field label="Volume anual">
             <div className="flex gap-2">
@@ -729,10 +744,14 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
               {profileChart ? <EChart option={profileChart} height={280} label="Perfil horário da carga e do PLD" /> : null}
             </Panel>
             <div id="contraparte" className="scroll-mt-20">
-              <Panel title="Se a comercializadora quebrar" subtitle="Perda ao repor o resto do contrato ao PLD se a contraparte falhar no início de cada mês">
+              <Panel
+                title="Se a comercializadora quebrar"
+                subtitle="Perda ao recontratar o resto do contrato a preço de mercado se a contraparte falhar no início de cada mês (a linha tracejada é ficar no PLD até o fim)"
+              >
                 {expoChart ? <EChart option={expoChart} height={240} label="Exposição de contraparte por mês" /> : null}
                 <MetricRow label="Maior exposição potencial (PFE 95%)" hint="garantia que cobre 95% dos cenários" value={money(peakPfe)} tone="warning" />
-                <MetricRow label="Exposição esperada no início" value={money(res.exposure[0]?.ee ?? null)} />
+                <MetricRow label="Maior exposição esperada (EE)" value={money(peakEe)} />
+                <MetricRow label="Sem recontratar, quebra no início" hint="o ano todo no PLD, 95% dos cenários" value={money(res.exposure[0]?.pfeSpot ?? null)} tone="muted" />
               </Panel>
             </div>
           </div>
@@ -741,7 +760,10 @@ export function Simulator({ data, essPerMwh }: { data: MercadoLivreResp; essPerM
             <Panel title="Mercado regulado × livre" subtitle="Só a parcela de energia: a TUSD (fio) é paga nos dois ambientes">
               <div className="grid grid-cols-1 gap-4 lg:grid-cols-3">
                 <div className="flex flex-col gap-3">
-                  <Field label="Tarifa de energia regulada — TE (R$/MWh)" hint="Na conta ou na resolução da sua distribuidora, sem impostos e sem TUSD">
+                  <Field
+                    label="Tarifa de energia regulada — TE (R$/MWh)"
+                    hint={teKwh ? `Lida como R$/kWh: ${brl(teIn)}/MWh` : "Na conta ou na resolução da sua distribuidora, sem impostos e sem TUSD"}
+                  >
                     <input className={inputCls} inputMode="decimal" value={te} onChange={(e) => setTe(e.target.value)} placeholder="ex.: 300" />
                   </Field>
                   <Field label="Bandeira média esperada">

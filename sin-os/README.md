@@ -396,16 +396,20 @@ mensal** (±f%, ajustada ao consumo medido ou livre, como opção), **modulaçã
 submercado do contrato, que pode ser outro que o da carga (correlação histórica entre submercados). O
 custo de cada cenário é o contrato tomado mais a liquidação horária da diferença entre consumo e
 contrato, nas 8.760 horas do ano: cada dia usa o **dia equivalente** do PLD real (mesmo tipo de dia,
-com feriados nacionais e móveis, mesmo mês, ~52 semanas antes). Volume e sazonalização minimizam
+com feriados nacionais e móveis, mesmo mês, ~52 semanas antes), com o piso, o teto horário e o **teto
+estrutural diário** aplicados pela mesma regra do PLD estimado da plataforma. Volume e sazonalização minimizam
 (1 − β)·custo esperado + β·CVaR 95% do custo por MWh consumido; como a flexibilidade torna o problema
 não convexo, a busca é global no volume e por trocas de energia entre pares de meses, com avaliação
 incremental (milhares de contratos em fração de segundo). Os 2.000 cenários de preço saem da faixa
-publicada no planejamento (lognormal com mediana no P50 e cauda no P90), com os meses correlacionados
-pelo ρ implícito nos cenários do SDDP. Saem o volume e a sazonalização ótimos, o valor da
+publicada no planejamento (lognormal com mediana no P50 e cauda no P90, entre o PLD mínimo e o máximo
+estrutural), com os meses correlacionados pelo ρ implícito nos cenários do SDDP e casamento de momentos
+nos sorteios. Saem o volume e a sazonalização ótimos, o valor da
 flexibilidade e da sazonalização, a tabela mês a mês, a fronteira eficiente, a distribuição do custo, o
 preço justo do flat e o da carga, a comparação com o mercado regulado (TE + bandeira, com o ESS
-estimado como encargo) e a **exposição de contraparte** — EE e PFE 95% da perda se a comercializadora
-quebrar em cada mês, com recuperação, a métrica de crédito de derivativos aplicada ao contrato.
+estimado como encargo) e a **exposição de contraparte** — EE e PFE 95% da perda ao recontratar a preço
+de mercado se a comercializadora quebrar em cada mês, com o valor de mercado calculado pelas integrais
+exatas do modelo (conferido contra a fórmula fechada e contra simulação aninhada) e a recuperação
+descontada.
 
 A curva de carga (CSV de memória de massa, 5 a 60 min, o dado que o Open Energy vai padronizar) é
 lida no navegador e não sai da máquina; cada dia do contrato usa o dia equivalente da curva. Sem ela,

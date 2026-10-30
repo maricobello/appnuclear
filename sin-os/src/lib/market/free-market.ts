@@ -7,7 +7,7 @@ import { brtDate, brtHour } from "../sources/time";
 import { SUBS, type Sub, type SubPanel } from "../sources/types";
 import { limitsFor, PLD_LIMITS } from "./brazil";
 import { daysOfMonths, equivalentDay } from "./calendar";
-import { impliedRho, type MonthBand } from "./contracting";
+import { impliedRho, monthCap, type MonthBand } from "./contracting";
 import { BANDEIRAS_RS_MWH } from "./radar";
 
 /** Dias com dado para a forma horária do mês civil; abaixo disso usa a média dos 12 meses. */
@@ -158,7 +158,8 @@ export function sddpRho(r: PlanReport): Record<Sub, number | null> {
     const w = widths.reduce((a, b) => a + b, 0) / widths.length;
     const q = s12?.[s];
     const target = q && q.p90 !== null && q.p50 !== null && w > 1e-6 ? (q.p90 - q.p50) / w : NaN;
-    out[s] = ms.length === 12 && Number.isFinite(target) ? impliedRho(bands, target, ms.map((m) => limitsFor(Number(m.mes.slice(0, 4))).min)) : null;
+    const lims = ms.map((m) => limitsFor(Number(m.mes.slice(0, 4))));
+    out[s] = ms.length === 12 && Number.isFinite(target) ? impliedRho(bands, target, lims.map((l) => l.min), lims.map(monthCap)) : null;
   }
   return out;
 }
@@ -167,7 +168,7 @@ export async function buildFreeMarketInputs(now = Date.now()) {
   const [plan, pld] = await Promise.all([loadPlanReport().catch(() => null), getPld(PLD_DAYS)]);
   const report = plan?.report ?? null;
   const panel = pld.ok && pld.data && !pld.simulated ? pld.data : null;
-  const key = `mercado-livre:v2:${report?.generatedAt ?? "-"}:${panel ? panel.ts[panel.ts.length - 1] : "-"}`;
+  const key = `mercado-livre:v3:${report?.generatedAt ?? "-"}:${panel ? panel.ts[panel.ts.length - 1] : "-"}`;
   const { value } = await cached(key, 30 * 60_000, async () => {
     const ms = report ? fullMonths(report) : [];
     const meses = ms.map((m) => {
@@ -176,7 +177,7 @@ export async function buildFreeMarketInputs(now = Date.now()) {
       const pub = headlinePld(m);
       return {
         mes: m.mes,
-        lim: { min: lim.min, maxHourly: lim.maxHourly },
+        lim: { min: lim.min, maxHourly: lim.maxHourly, maxStructural: lim.maxStructural },
         limAno: lim.year,
         band: Object.fromEntries(SUBS.map((s) => [s, { mes: m.mes, p10: headlineBand(m, s).p10, p50: pub[s].p50, p90: headlineBand(m, s).p90 } satisfies MonthBand])) as Record<Sub, MonthBand>,
       };

@@ -45,7 +45,12 @@ export interface MonthBand {
 export interface Limits {
   min: number;
   maxHourly: number;
+  /** PLD máximo estrutural: teto da média diária dos preços horários (sem ele, só o teto horário vale). */
+  maxStructural?: number;
 }
+
+/** Maior média mensal possível: todos os dias no teto estrutural (ou todas as horas no teto horário). */
+export const monthCap = (l: Limits) => Math.min(l.maxHourly, l.maxStructural ?? Infinity);
 
 /* ------------------------------------------------------------- cenários de nível mensal */
 
@@ -81,11 +86,41 @@ export interface Shocks {
   e: Float64Array[]; // choque próprio de cada mês, por cenário
 }
 
-/** Choques fixos: os mesmos para todo ρ, para a calibração e a comparação entre contratos serem suaves. */
+/** Média 0 e desvio 1 na amostra. */
+function standardize(x: Float64Array): void {
+  const n = x.length;
+  let mean = 0;
+  for (let i = 0; i < n; i++) mean += x[i];
+  mean /= n;
+  let sd = 0;
+  for (let i = 0; i < n; i++) sd += (x[i] - mean) ** 2;
+  sd = Math.sqrt(sd / n);
+  for (let i = 0; i < n; i++) x[i] = sd > 0 ? (x[i] - mean) / sd : 0;
+}
+
+/**
+ * Choques fixos: os mesmos para todo ρ, para a calibração e a comparação entre contratos serem suaves.
+ * Casamento de momentos: o fator comum e o choque de cada mês têm média 0 e variância 1 na amostra, e os
+ * choques dos meses são ortogonais ao fator — tira o grosso do ruído de Monte Carlo das médias.
+ */
 export function shocks(n: number, months: number, seed = 20261030): Shocks {
   const r = rng(seed);
   const z = Float64Array.from({ length: n }, () => r.normal());
   const e = Array.from({ length: n }, () => Float64Array.from({ length: months }, () => r.normal()));
+  if (n < 3) return { z, e };
+  standardize(z);
+  const col = new Float64Array(n);
+  for (let m = 0; m < months; m++) {
+    let dot = 0;
+    for (let s = 0; s < n; s++) {
+      col[s] = e[s][m];
+      dot += col[s] * z[s];
+    }
+    dot /= n;
+    for (let s = 0; s < n; s++) col[s] -= dot * z[s];
+    standardize(col);
+    for (let s = 0; s < n; s++) e[s][m] = col[s];
+  }
   return { z, e };
 }
 
@@ -103,14 +138,15 @@ export function lognormal(b: MonthBand, floor: number): { mu: number; sigma: num
   return { mu: Math.log(p50), sigma };
 }
 
-export function levelsFrom(x: Float64Array[], bands: MonthBand[], floors: number[]): Float64Array[] {
+/** Nível mensal por cenário: lognormal entre o piso e a maior média mensal que as regras do PLD permitem. */
+export function levelsFrom(x: Float64Array[], bands: MonthBand[], floors: number[], caps?: number[]): Float64Array[] {
   const par = bands.map((b, m) => lognormal(b, floors[m]));
-  return x.map((row) => Float64Array.from(par, ({ mu, sigma }, m) => Math.max(floors[m], Math.exp(mu + sigma * row[m]))));
+  return x.map((row) => Float64Array.from(par, ({ mu, sigma }, m) => Math.min(caps?.[m] ?? Infinity, Math.max(floors[m], Math.exp(mu + sigma * row[m])))));
 }
 
 /** Nível mensal (R$/MWh) por cenário × mês, com correlação ρ entre os meses e piso no PLD mínimo. */
-export function monthlyLevels(bands: MonthBand[], rho: number, sh: Shocks, floors: number[]): Float64Array[] {
-  return levelsFrom(correlated(sh, rho), bands, floors);
+export function monthlyLevels(bands: MonthBand[], rho: number, sh: Shocks, floors: number[], caps?: number[]): Float64Array[] {
+  return levelsFrom(correlated(sh, rho), bands, floors, caps);
 }
 
 export function quantile(xs: ArrayLike<number>, p: number): number {
@@ -136,10 +172,10 @@ export function spreadRatio(levels: Float64Array[]): number {
 }
 
 /** Correlação entre meses que reproduz a razão `target` medida nos cenários do SDDP (bisseção em ρ). */
-export function impliedRho(bands: MonthBand[], target: number, floors: number[], n = 1500): number | null {
+export function impliedRho(bands: MonthBand[], target: number, floors: number[], caps?: number[], n = 1500): number | null {
   if (!Number.isFinite(target) || bands.length < 3) return null;
   const sh = shocks(n, bands.length, 7);
-  const f = (rho: number) => spreadRatio(monthlyLevels(bands, rho, sh, floors));
+  const f = (rho: number) => spreadRatio(monthlyLevels(bands, rho, sh, floors, caps));
   let lo = 0;
   let hi = 0.999;
   if (target <= f(lo)) return 0;
@@ -171,18 +207,38 @@ export function contractCalendar(months: string[]): ContractCalendar {
 }
 
 /**
- * Preços das horas [from, to) com média `level`: nível + desvio, entre piso e teto, recentrado.
- * Newton com salvaguarda: a média recortada é linear por partes e não decrescente no deslocamento.
+ * Teto estrutural nos dias de [from, to), pela mesma regra do PLD estimado e da previsão da plataforma
+ * (capDailyMean, em brazil.ts): se a média de um dia passa do PLD máximo estrutural, a curva acima do
+ * piso é reduzida na mesma proporção até a média ficar igual ao teto, mantendo o perfil horário.
+ */
+function capDays(out: Float64Array, from: number, to: number, cap: number, lim: Limits): void {
+  for (let a = from; a < to; a += 24) {
+    const b = Math.min(a + 24, to);
+    let sum = 0;
+    for (let h = a; h < b; h++) sum += out[h];
+    const mean = sum / (b - a);
+    if (mean <= cap) continue;
+    const k = (cap - lim.min) / (mean - lim.min);
+    for (let h = a; h < b; h++) out[h] = lim.min + (out[h] - lim.min) * k;
+  }
+}
+
+/**
+ * Preços das horas [from, to) com média `level`: nível + desvio, entre o piso e o teto horário,
+ * recentrado (Newton com salvaguarda: a média recortada é linear por partes e não decrescente no
+ * deslocamento). Se algum dia passar do teto estrutural, o dia é ajustado pela regra do teto e o
+ * deslocamento é refeito por bisseção para o mês manter o nível.
  */
 export function fillMonth(level: number, dev: ArrayLike<number>, from: number, to: number, lim: Limits, out: Float64Array): void {
   const n = to - from;
   if (n <= 0) return;
+  const top = monthCap(lim);
   if (level <= lim.min) {
     out.fill(lim.min, from, to);
     return;
   }
-  if (level >= lim.maxHourly) {
-    out.fill(lim.maxHourly, from, to);
+  if (level >= top) {
+    out.fill(top, from, to);
     return;
   }
   let lo = -Infinity;
@@ -208,10 +264,27 @@ export function fillMonth(level: number, dev: ArrayLike<number>, from: number, t
     if (!(nd > lo && nd < hi)) nd = Number.isFinite(lo) && Number.isFinite(hi) ? (lo + hi) / 2 : nd;
     d = nd;
   }
-  for (let i = from; i < to; i++) {
-    const v = level + d + dev[i];
-    out[i] = v < lim.min ? lim.min : v > lim.maxHourly ? lim.maxHourly : v;
+  const write = (shift: number) => {
+    let sum = 0;
+    for (let i = from; i < to; i++) {
+      const v = level + shift + dev[i];
+      out[i] = v < lim.min ? lim.min : v > lim.maxHourly ? lim.maxHourly : v;
+    }
+    if (top < lim.maxHourly) capDays(out, from, to, top, lim);
+    for (let i = from; i < to; i++) sum += out[i];
+    return sum / n;
+  };
+  if (write(d) >= level - 1e-6) return; // nenhum dia passou do teto estrutural
+  // os dias cortados baixaram a média: sobe o resto até o mês voltar ao nível (a média não decresce no deslocamento)
+  let a = d;
+  let b = d + 64;
+  for (let it = 0; it < 40 && write(b) < level; it++) b = d + 2 * (b - d);
+  for (let it = 0; it < 60 && b - a > 1e-7; it++) {
+    const mid = (a + b) / 2;
+    if (write(mid) < level) a = mid;
+    else b = mid;
   }
+  write(b);
 }
 
 /* ---------------------------------------------------------------- estatísticas por cenário */
@@ -250,8 +323,21 @@ export interface Stats {
   loadSum: Float64Array;
   levelsLoad: Float64Array[];
   levelsContract: Float64Array[];
+  /**
+   * Choques normais por cenário × mês — do nível no submercado da carga, do componente próprio do
+   * submercado do contrato (null se for o mesmo) e do consumo fora a parte ligada ao preço: o que se
+   * sabe no início de cada mês, para o valor de mercado do resto do contrato.
+   */
+  shockLoad: Float64Array[];
+  shockOwn: Float64Array[] | null;
+  shockUse: Float64Array; // s·M + m
+  /** PLD do submercado da carga somado em cada hora do dia, sobre os cenários calculados e os dias do ano. */
+  hourSum: Float64Array;
   sameSub: boolean;
   done: number; // cenários já calculados
+  input: StatsInput;
+  /** Preço capturado pelo contrato modulado pela carga em função do nível do mês (calculado sob demanda). */
+  capture?: { levels: Float64Array; value: Float64Array }[];
 }
 
 export interface StatsInput {
@@ -275,17 +361,21 @@ export function createStats(inp: StatsInput): Stats {
     xy,
     inp.loadSide.bands,
     inp.loadSide.lims.map((l) => l.min),
+    inp.loadSide.lims.map(monthCap),
   );
   let levelsContract = levelsLoad;
+  let own: Float64Array[] | null = null;
   if (inp.contractSide) {
-    const r = Math.min(Math.max(inp.crossRho, 0), 1);
-    const own = correlated(shocks(n, M, seed + 101), inp.contractSide.rho);
+    const r = Math.min(Math.max(inp.crossRho, -1), 1);
+    own = correlated(shocks(n, M, seed + 101), inp.contractSide.rho);
     const k = Math.sqrt(1 - r * r);
-    const xx = xy.map((row, s) => Float64Array.from(row, (x, m) => r * x + k * own[s][m]));
+    const o = own;
+    const xx = xy.map((row, s) => Float64Array.from(row, (x, m) => r * x + k * o[s][m]));
     levelsContract = levelsFrom(
       xx,
       inp.contractSide.bands,
       inp.contractSide.lims.map((l) => l.min),
+      inp.contractSide.lims.map(monthCap),
     );
   }
   // ε = ρ·σ·(choque de preço do mês) + √(1 − ρ²)·(σ_ano·z + σ_mês·e): desvio-padrão σ e correlação ρ com o preço
@@ -295,9 +385,14 @@ export function createStats(inp: StatsInput): Stats {
   const kr = Math.sqrt(1 - rc * rc);
   const lr = rng(seed + 202);
   const eps = new Float64Array(n * M);
+  const use = new Float64Array(n * M);
   for (let s = 0; s < n; s++) {
     const za = lr.normal();
-    for (let m = 0; m < M; m++) eps[s * M + m] = Math.max(-0.95, rc * sig * xy[s][m] + kr * (annual * za + monthly * lr.normal()));
+    for (let m = 0; m < M; m++) {
+      const u = annual * za + monthly * lr.normal();
+      use[s * M + m] = u;
+      eps[s * M + m] = Math.max(-0.95, rc * sig * xy[s][m] + kr * u);
+    }
   }
   const loadSum = new Float64Array(M);
   for (let m = 0; m < M; m++) for (let h = inp.cal.offset[m]; h < inp.cal.offset[m] + inp.cal.hours[m]; h++) loadSum[m] += inp.load[h];
@@ -312,8 +407,13 @@ export function createStats(inp: StatsInput): Stats {
     loadSum,
     levelsLoad,
     levelsContract,
+    shockLoad: xy,
+    shockOwn: own,
+    shockUse: use,
+    hourSum: new Float64Array(24),
     sameSub: !inp.contractSide,
     done: 0,
+    input: inp,
   };
 }
 
@@ -335,6 +435,7 @@ export function fillStats(st: Stats, inp: StatsInput, s0: number, s1: number): v
         x += inp.load[h] * bufY[h];
         t += bufX[h];
         z += inp.load[h] * bufX[h];
+        st.hourSum[h % 24] += bufY[h];
       }
       const i = s * st.M + m;
       st.X[i] = x;
@@ -704,9 +805,17 @@ export interface MonthRow {
 
 export interface Exposure {
   mes: string;
+  /**
+   * Perda ao recontratar o resto do contrato a preço de mercado se a contraparte falhar no início do
+   * mês: média (EE) e quantil (PFE) da parte positiva do valor de mercado, já descontada a recuperação.
+   */
   ee: number;
   pfe: number;
+  /** Valor esperado do resto do contrato para o comprador (positivo = contrato abaixo do mercado). */
   mtm: number;
+  /** Sem recontratar: o resto do contrato fica exposto ao PLD de cada cenário até o fim. */
+  eeSpot: number;
+  pfeSpot: number;
 }
 
 export function monthTable(st: Stats, c: Contract): MonthRow[] {
@@ -742,24 +851,338 @@ export function monthTable(st: Stats, c: Contract): MonthRow[] {
   });
 }
 
-/** Perda se a comercializadora quebrar no início de cada mês: reposição do resto do contrato ao PLD. */
+/** E[f(Z)], Z normal padrão: trapézio em ±7 desvios com a densidade normalizada (robusto às quinas do piso e do teto). */
+const normalNodes = (count: number, half: number) => {
+  const nodes = Float64Array.from({ length: count }, (_, i) => -half + (2 * half * i) / (count - 1));
+  const w = nodes.map((z) => Math.exp((-z * z) / 2));
+  const sum = w.reduce((a, b) => a + b, 0);
+  return { nodes, weights: w.map((x) => x / sum) };
+};
+const { nodes: Z_NODES, weights: Z_WEIGHTS } = normalNodes(71, 7);
+
+/** Nós e pesos de Gauss–Legendre em [−1, 1]. */
+function gaussLegendre(count: number): { x: Float64Array; w: Float64Array } {
+  const x = new Float64Array(count);
+  const w = new Float64Array(count);
+  for (let i = 0; i < Math.ceil(count / 2); i++) {
+    let z = Math.cos((Math.PI * (i + 0.75)) / (count + 0.5));
+    let dp = 1;
+    for (let it = 0; it < 100; it++) {
+      let p1 = 1;
+      let p2 = 0;
+      for (let j = 1; j <= count; j++) {
+        const p3 = p2;
+        p2 = p1;
+        p1 = ((2 * j - 1) * z * p2 - (j - 1) * p3) / j;
+      }
+      dp = (count * (z * p1 - p2)) / (z * z - 1);
+      const prev = z;
+      z = prev - p1 / dp;
+      if (Math.abs(z - prev) < 1e-15) break;
+    }
+    x[i] = -z;
+    x[count - 1 - i] = z;
+    w[i] = w[count - 1 - i] = 2 / ((1 - z * z) * dp * dp);
+  }
+  return { x, w };
+}
+const GL = gaussLegendre(16);
+const INV_SQRT_2PI = 1 / Math.sqrt(2 * Math.PI);
+
+/**
+ * E[g(Z)], Z normal padrão em ±7 desvios, por Gauss–Legendre em cada trecho entre as quinas dadas (onde g
+ * deixa de ser suave: piso, teto, limites da flexibilidade) e em ±2: exato para as quinas sem grade fina.
+ * `cuts` é um buffer de trabalho com as quinas nas primeiras `count` posições (e espaço para mais 4).
+ */
+function normalExpectation(g: (z: number) => number, cuts: Float64Array, count: number): number {
+  let k = 0;
+  for (let i = 0; i < count; i++) if (cuts[i] > -7 && cuts[i] < 7) cuts[k++] = cuts[i];
+  cuts[k++] = -7;
+  cuts[k++] = -2;
+  cuts[k++] = 2;
+  cuts[k++] = 7;
+  for (let i = 1; i < k; i++) {
+    const v = cuts[i];
+    let j = i - 1;
+    while (j >= 0 && cuts[j] > v) {
+      cuts[j + 1] = cuts[j];
+      j--;
+    }
+    cuts[j + 1] = v;
+  }
+  let acc = 0;
+  for (let j = 0; j + 1 < k; j++) {
+    const a = cuts[j];
+    const b = cuts[j + 1];
+    if (b - a < 1e-12) continue;
+    const half = (b - a) / 2;
+    const mid = (a + b) / 2;
+    for (let q = 0; q < GL.x.length; q++) {
+      const z = mid + half * GL.x[q];
+      acc += GL.w[q] * half * INV_SQRT_2PI * Math.exp((-z * z) / 2) * g(z);
+    }
+  }
+  return acc;
+}
+
+/** E[f(c + band·Z)] tabelada em [lo, hi] e lida por interpolação linear (fora da faixa, o extremo). */
+function smoothed(f: (x: number) => number, band: number, lo: number, hi: number, points = 401): (c: number) => number {
+  const N = hi > lo ? points : 1;
+  const h = N > 1 ? (hi - lo) / (N - 1) : 1;
+  const v = new Float64Array(N);
+  for (let i = 0; i < N; i++) {
+    const c = lo + i * h;
+    if (band < 1e-12) v[i] = f(c);
+    else {
+      let acc = 0;
+      for (let q = 0; q < Z_NODES.length; q++) acc += Z_WEIGHTS[q] * f(c + band * Z_NODES[q]);
+      v[i] = acc;
+    }
+  }
+  return (c) => {
+    if (N === 1) return v[0];
+    const x = (c - lo) / h;
+    if (x <= 0) return v[0];
+    if (x >= N - 1) return v[N - 1];
+    const i = Math.floor(x);
+    return v[i] + (v[i + 1] - v[i]) * (x - i);
+  };
+}
+
+/**
+ * Fator comum de uma série x_j = carga·f + ruído·e_j (f e e normais padrão) depois de ver a soma de t valores:
+ * média e variância a posteriori de f.
+ */
+function posterior(sum: number, t: number, load: number, noise: number): { mean: number; var: number } {
+  if (t === 0 || load < 1e-12) return { mean: 0, var: 1 };
+  if (noise < 1e-9) return { mean: sum / (t * load), var: 0 };
+  const prec = 1 + (t * load * load) / (noise * noise);
+  return { mean: ((load / (noise * noise)) * sum) / prec, var: 1 / prec };
+}
+
+/** Preço capturado (Σ L_h·PLD_h ÷ Σ L_h) pelo contrato modulado pela carga em uma grade de níveis de cada mês. */
+function captureTable(st: Stats): { levels: Float64Array; value: Float64Array }[] {
+  if (st.capture) return st.capture;
+  const { input: inp, cal } = st;
+  const side = inp.contractSide ?? inp.loadSide;
+  const buf = new Float64Array(cal.total);
+  st.capture = cal.months.map((_, m) => {
+    const lo = side.lims[m].min;
+    const hi = monthCap(side.lims[m]);
+    const a = cal.offset[m];
+    const b = a + cal.hours[m];
+    const levels = Float64Array.from({ length: 121 }, (_, k) => lo * Math.pow(hi / lo, k / 120));
+    const value = Float64Array.from(levels, (L) => {
+      fillMonth(L, side.dev, a, b, side.lims[m], buf);
+      let z = 0;
+      for (let h = a; h < b; h++) z += inp.load[h] * buf[h];
+      return st.loadSum[m] > 0 ? z / st.loadSum[m] : L;
+    });
+    return { levels, value };
+  });
+  return st.capture;
+}
+
+/**
+ * Exposição se a comercializadora quebrar no início de cada mês t.
+ *
+ * O comprador perde o resto do contrato, Y_t = Σ_{m ≥ t} v_m·(Σ_h w_h·PLD_h − H_m·P), e o repõe a preço de
+ * mercado: a perda é a parte positiva de E_t[Y_t], o valor esperado dado o que já se viu até o fim do mês
+ * t − 1. Nos cenários, o que se viu entra pelos fatores comuns — do nível no submercado da carga, do
+ * componente próprio do submercado do contrato e do consumo —, que têm posteriori normal; E_t[Y_t] sai
+ * das integrais exatas do modelo sobre essas normais (nível lognormal entre o piso e o teto, preço
+ * capturado pela modulação, volume tomado pela regra da flexibilidade), não de regressão.
+ * EE = média e PFE = quantil da perda, vezes (1 − recuperação). Também sai a perda sem recontratar: o resto
+ * exposto ao PLD de cada cenário até o fim.
+ */
 export function counterpartyExposure(st: Stats, c: Contract, recovery = 0, pfeLevel = 0.95): Exposure[] {
   const ev = evaluate(st, c, true);
-  const { n, M } = st;
-  return st.cal.months.map((mes, t) => {
-    const pos = new Float64Array(n);
-    let mtm = 0;
+  const { n, M, cal, input: inp } = st;
+  const keep = 1 - recovery;
+  const side = inp.contractSide ?? inp.loadSide;
+  const par = side.bands.map((b, m) => lognormal(b, side.lims[m].min));
+  const floor = side.lims.map((l) => l.min);
+  const top = side.lims.map(monthCap);
+  const cap = c.modulation === "carga" ? captureTable(st) : null;
+  /** Preço médio que 1 MWmed do contrato captura no mês m, dado o choque normal x do nível do contrato. */
+  const exact = (m: number, x: number) => {
+    const L = Math.min(top[m], Math.max(floor[m], Math.exp(par[m].mu + par[m].sigma * x)));
+    if (!cap) return L;
+    const { levels, value } = cap[m];
+    const pos = ((Math.log(L) - Math.log(levels[0])) / (Math.log(levels[levels.length - 1]) - Math.log(levels[0]))) * (levels.length - 1);
+    if (!(pos > 0)) return value[0];
+    if (pos >= levels.length - 1) return value[levels.length - 1];
+    const i = Math.floor(pos);
+    return value[i] + (value[i + 1] - value[i]) * (pos - i);
+  };
+  // tabelado em x (passo 0,005 desvio): as integrais abaixo leem a tabela em vez de refazer exp e log
+  const X0 = -14;
+  const DX = 0.005;
+  const NX = 5601;
+  const tabs = cal.months.map((_, m) => Float64Array.from({ length: NX }, (_, i) => exact(m, X0 + i * DX)));
+  const price = (m: number, x: number) => {
+    const tab = tabs[m];
+    const pos = (x - X0) / DX;
+    if (pos <= 0) return tab[0];
+    if (pos >= NX - 1) return tab[NX - 1];
+    const i = Math.floor(pos);
+    return tab[i] + (tab[i + 1] - tab[i]) * (pos - i);
+  };
+  const lf = 1 + c.losses;
+  const take = (m: number, nu: number) => {
+    const need = ((1 + Math.max(-0.95, nu)) * lf * st.loadSum[m]) / cal.hours[m];
+    const lo = (1 - c.flex) * c.volumes[m];
+    const hi = (1 + c.flex) * c.volumes[m];
+    return need < lo ? lo : need > hi ? hi : need;
+  };
+  // parâmetros dos choques (os mesmos de createStats)
+  const rhoL = Math.min(Math.max(inp.loadSide.rho, 0), 1);
+  const aL = Math.sqrt(rhoL);
+  const bL = Math.sqrt(1 - rhoL);
+  const rhoC = inp.contractSide ? Math.min(Math.max(inp.contractSide.rho, 0), 1) : 0;
+  const aC = Math.sqrt(rhoC);
+  const bC = Math.sqrt(1 - rhoC);
+  const r = inp.contractSide ? Math.min(Math.max(inp.crossRho, -1), 1) : 1;
+  const k = Math.sqrt(1 - r * r);
+  const { annual, monthly } = inp.uncertainty;
+  const rc = Math.min(Math.max(inp.uncertainty.priceCorr ?? 0, -1), 1);
+  const sig = Math.sqrt(annual * annual + monthly * monthly);
+  const kr = Math.sqrt(1 - rc * rc);
+  const byLoad = c.flexRule === "carga" && c.flex > 0;
+  const joint = byLoad && Math.abs(rc) > 1e-12 && sig > 0; // volume e preço ligados pelo mesmo choque
+  const f = c.flex;
+
+  const mtm = Array.from({ length: M }, () => new Float64Array(n));
+  const s1 = new Float64Array(n);
+  const s2 = new Float64Array(n);
+  const s3 = new Float64Array(n);
+  const mXY = new Float64Array(n);
+  const mOwn = new Float64Array(n);
+  const mU = new Float64Array(n);
+  for (let t = 0; t < M; t++) {
+    // a posteriori de cada cenário no início do mês t
+    let vXY = 0;
+    let vOwn = 0;
+    let vU = 0;
     for (let s = 0; s < n; s++) {
-      let v = 0;
-      for (let m = t; m < M; m++) v += ev.taken[s * M + m] * ev.edge[s * M + m];
-      v *= 1 - recovery;
-      mtm += v;
-      pos[s] = Math.max(0, v);
+      const z = posterior(s1[s], t, aL, bL);
+      mXY[s] = aL * z.mean;
+      vXY = aL * aL * z.var + bL * bL;
+      if (inp.contractSide) {
+        const z2 = posterior(s2[s], t, aC, bC);
+        mOwn[s] = aC * z2.mean;
+        vOwn = aC * aC * z2.var + bC * bC;
+      }
+      const z3 = posterior(s3[s], t, annual, monthly);
+      mU[s] = annual * z3.mean;
+      vU = annual * annual * z3.var + monthly * monthly;
     }
-    let ee = 0;
-    for (let s = 0; s < n; s++) ee += pos[s];
-    return { mes, ee: ee / n, pfe: quantile(pos, pfeLevel), mtm: mtm / n };
-  });
+    const sXY = Math.sqrt(vXY);
+    const sOwn = Math.sqrt(vOwn);
+    const sU = Math.sqrt(vU);
+    const range = (vals: Float64Array, pad: number): [number, number] => {
+      let lo = Infinity;
+      let hi = -Infinity;
+      for (const v of vals) {
+        lo = Math.min(lo, v);
+        hi = Math.max(hi, v);
+      }
+      return [lo - pad, hi + pad];
+    };
+    for (let m = t; m < M; m++) {
+      const H = cal.hours[m];
+      const V = c.volumes[m];
+      if (!joint) {
+        // volume independente do preço: E[v·e] = E[v]·E[e] (ou, na opção livre, só preço)
+        const muC = inp.contractSide ? Float64Array.from(mXY, (x, s) => r * x + k * mOwn[s]) : mXY;
+        const sC = inp.contractSide ? Math.sqrt(r * r * vXY + k * k * vOwn) : sXY;
+        const [lo, hi] = range(muC, 1e-6);
+        const val =
+          c.flexRule === "livre"
+            ? smoothed((x) => {
+                const e = price(m, x) - c.price;
+                return e + f * Math.abs(e);
+              }, sC, lo, hi)
+            : smoothed((x) => price(m, x) - c.price, sC, lo, hi);
+        const nuMean = Float64Array.from(mU, (u, s) => rc * sig * mXY[s] + kr * u);
+        const sNu = Math.sqrt(rc * rc * sig * sig * vXY + kr * kr * vU);
+        const [nlo, nhi] = range(nuMean, 1e-9);
+        const vol = c.flexRule === "livre" || !byLoad ? null : smoothed((nu) => take(m, nu), sNu, nlo, nhi);
+        for (let s = 0; s < n; s++) mtm[t][s] += H * (c.flexRule === "livre" ? V * val(muC[s]) : (vol ? vol(nuMean[s]) : V) * val(muC[s]));
+      } else {
+        // volume pelo consumo ligado ao preço: integra no choque do nível do submercado da carga
+        let xlo = Infinity;
+        let xhi = -Infinity;
+        for (let s = 0; s < n; s++) {
+          xlo = Math.min(xlo, mXY[s]);
+          xhi = Math.max(xhi, mXY[s]);
+        }
+        xlo -= 7 * sXY + 1e-6;
+        xhi += 7 * sXY + 1e-6;
+        let olo = 0;
+        let ohi = 0;
+        if (inp.contractSide) [olo, ohi] = range(mOwn, 1e-6);
+        const eGiven = inp.contractSide
+          ? smoothed((x) => price(m, x) - c.price, k * sOwn, Math.min(r * xlo, r * xhi) + k * olo, Math.max(r * xlo, r * xhi) + k * ohi, 801)
+          : smoothed((x) => price(m, x) - c.price, 0, xlo, xhi, 801);
+        const [ulo, uhi] = range(mU, 1e-9);
+        const nlo = Math.min(rc * sig * xlo, rc * sig * xhi) + kr * ulo;
+        const nhi = Math.max(rc * sig * xlo, rc * sig * xhi) + kr * uhi;
+        const vGiven = smoothed((nu) => take(m, nu), kr * sU, nlo, nhi, 801);
+        // quinas no choque x do submercado da carga: piso e teto do preço e limites do volume tomado
+        const xf = (Math.log(floor[m]) - par[m].mu) / par[m].sigma;
+        const xc = (Math.log(top[m]) - par[m].mu) / par[m].sigma;
+        const need1 = (lf * st.loadSum[m]) / H; // volume tomado com ε = 0
+        const nuKinks = need1 > 0 ? [-0.95, ((1 - f) * V) / need1 - 1, ((1 + f) * V) / need1 - 1] : [-0.95];
+        const cuts = new Float64Array(16);
+        for (let s = 0; s < n; s++) {
+          const mx = mXY[s];
+          const mo = k * mOwn[s];
+          const mu = kr * mU[s];
+          let count = 0;
+          if (!inp.contractSide) {
+            cuts[count++] = (xf - mx) / sXY;
+            cuts[count++] = (xc - mx) / sXY;
+          } else if (Math.abs(r) > 1e-9) {
+            cuts[count++] = ((xf - mo) / r - mx) / sXY;
+            cuts[count++] = ((xc - mo) / r - mx) / sXY;
+          }
+          for (const nu of nuKinks) cuts[count++] = ((nu - mu) / (rc * sig) - mx) / sXY;
+          const acc = normalExpectation(
+            (z) => {
+              const x = mx + sXY * z;
+              return vGiven(rc * sig * x + mu) * (inp.contractSide ? eGiven(r * x + mo) : eGiven(x));
+            },
+            cuts,
+            count,
+          );
+          mtm[t][s] += H * acc;
+        }
+      }
+    }
+    for (let s = 0; s < n; s++) {
+      s1[s] += st.shockLoad[s][t];
+      if (st.shockOwn) s2[s] += st.shockOwn[s][t];
+      s3[s] += st.shockUse[s * M + t];
+    }
+  }
+
+  const rest = new Float64Array(n);
+  const out: Exposure[] = new Array(M);
+  for (let t = M - 1; t >= 0; t--) {
+    for (let s = 0; s < n; s++) rest[s] += ev.taken[s * M + t] * ev.edge[s * M + t];
+    const loss = Float64Array.from(mtm[t], (v) => keep * Math.max(0, v));
+    const spot = Float64Array.from(rest, (v) => keep * Math.max(0, v));
+    out[t] = {
+      mes: cal.months[t],
+      ee: loss.reduce((a, b) => a + b, 0) / n,
+      pfe: quantile(loss, pfeLevel),
+      mtm: mtm[t].reduce((a, b) => a + b, 0) / n,
+      eeSpot: spot.reduce((a, b) => a + b, 0) / n,
+      pfeSpot: quantile(spot, pfeLevel),
+    };
+  }
+  return out;
 }
 
 /** Histograma comum do custo em R$/MWh consumido para alguns contratos. */

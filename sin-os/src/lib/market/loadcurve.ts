@@ -39,6 +39,28 @@ const ISO = /(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{1,2}):(\d{2}))?/;
 const BR = /(\d{2})\/(\d{2})\/(\d{4})(?:[ T]+(\d{1,2}):(\d{2}))?/;
 const TIME = /^(\d{1,2}):(\d{2})(?::\d{2})?$/;
 
+/** Campos de uma linha CSV respeitando aspas: o separador dentro de aspas não divide ("1,5" é um campo). */
+export function splitCsv(line: string, delim: string): string[] {
+  if (!line.includes('"')) return line.split(delim);
+  const out: string[] = [];
+  let cur = "";
+  let quoted = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (quoted && line[i + 1] === '"') {
+        cur += '"';
+        i++;
+      } else quoted = !quoted;
+    } else if (ch === delim && !quoted) {
+      out.push(cur);
+      cur = "";
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+
 /** Número com vírgula decimal (1.234,5) ou ponto decimal (1234.5); null se não for número. */
 export function parseNumber(raw: string, decimalComma: boolean): number | null {
   const s = raw.trim().replace(/^"|"$/g, "");
@@ -63,14 +85,14 @@ export function parseLoadCsv(text: string, unit?: LoadUnit): ParsedCurve {
   const sample = lines.slice(0, 20).join("\n");
   const delim = sample.includes(";") ? ";" : sample.includes("\t") ? "\t" : ",";
   const hasHeader = !ISO.test(lines[0]) && !BR.test(lines[0]);
-  // vírgula decimal só se algum valor a usar (com ; há arquivos com ponto decimal)
-  const decimalComma = delim !== "," && (hasHeader ? lines.slice(1) : lines).slice(0, 50).some((l) => l.split(delim).some((c) => /^\s*"?-?\d[\d.]*,\d+"?\s*$/.test(c)));
-  const header = hasHeader ? lines[0].split(delim).map((c) => c.trim().replace(/^"|"$/g, "")) : [];
+  // vírgula decimal só se algum valor a usar (com ; há arquivos com ponto decimal; com vírgula, só entre aspas)
+  const decimalComma = (hasHeader ? lines.slice(1) : lines).slice(0, 50).some((l) => splitCsv(l, delim).some((c) => /^\s*-?\d[\d.]*,\d+\s*$/.test(c)));
+  const header = hasHeader ? splitCsv(lines[0], delim).map((c) => c.trim().replace(/^"|"$/g, "")) : [];
   const recs: { t: number; v: number; end: boolean }[] = [];
   let skipped = 0;
   let col = -1;
   for (const line of hasHeader ? lines.slice(1) : lines) {
-    const cells = line.split(delim);
+    const cells = splitCsv(line, delim);
     let y = 0;
     let mo = 0;
     let d = 0;

@@ -7,12 +7,15 @@ import {
   contractCalendar,
   costHistogram,
   counterpartyExposure,
+  createStats,
   evaluate,
   fairPrices,
   fillMonth,
+  fillStats,
   impliedRho,
   loadShape,
   lognormal,
+  monthCap,
   monthlyLevels,
   monthTable,
   objective,
@@ -92,7 +95,7 @@ describe("cenários de preço", () => {
     expect(Math.min(...col)).toBeGreaterThanOrEqual(LIM.min);
     expect(spreadRatio(monthlyLevels(b, 0.95, sh, b.map(() => LIM.min)))).toBeGreaterThan(spreadRatio(ind) + 0.3);
     const target = spreadRatio(monthlyLevels(b, 0.6, shocks(4000, 12, 9), b.map(() => LIM.min)));
-    expect(impliedRho(b, target, b.map(() => LIM.min), 4000)).toBeCloseTo(0.6, 1);
+    expect(impliedRho(b, target, b.map(() => LIM.min), undefined, 4000)).toBeCloseTo(0.6, 1);
     expect(lognormal({ mes: "x", p10: null, p50: null, p90: null }, LIM.min).mu).toBeCloseTo(Math.log(LIM.min));
   });
 
@@ -275,6 +278,166 @@ describe("contrato completo", () => {
   });
 });
 
+describe("regras do PLD e exposição de contraparte", () => {
+  const CAP = { ...LIM, maxStructural: 785.27 };
+  const Phi = (x: number) => {
+    const t = 1 / (1 + 0.2316419 * Math.abs(x));
+    const p = 0.3989422804014327 * Math.exp((-x * x) / 2) * t * (0.31938153 + t * (-0.356563782 + t * (1.781477937 + t * (-1.821255978 + t * 1.330274429))));
+    return x >= 0 ? 1 - p : p;
+  };
+  /** E[min(c, max(f, e^Y))], Y ~ N(M, Sd²). */
+  const clipMean = (M: number, Sd: number, f: number, c: number) => {
+    const a = (Math.log(f) - M) / Sd;
+    const b = (Math.log(c) - M) / Sd;
+    return f * Phi(a) + c * (1 - Phi(b)) + Math.exp(M + (Sd * Sd) / 2) * (Phi(b - Sd) - Phi(a - Sd));
+  };
+
+  it("teto estrutural: média de cada dia até o máximo estrutural, mês no nível, horas entre piso e teto horário", () => {
+    // dia útil com noite muito cara, fim de semana e feriado baratos: com nível alto, os dias úteis passam do teto
+    const dev = Float64Array.from({ length: cal.total }, (_, i) => {
+      const util = dayType(cal.days[Math.floor(i / 24)].date) === "util";
+      return util ? (i % 24 >= 17 && i % 24 <= 22 ? 900 : -150) : -200;
+    });
+    const out = new Float64Array(cal.total);
+    const [a, b] = [cal.offset[0], cal.offset[0] + cal.hours[0]];
+    let capped = 0;
+    for (const level of [600, 720, 770]) {
+      fillMonth(level, dev, a, b, CAP, out);
+      let sum = 0;
+      for (let d = a; d < b; d += 24) {
+        let day = 0;
+        for (let h = d; h < d + 24; h++) {
+          day += out[h];
+          expect(out[h]).toBeGreaterThanOrEqual(CAP.min - 1e-9);
+          expect(out[h]).toBeLessThanOrEqual(CAP.maxHourly + 1e-9);
+        }
+        expect(day / 24).toBeLessThanOrEqual(CAP.maxStructural + 1e-6);
+        if (day / 24 > CAP.maxStructural - 1e-6) capped++;
+        sum += day;
+      }
+      expect(sum / (b - a)).toBeCloseTo(level, 5);
+    }
+    expect(capped).toBeGreaterThan(10); // o teto de fato atuou
+    fillMonth(900, dev, a, b, CAP, out); // acima do teto: todos os dias no teto
+    expect(out[a + 19]).toBeCloseTo(CAP.maxStructural, 9);
+    const lv = monthlyLevels(bands(() => 300, () => 900), 0.5, shocks(3000, 12, 3), MONTHS.map(() => CAP.min), MONTHS.map(() => monthCap(CAP)));
+    expect(Math.max(...lv.flatMap((r) => [...r]))).toBeCloseTo(CAP.maxStructural, 9);
+  });
+
+  it("PLD médio por hora do dia acumulado nos cenários = média das horas reconstruídas", () => {
+    const inp = input(typicalLoad("comercial", 2, cal), { n: 30 });
+    const st = createStats(inp);
+    fillStats(st, inp, 0, 10);
+    fillStats(st, inp, 10, 30);
+    const want = new Float64Array(24);
+    const out = new Float64Array(cal.total);
+    for (let s = 0; s < 30; s++)
+      for (let m = 0; m < 12; m++) {
+        fillMonth(st.levelsLoad[s][m], inp.loadSide.dev, cal.offset[m], cal.offset[m] + cal.hours[m], inp.loadSide.lims[m], out);
+        for (let h = cal.offset[m]; h < cal.offset[m] + cal.hours[m]; h++) want[h % 24] += out[h];
+      }
+    for (let h = 0; h < 24; h++) expect(st.hourSum[h]).toBeCloseTo(want[h], 3);
+  });
+
+  it("valor de mercado do resto do contrato = esperança condicional analítica do modelo", () => {
+    const b = bands((m) => (m >= 2 && m <= 5 ? 90 : 200), (m) => (m >= 2 && m <= 5 ? 160 : 520));
+    const rho = 0.8;
+    const st = buildStats(input(flatLoad(10), { loadSide: { bands: b, lims: MONTHS.map(() => CAP), dev: new Float64Array(cal.total), rho }, n: 1000 }));
+    const a = Math.sqrt(rho);
+    const s2 = Math.sqrt(1 - rho);
+    const par = b.map((x) => lognormal(x, CAP.min));
+    for (const price of [120, 180]) {
+      const ex = counterpartyExposure(st, contract(new Array(12).fill(10), { price }));
+      for (const t of [0, 2, 5, 9]) {
+        const exact = Float64Array.from({ length: st.n }, (_, s) => {
+          let sum = 0;
+          for (let m = 0; m < t; m++) sum += st.shockLoad[s][m];
+          const v = 1 / (1 + (t * a * a) / (s2 * s2));
+          const mu = v * (a / (s2 * s2)) * sum;
+          let val = 0;
+          for (let m = t; m < 12; m++) val += 10 * cal.hours[m] * (clipMean(par[m].mu + par[m].sigma * a * mu, par[m].sigma * Math.sqrt(a * a * v + s2 * s2), CAP.min, CAP.maxStructural) - price);
+          return Math.max(0, val);
+        });
+        const scale = Math.max(quantile(exact, 0.95), 1e4);
+        expect(Math.abs(ex[t].ee - exact.reduce((x, y) => x + y, 0) / st.n) / scale).toBeLessThan(3e-3);
+        expect(Math.abs(ex[t].pfe - quantile(exact, 0.95)) / scale).toBeLessThan(3e-3);
+      }
+      // no início ninguém sabe nada: a exposição é a mesma em todo cenário; sem recontratar, não
+      expect(ex[0].pfe).toBeCloseTo(ex[0].ee, 6);
+      expect(ex[0].pfeSpot).toBeGreaterThan(ex[0].pfe * 2);
+    }
+  });
+
+  it("valor de mercado no caso geral (outro submercado, modulação e flexibilidade pela carga, consumo ligado ao preço) = simulação aninhada", () => {
+    const load = typicalLoad("comercial", 2, cal);
+    const loadSide = { ...side(bands(() => 150, () => 320)), lims: MONTHS.map(() => CAP) };
+    const ctrSide = { ...side(bands(() => 110, () => 260), 0.6), lims: MONTHS.map(() => CAP) };
+    const inp = input(load, { loadSide, contractSide: ctrSide, crossRho: 0.5, uncertainty: { annual: 0.08, monthly: 0.05, priceCorr: 0.6 }, n: 300 });
+    const st = buildStats(inp);
+    const c = contract(new Array(12).fill(2), { price: 125, flex: 0.2, modulation: "carga", losses: 0.02 });
+    const ex = counterpartyExposure(st, c);
+    // refaz o valor de mercado de um cenário por simulação aninhada: sorteia o futuro dado o passado
+    const t = 4;
+    const R = rng(77);
+    const buf = new Float64Array(cal.total);
+    const parC = ctrSide.bands.map((x) => lognormal(x, CAP.min));
+    const post = (sum: number, load: number, noise: number) => {
+      const prec = 1 + (t * load * load) / (noise * noise);
+      return { mean: ((load / (noise * noise)) * sum) / prec, sd: Math.sqrt(1 / prec) };
+    };
+    const one = (s: number) => counterpartyExposure({ ...st, n: 1, shockLoad: [st.shockLoad[s]], shockOwn: [st.shockOwn![s]], shockUse: st.shockUse.subarray(s * 12, s * 12 + 12), eps: st.eps.subarray(s * 12, s * 12 + 12), X: st.X.subarray(s * 12, s * 12 + 12), T: st.T.subarray(s * 12, s * 12 + 12), Z: st.Z.subarray(s * 12, s * 12 + 12) }, c)[t].mtm;
+    for (const s of [5, 150]) {
+      let sum1 = 0;
+      let sum2 = 0;
+      let sumU = 0;
+      for (let m = 0; m < t; m++) {
+        sum1 += st.shockLoad[s][m];
+        sum2 += st.shockOwn![s][m];
+        sumU += st.shockUse[s * 12 + m];
+      }
+      const pz = post(sum1, Math.sqrt(0.7), Math.sqrt(0.3));
+      const pz2 = post(sum2, Math.sqrt(0.6), Math.sqrt(0.4));
+      const pa = post(sumU, 0.08, 0.05);
+      const K = 600;
+      const ys: number[] = [];
+      for (let it = 0; it < K; it++) {
+        const z = pz.mean + pz.sd * R.normal();
+        const z2 = pz2.mean + pz2.sd * R.normal();
+        const za = pa.mean + pa.sd * R.normal();
+        let y = 0;
+        for (let m = t; m < 12; m++) {
+          const xy = Math.sqrt(0.7) * z + Math.sqrt(0.3) * R.normal();
+          const xc = 0.5 * xy + Math.sqrt(0.75) * (Math.sqrt(0.6) * z2 + Math.sqrt(0.4) * R.normal());
+          const L = Math.min(CAP.maxStructural, Math.max(CAP.min, Math.exp(parC[m].mu + parC[m].sigma * xc)));
+          const [a0, b0, H] = [cal.offset[m], cal.offset[m] + cal.hours[m], cal.hours[m]];
+          fillMonth(L, ctrSide.dev, a0, b0, CAP, buf);
+          let Z = 0;
+          for (let h = a0; h < b0; h++) Z += load[h] * buf[h];
+          const e = (H * Z) / st.loadSum[m] - H * c.price;
+          const eps = Math.max(-0.95, 0.6 * Math.hypot(0.08, 0.05) * xy + 0.8 * (0.08 * za + 0.05 * R.normal()));
+          y += Math.min(2.4, Math.max(1.6, ((1 + eps) * 1.02 * st.loadSum[m]) / H)) * e;
+        }
+        ys.push(y);
+      }
+      const mean = ys.reduce((x, y) => x + y, 0) / K;
+      const se = Math.sqrt(ys.reduce((x, y) => x + (y - mean) ** 2, 0) / (K - 1) / K);
+      expect(Math.abs(one(s) - mean)).toBeLessThan(4 * se + 1e-3 * Math.abs(mean));
+    }
+    for (const e of ex) expect(e.pfe).toBeGreaterThanOrEqual(e.ee - 1e-6);
+  }, 60_000);
+
+  it("correlação negativa entre submercados é respeitada", () => {
+    const st = createStats(input(flatLoad(1), { contractSide: side(bands(() => 150, () => 320)), crossRho: -0.7, n: 3000 }));
+    const xs = st.levelsLoad.map((r) => Math.log(r[6]));
+    const ys = st.levelsContract.map((r) => Math.log(r[6]));
+    const mx = xs.reduce((a, b) => a + b, 0) / xs.length;
+    const my = ys.reduce((a, b) => a + b, 0) / ys.length;
+    const cov = xs.reduce((a, x, i) => a + (x - mx) * (ys[i] - my), 0);
+    const corr = cov / Math.sqrt(xs.reduce((a, x) => a + (x - mx) ** 2, 0) * ys.reduce((a, y) => a + (y - my) ** 2, 0));
+    expect(corr).toBeLessThan(-0.55);
+  });
+});
+
 describe("curva de carga em CSV", () => {
   it("memória de massa brasileira: ; e vírgula decimal, data e hora separadas, 15 min em kWh", () => {
     const rows = ["Data;Hora;Consumo ativo (kWh)"];
@@ -310,6 +473,12 @@ describe("curva de carga em CSV", () => {
     expect(b.hourly[23].h).toBe(23);
     expect(b.unitGuessed).toBe(true);
     expect(() => parseLoadCsv("a;b\n1;2\n3;4")).toThrow();
+    // vírgula como separador e decimal com vírgula entre aspas (exportação comum de planilha)
+    const quoted = ['"Data e hora","Consumo (kWh)"'];
+    for (let h = 0; h < 24; h++) quoted.push(`"05/02/2026 ${String(h).padStart(2, "0")}:00","1.250,5"`);
+    const q = parseLoadCsv(quoted.join("\n"));
+    expect(q.hourly).toHaveLength(24);
+    expect(q.hourly[0].mw).toBeCloseTo(1.2505, 9); // 1.250,5 kWh numa hora = 1,2505 MW
     expect(parseNumber("1.234,5", true)).toBe(1234.5);
     expect(parseNumber("12.5", false)).toBe(12.5);
     expect(parseNumber("abc", true)).toBeNull();

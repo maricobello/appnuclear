@@ -160,19 +160,25 @@ export default function MercadoLivrePage() {
             <Link href="/planejamento" className="text-accent hover:underline">
               Planejamento
             </Link>
-            , com piso no PLD mínimo. Os meses se movem juntos pela correlação implícita nos cenários do SDDP; um contrato em outro submercado se move com a carga pela correlação histórica das variações mensais do PLD dos dois.
+            , entre o PLD mínimo e o máximo estrutural (a média de um mês não passa dele). Os meses se movem juntos pela correlação implícita nos cenários do SDDP; um contrato em outro submercado se move com a carga
+            pela correlação histórica das variações mensais do PLD dos dois. Os sorteios têm casamento de momentos, o que tira o grosso do ruído das médias.
           </li>
           <li>
             As 8.760 horas do ano entram uma a uma: cada dia do contrato usa o dia equivalente do PLD real (mesmo tipo de dia — útil, sábado, domingo ou feriado nacional, inclusive Carnaval, Sexta-feira Santa e Corpus
-            Christi —, mesmo mês, cerca de 52 semanas antes), somado ao nível do cenário, limitado ao piso e ao teto horário e recentrado para o mês manter o nível. A carga segue o mesmo critério na sua curva (ou o perfil
-            típico por tipo de dia), com incerteza no ano e no mês e, se informada, correlação com o preço.
+            Christi —, mesmo mês, cerca de 52 semanas antes), somado ao nível do cenário, limitado ao piso e ao teto horário e recentrado para o mês manter o nível. O dia cuja média passa do PLD máximo estrutural tem a
+            curva acima do piso reduzida na mesma proporção até a média ficar no teto. A carga segue o mesmo critério na sua curva (ou o perfil típico por tipo de dia), com incerteza no ano e no mês e, se informada, correlação com o
+            preço.
           </li>
           <li>O valor da flexibilidade e da sazonalização é quanto a estrutura escolhida economiza frente à mesma sem flexibilidade ou com volume flat, no custo esperado e no pior 5% dos cenários.</li>
           <li>
-            A exposição de contraparte supõe que, se a comercializadora quebra no início de um mês, o resto do contrato (o volume que seria tomado em cada cenário) é comprado ao PLD; EE e PFE 95% da perda, descontada a
-            recuperação informada. É a métrica de exposição de crédito usada em derivativos.
+            A exposição de contraparte é a perda ao recontratar o resto do contrato a preço de mercado se a comercializadora quebrar no início de um mês: a parte positiva do valor esperado do resto do contrato dado o que já
+            se viu até ali, calculado pelas integrais exatas do modelo. Saem a exposição esperada (EE) e a potencial (PFE 95%), descontada a recuperação, como na exposição de crédito de derivativos. A linha tracejada é o
+            pior caso de não recontratar e ficar no PLD até o fim.
           </li>
-          <li>Ficam de fora a energia incentivada (desconto na TUSD), impostos e garantias financeiras. O desenho de cada dia é o do dia equivalente do histórico em todos os cenários: o nível muda, a forma do dia não.</li>
+          <li>
+            Ficam de fora a energia incentivada (desconto na TUSD), impostos e garantias financeiras. O desenho de cada dia é o do dia equivalente do histórico em todos os cenários: o nível muda, a forma do dia não. Com 2.000
+            cenários, o PLD médio esperado varia cerca de R$ 0,30/MWh entre sorteios, o custo esperado da estrutura ótima menos de R$ 0,10/MWh, e o valor da flexibilidade cerca de 10%.
+          </li>
         </ul>
       </Panel>
     </div>
