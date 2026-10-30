@@ -146,21 +146,33 @@ export default function MercadoLivrePage() {
       <Panel title="Como o modelo funciona" subtitle="Hipóteses e limites do simulador">
         <ul className="flex list-disc flex-col gap-1.5 pl-5 text-[13px] leading-relaxed text-ink-2">
           <li>
-            O custo do ano é o contrato flat (volume × preço em todas as horas) mais a diferença entre a carga e o contrato liquidada ao PLD, hora a hora. Como ele é linear no volume, o CVaR é convexo e o volume ótimo minimiza
-            (1 − β) × custo esperado + β × CVaR 95%.
+            O contrato tem a estrutura de um bilateral de verdade: volume anual a um preço; sazonalização (o volume de cada mês, decidido antes do ano, entre −s% e +s% do anual, com a energia do ano preservada: flat, conforme
+            a carga prevista ou a ótima); flexibilidade mensal (o volume tomado fica entre −f% e +f% do sazonalizado, ajustado ao consumo medido ou escolhido depois do mês, como uma opção); modulação flat ou conforme a carga; e
+            submercado do contrato, que pode ser outro que o da carga.
+          </li>
+          <li>
+            O custo de cada cenário é o contrato tomado mais a liquidação na CCEE, hora a hora, da diferença entre o consumo medido (com perdas e choque de consumo) e o contrato modulado. O risco é medido no custo por MWh
+            consumido, e volume e sazonalização minimizam (1 − β) × custo esperado + β × CVaR 95%. Com a flexibilidade ajustada ao consumo o custo deixa de ser convexo: a busca é global no volume e por trocas de energia entre
+            pares de meses na sazonalização, partindo da melhor entre flat e conforme a carga.
           </li>
           <li>
             Cada cenário dá um nível de PLD por mês: lognormal com mediana no P50 e cauda no P90 da faixa publicada em{" "}
             <Link href="/planejamento" className="text-accent hover:underline">
               Planejamento
             </Link>
-            , com piso no PLD mínimo. Os meses se movem juntos pela correlação implícita nos cenários do SDDP (a que reproduz a largura da média de 12 meses que o próprio SDDP produziu).
+            , com piso no PLD mínimo. Os meses se movem juntos pela correlação implícita nos cenários do SDDP; um contrato em outro submercado se move com a carga pela correlação histórica das variações mensais do PLD dos dois.
           </li>
-          <li>As horas seguem a forma do PLD real do mesmo mês no último ano (desvio de cada hora para a média do dia), limitada ao piso e ao teto horário e recentrada para preservar o nível do mês.</li>
-          <li>A carga entra como a média por mês e hora do dia; a variação entre dias de um mesmo mês fica de fora, assim como a energia incentivada, impostos, flexibilidade e sazonalização do contrato.</li>
           <li>
-            A exposição de contraparte supõe que, se a comercializadora quebra, o resto do contrato é comprado ao PLD do cenário, sem recuperação. É a métrica de exposição de crédito usada em derivativos (EE e PFE 95%).
+            As 8.760 horas do ano entram uma a uma: cada dia do contrato usa o dia equivalente do PLD real (mesmo tipo de dia — útil, sábado, domingo ou feriado nacional, inclusive Carnaval, Sexta-feira Santa e Corpus
+            Christi —, mesmo mês, cerca de 52 semanas antes), somado ao nível do cenário, limitado ao piso e ao teto horário e recentrado para o mês manter o nível. A carga segue o mesmo critério na sua curva (ou o perfil
+            típico por tipo de dia), com incerteza no ano e no mês e, se informada, correlação com o preço.
           </li>
+          <li>O valor da flexibilidade e da sazonalização é quanto a estrutura escolhida economiza frente à mesma sem flexibilidade ou com volume flat, no custo esperado e no pior 5% dos cenários.</li>
+          <li>
+            A exposição de contraparte supõe que, se a comercializadora quebra no início de um mês, o resto do contrato (o volume que seria tomado em cada cenário) é comprado ao PLD; EE e PFE 95% da perda, descontada a
+            recuperação informada. É a métrica de exposição de crédito usada em derivativos.
+          </li>
+          <li>Ficam de fora a energia incentivada (desconto na TUSD), impostos e garantias financeiras. O desenho de cada dia é o do dia equivalente do histórico em todos os cenários: o nível muda, a forma do dia não.</li>
         </ul>
       </Panel>
     </div>

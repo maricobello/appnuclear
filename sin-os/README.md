@@ -388,19 +388,28 @@ tensão (Decreto 13.097/2026: comércio e indústria em 25/11/2027, residências
 140/2026), o cerco à inadimplência de comercializadoras, o NovoModelo, os limites do PLD e as
 bandeiras. Quando as fontes divergem, a divergência fica escrita.
 
-**Contratação ótima** (`src/lib/market/contracting.ts`): quanto contratar em volume flat para os
-próximos 12 meses. O custo do ano é o contrato mais a diferença entre carga e contrato liquidada ao
-PLD hora a hora — afim no volume, então o CVaR é convexo e o volume ótimo minimiza
-(1 − β)·custo esperado + β·CVaR 95%. Os 2.000 cenários de preço saem da faixa publicada no
-planejamento (lognormal com mediana no P50 e cauda no P90), com os meses correlacionados pelo ρ
-implícito nos cenários do próprio SDDP e as horas na forma do PLD real do mesmo mês no último ano.
-Saem o volume ótimo, a fronteira eficiente, o preço justo do flat, o preço da carga (e o custo de
-perfil), a comparação com o mercado regulado (TE + bandeira, com o ESS estimado como encargo) e a
-**exposição de contraparte** — EE e PFE 95% da perda se a comercializadora quebrar em cada mês,
-a métrica de crédito de derivativos aplicada ao contrato de energia.
+**Contratação ótima** (`src/lib/market/contracting.ts`, `src/lib/market/calendar.ts`): o contrato
+bilateral completo para os próximos 12 meses — volume anual, **sazonalização** (volume de cada mês
+dentro de ±s% com a energia do ano preservada: flat, conforme a carga ou ótima), **flexibilidade
+mensal** (±f%, ajustada ao consumo medido ou livre, como opção), **modulação** flat ou conforme a carga,
+**perdas**, **incerteza do consumo** (choque do ano e do mês, com correlação opcional com o preço) e
+submercado do contrato, que pode ser outro que o da carga (correlação histórica entre submercados). O
+custo de cada cenário é o contrato tomado mais a liquidação horária da diferença entre consumo e
+contrato, nas 8.760 horas do ano: cada dia usa o **dia equivalente** do PLD real (mesmo tipo de dia,
+com feriados nacionais e móveis, mesmo mês, ~52 semanas antes). Volume e sazonalização minimizam
+(1 − β)·custo esperado + β·CVaR 95% do custo por MWh consumido; como a flexibilidade torna o problema
+não convexo, a busca é global no volume e por trocas de energia entre pares de meses, com avaliação
+incremental (milhares de contratos em fração de segundo). Os 2.000 cenários de preço saem da faixa
+publicada no planejamento (lognormal com mediana no P50 e cauda no P90), com os meses correlacionados
+pelo ρ implícito nos cenários do SDDP. Saem o volume e a sazonalização ótimos, o valor da
+flexibilidade e da sazonalização, a tabela mês a mês, a fronteira eficiente, a distribuição do custo, o
+preço justo do flat e o da carga, a comparação com o mercado regulado (TE + bandeira, com o ESS
+estimado como encargo) e a **exposição de contraparte** — EE e PFE 95% da perda se a comercializadora
+quebrar em cada mês, com recuperação, a métrica de crédito de derivativos aplicada ao contrato.
 
 A curva de carga (CSV de memória de massa, 5 a 60 min, o dado que o Open Energy vai padronizar) é
-lida no navegador e não sai da máquina; sem ela, há perfis típicos de exemplo.
+lida no navegador e não sai da máquina; cada dia do contrato usa o dia equivalente da curva. Sem ela,
+há perfis típicos por tipo de dia.
 
 ## Térmicas & encargos (ESS)
 

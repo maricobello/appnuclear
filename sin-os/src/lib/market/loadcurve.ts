@@ -1,4 +1,5 @@
-import type { LoadProfile } from "./contracting";
+import { dayType, equivalentDay, isoDate, type DayType } from "./calendar";
+import type { ContractCalendar } from "./contracting";
 
 /**
  * Leitura da curva de carga (memória de massa) em CSV: o dado que o Open Energy vai padronizar e que
@@ -165,32 +166,62 @@ export interface LoadStats {
   monthsCovered: number;
 }
 
-/** Perfil mês civil × hora; meses sem pelo menos 7 dias de dado usam a média de todas as horas iguais. */
-export function profileFromCurve(c: ParsedCurve): { profile: LoadProfile; stats: LoadStats } {
-  const sum = Array.from({ length: 12 }, () => new Array(24).fill(0));
-  const cnt = Array.from({ length: 12 }, () => new Array(24).fill(0));
-  const days = Array.from({ length: 12 }, () => new Set<number>());
-  const all = new Array(24).fill(0);
-  const allN = new Array(24).fill(0);
+/** Indicadores da curva medida. */
+export function curveStats(c: ParsedCurve): LoadStats {
+  const months = new Map<number, Set<number>>();
   let peak = 0;
   let tot = 0;
   let ponta = 0;
   for (const p of c.hourly) {
-    sum[p.m - 1][p.h] += p.mw;
-    cnt[p.m - 1][p.h]++;
-    days[p.m - 1].add(Math.floor(p.key / 86_400_000));
-    all[p.h] += p.mw;
-    allN[p.h]++;
+    const set = months.get(p.m) ?? new Set<number>();
+    set.add(Math.floor(p.key / 86_400_000));
+    months.set(p.m, set);
     peak = Math.max(peak, p.mw);
     tot += p.mw;
     if (p.h >= 18 && p.h <= 20) ponta += p.mw;
   }
-  const avgHour = all.map((s, h) => (allN[h] ? s / allN[h] : 0));
-  const covered = days.map((d) => d.size >= 7);
-  const mw = sum.map((row, m) => (covered[m] ? row.map((s, h) => (cnt[m][h] ? s / cnt[m][h] : avgHour[h])) : [...avgHour]));
   const avgMw = c.hourly.length ? tot / c.hourly.length : 0;
   return {
-    profile: { mw, covered },
-    stats: { avgMw, peakMw: peak, loadFactor: peak ? avgMw / peak : 0, peakShare: tot ? ponta / tot : 0, monthsCovered: covered.filter(Boolean).length },
+    avgMw,
+    peakMw: peak,
+    loadFactor: peak ? avgMw / peak : 0,
+    peakShare: tot ? ponta / tot : 0,
+    monthsCovered: [...months.values()].filter((d) => d.size >= 7).length,
   };
+}
+
+/**
+ * Carga de cada hora do horizonte do contrato a partir da curva medida: cada dia usa o dia
+ * equivalente da curva (mesmo tipo de dia e mês civil, o mais perto de 52 semanas antes); sem
+ * equivalente, a média dos dias do mesmo tipo.
+ */
+export function contractLoad(c: ParsedCurve, cal: ContractCalendar): { load: Float64Array; equivalent: number; fallback: number } {
+  const byDay = new Map<string, number[]>();
+  for (const p of c.hourly) {
+    const d = isoDate(p.y, p.m, p.d);
+    const row = byDay.get(d) ?? new Array<number>(24).fill(NaN);
+    row[p.h] = p.mw;
+    byDay.set(d, row);
+  }
+  const complete = new Map([...byDay].filter(([, r]) => r.every((v) => Number.isFinite(v))));
+  const avg: Record<DayType, number[]> = { util: new Array(24).fill(0), sab: new Array(24).fill(0), dom: new Array(24).fill(0) };
+  const cnt: Record<DayType, number> = { util: 0, sab: 0, dom: 0 };
+  for (const [d, r] of complete) {
+    const t = dayType(d);
+    r.forEach((v, h) => (avg[t][h] += v));
+    cnt[t]++;
+  }
+  const all = Array.from({ length: 24 }, (_, h) => (avg.util[h] + avg.sab[h] + avg.dom[h]) / Math.max(1, cnt.util + cnt.sab + cnt.dom));
+  const typical = (t: DayType) => (cnt[t] ? avg[t].map((v) => v / cnt[t]) : all);
+  const load = new Float64Array(cal.total);
+  let equivalent = 0;
+  let fallback = 0;
+  cal.days.forEach((day, i) => {
+    const eq = equivalentDay(day.date, (d) => complete.has(d));
+    const row = eq ? complete.get(eq)! : typical(dayType(day.date));
+    if (eq) equivalent++;
+    else fallback++;
+    for (let h = 0; h < 24; h++) load[i * 24 + h] = row[h];
+  });
+  return { load, equivalent, fallback };
 }
