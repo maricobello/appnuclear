@@ -524,7 +524,7 @@ function radarMercado(args: Record<string, unknown>): ToolOutcome {
         fontes: r.fontes.map((f) => f.nome),
       })),
       quem_pode_migrar: MIGRACAO.map((m) => ({ quem: m.label, desde: m.desde, detalhe: m.detalhe })),
-      nota: "Curado a partir de notícias e atos oficiais; quando as fontes divergem, a ressalva diz. Para contratar, o simulador em /mercado-livre calcula o volume ótimo com a curva de carga do usuário.",
+      nota: "Curado a partir de notícias e atos oficiais; quando as fontes divergem, a ressalva diz. Para contratar, o simulador em /mercado-livre calcula volume, sazonalização e flexibilidade ótimos com a curva de carga do usuário, hora a hora, e quanto vale pagar a mais por cada cláusula.",
     },
   };
 }

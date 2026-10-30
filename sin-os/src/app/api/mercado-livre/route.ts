@@ -6,9 +6,9 @@ export const maxDuration = 60;
 
 /**
  * Insumos do simulador de contratação no mercado livre: faixas de preço dos próximos 12 meses
- * (planejamento), correlação entre meses implícita nos cenários do SDDP, forma horária do PLD no
- * último ano, limites e bandeiras. A curva de carga do usuário não passa por aqui: o cálculo roda
- * no navegador.
+ * (planejamento), correlação entre meses implícita nos cenários do SDDP, desvio do PLD em cada hora
+ * do ano do contrato pelo dia equivalente do histórico, correlação entre submercados, limites e
+ * bandeiras. A curva de carga do usuário não passa por aqui: o cálculo roda no navegador.
  */
 export async function GET() {
   try {
