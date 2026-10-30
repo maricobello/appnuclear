@@ -140,6 +140,16 @@ describe("ferramentas da Iara", () => {
     expect(r.pld_oficial).toBe(false);
   });
 
+  it("radar_mercado: itens com fonte, filtro por tema e quem pode migrar", async () => {
+    const all = (await executeTool("radar_mercado", {}, { now: NOW, asset: ASSET }, deps(src(PLD)))).result as { itens: { tema: string; titulo: string; fontes: string[] }[]; quem_pode_migrar: { desde: string }[] };
+    expect(all.itens[0].titulo).toContain("Open Energy");
+    expect(all.itens.every((i) => i.fontes.length > 0)).toBe(true);
+    expect(all.quem_pode_migrar.map((m) => m.desde)).toContain("2027-11-25");
+    const abertura = (await executeTool("radar_mercado", { tema: "abertura" }, { now: NOW, asset: ASSET }, deps(src(PLD)))).result as { itens: { tema: string }[] };
+    expect(abertura.itens.length).toBeGreaterThan(0);
+    expect(abertura.itens.every((i) => i.tema === "Abertura do mercado")).toBe(true);
+  });
+
   it("planejamento_sddp: PLD mensal com faixa, média de 12 meses e retroanálise do submercado pedido", async () => {
     const out = await executeTool("planejamento_sddp", { sub: "ne" }, { now: NOW, asset: ASSET }, deps(src(PLD)));
     const r = out.result as { submercado: string; pld_mensal: { mes: string; p10: number; p50: number; p90: number }[]; dados_ate: string; nota: string; retroanalise: Record<string, unknown> };

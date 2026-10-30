@@ -114,6 +114,7 @@ export type { RenewablesReport as RenovaveisResp } from "./market/renewables-rep
 export type { GridReport as RedeResp } from "./grid/report";
 export type { ThermalReportResp as TermicasResp } from "./market/thermal-report";
 export type { PlanView as PlanejamentoResp } from "./planning/view";
+export type { FreeMarketInputs as MercadoLivreResp } from "./market/free-market";
 
 export interface AlertasResp {
   generatedAt: number;

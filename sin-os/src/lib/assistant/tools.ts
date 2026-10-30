@@ -7,6 +7,7 @@ import { dayRow, dayStats } from "../market/pld-summary";
 import type { ForecastResult } from "../market/forecast";
 import { buildOpportunities, pickDay } from "../market/opportunities";
 import { headline12, headlineBand, headlinePld, type PlanReport } from "../planning/report";
+import { MIGRACAO, RADAR_UPDATED, radarSorted, TEMA_LABEL, type RadarTema } from "../market/radar";
 import { brtDate, brtHour } from "../sources/time";
 import { SUB_NAMES, SUBS, type DailySubPanel, type SourceResult, type Sub, type SubPanel } from "../sources/types";
 import type { ToolDef } from "./groq";
@@ -24,6 +25,7 @@ export const ROUTES = {
   "/renovaveis": "Renováveis & corte",
   "/previsao": "Previsão",
   "/planejamento": "Planejamento (SDDP)",
+  "/mercado-livre": "Mercado livre & Open Energy",
   "/arbitragem": "Arbitragem",
   "/bess": "BESS",
   "/carteira": "Carteira",
@@ -174,6 +176,19 @@ export const TOOL_DEFS: ToolDef[] = [
       parameters: {
         type: "object",
         properties: { dias: { type: "integer", minimum: 3, maximum: 31, description: "janela de dias fechados (padrão 14)" } },
+        additionalProperties: false,
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "radar_mercado",
+      description:
+        "Radar regulatório do mercado de energia: Open Energy (aprovado pela ANEEL em 27/10/2026), abertura do mercado livre para a baixa tensão (Decreto 13.097/2026), Lei 15.269/2025, leilões de baterias de dezembro de 2026, ressarcimento de curtailment, inadimplência de comercializadoras, NovoModelo, limites do PLD e bandeiras tarifárias, com datas, status e fontes. Use para perguntas sobre o que mudou ou vai mudar no mercado e sobre quando cada consumidor pode migrar para o mercado livre.",
+      parameters: {
+        type: "object",
+        properties: { tema: { type: "string", enum: ["abertura", "dados", "precos", "leiloes", "renovaveis", "risco", "modelos", "tarifas"], description: "Filtra por tema (opcional)" } },
         additionalProperties: false,
       },
     },
@@ -491,6 +506,29 @@ async function planejamentoSddp(args: Record<string, unknown>, _ctx: ToolCtx, de
   };
 }
 
+function radarMercado(args: Record<string, unknown>): ToolOutcome {
+  const tema = typeof args.tema === "string" && args.tema in TEMA_LABEL ? (args.tema as RadarTema) : null;
+  const itens = radarSorted().filter((r) => !tema || r.tema === tema);
+  return {
+    result: {
+      atualizado_em: RADAR_UPDATED,
+      itens: itens.map((r) => ({
+        data: r.data,
+        tema: TEMA_LABEL[r.tema],
+        titulo: r.titulo,
+        status: r.status,
+        o_que_muda: r.oQueMuda,
+        quem_afeta: r.quemAfeta,
+        proximas_datas: r.marcos ?? [],
+        ressalva: r.ressalva ?? null,
+        fontes: r.fontes.map((f) => f.nome),
+      })),
+      quem_pode_migrar: MIGRACAO.map((m) => ({ quem: m.label, desde: m.desde, detalhe: m.detalhe })),
+      nota: "Curado a partir de notícias e atos oficiais; quando as fontes divergem, a ressalva diz. Para contratar, o simulador em /mercado-livre calcula o volume ótimo com a curva de carga do usuário.",
+    },
+  };
+}
+
 function navegar(args: Record<string, unknown>): ToolOutcome {
   const rota = typeof args.rota === "string" && args.rota in ROUTES ? (args.rota as Route) : null;
   if (!rota) return { result: { erro: `rota desconhecida; use uma de ${Object.keys(ROUTES).join(", ")}` } };
@@ -538,6 +576,8 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return await confiancaDados(args, ctx, deps);
       case "renovaveis_corte":
         return await renovaveisCorte(args, ctx, deps);
+      case "radar_mercado":
+        return radarMercado(args);
       case "planejamento_sddp":
         return await planejamentoSddp(args, ctx, deps);
       case "navegar":

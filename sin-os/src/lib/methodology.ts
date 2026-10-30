@@ -560,6 +560,23 @@ export function methodology(env: Record<string, string | undefined> = process.en
         "restrições elétricas internas aos submercados ficam de fora; as interligações usam o que já foi medido, não o limite operativo publicado",
       ],
     },
+    freeMarket: {
+      steps: [
+        "custo do ano para um volume flat q (MWmed) a um preço P: C = Σ horas [q·P + (carga − q)·PLD] = A + q·(H·P − T), com A o custo de comprar toda a carga ao PLD e T a soma do PLD nas H horas; afim em q, então o custo esperado é linear e o CVaR é convexo",
+        "volume ótimo: o q em [0; 1,5 × carga média] que minimiza (1 − β)·E[C] + β·CVaR 95%[C], por grade de 31 pontos e seção áurea; com β = 0 a resposta é de canto (tudo no contrato abaixo do preço justo, nada acima)",
+        "preço justo do flat = PLD médio esperado no tempo (E[T]/H); preço da carga = PLD médio esperado ponderado pela carga (E[A]/energia); a diferença é o custo de perfil",
+        "nível mensal do PLD em 2.000 cenários: lognormal com mediana no P50 e cauda no P90 da faixa publicada no Planejamento, piso no PLD mínimo do ano",
+        "meses correlacionados por um fator comum: ρ é o que faz, nos cenários do SDDP, o P90 − P50 da média de 12 meses repetir a razão que o SDDP produziu sobre a média dos P90 − P50 mensais (bisseção em ρ)",
+        "forma horária: desvio médio de cada hora à média do dia no mesmo mês civil, nos dias completos do PLD horário do último ano; somada ao nível, limitada ao piso e ao teto horário e recentrada para o mês manter o nível",
+        "exposição de contraparte: se a comercializadora quebra no início do mês t, o resto do contrato é reposto ao PLD do cenário; EE = média e PFE = quantil 95% da parte positiva de q·Σ(PLD médio do mês − P)·horas",
+        "curva de carga: CSV de memória de massa (5 a 60 min, kWh/kW/MWh/MW) lido no navegador e reduzido à média por mês civil e hora; meses com menos de 7 dias usam a média de todas as horas iguais",
+      ],
+      limits: [
+        "a variação da carga entre dias de um mesmo mês e a correlação dela com o preço do dia ficam de fora",
+        "contrato flat, sem flexibilidade, sazonalização ou modulação; energia incentivada e impostos fora da comparação com o mercado regulado",
+        "as faixas vêm do planejamento: se o worker diário atrasa, o simulador usa o último relatório e avisa",
+      ],
+    },
     limits: PLD_LIMITS,
   };
 }

@@ -134,6 +134,8 @@ class RunOfRiver:
     share: dict[str, dict[int, float]]  # fração média da armazenável por mês do ano (para antes de 2018)
     table: list[dict]
     check_max_err: float
+    #: Dias em que o arquivo por REE truncou em zero a ENA armazenável negativa e a soma não bate.
+    truncated_days: int = 0
 
 
 def run_of_river(ree: pd.DataFrame, earmax: pd.Series, ena: pd.DataFrame, asof: dt.date) -> RunOfRiver:
@@ -153,10 +155,18 @@ def run_of_river(ree: pd.DataFrame, earmax: pd.Series, ena: pd.DataFrame, asof: 
         if is_ror and sub:
             rees[sub].append(name)
     tot = r.groupby(["date", "sub"])["armaz"].sum().rename("ree_sum").reset_index()
-    chk = tot.merge(ena[["date", "sub", "armaz"]], on=["date", "sub"])
-    err = float(((chk["ree_sum"] - chk["armaz"]).abs() / chk["armaz"].abs().clip(lower=1.0)).max()) if len(chk) else 1.0
+    zeros = r[r["armaz"] <= 0].groupby(["date", "sub"]).size().rename("zeros").reset_index()
+    chk = tot.merge(ena[["date", "sub", "armaz"]], on=["date", "sub"]).merge(zeros, on=["date", "sub"], how="left").fillna({"zeros": 0})
+    chk["err"] = (chk["ree_sum"] - chk["armaz"]).abs() / chk["armaz"].abs().clip(lower=1.0)
+    # O arquivo por REE grava como zero a ENA armazenável negativa (reservatório a montante enchendo) e o do
+    # subsistema não: nesses dias a soma dos REEs fica acima do total sem que o mapeamento tenha mudado
+    # (out/2026: Itaipu e Paranapanema zerados de 18 a 23/10, até 22% no SE).
+    trunc = (chk["zeros"] > 0) & (chk["ree_sum"] >= chk["armaz"])
+    real = chk[~trunc]
+    err = float(real["err"].max()) if len(real) else 1.0
     if err > 0.02:
         raise RuntimeError(f"soma da ENA por REE difere da ENA do subsistema em até {err:.1%}: mapeamento REE → subsistema mudou?")
+    truncated = int((trunc & (chk["err"] > 0.02)).sum())
     ror = r[r["ree"].isin([x for v in rees.values() for x in v])].groupby(["date", "sub"])["armaz"].sum().clip(lower=0.0)
     daily = ror.rename("ror").reset_index()
     sub_daily = ena.set_index(["date", "sub"])["armaz"]
@@ -169,7 +179,8 @@ def run_of_river(ree: pd.DataFrame, earmax: pd.Series, ena: pd.DataFrame, asof: 
         a = sub_daily.xs(s, level="sub").reindex(x.index)
         by = pd.DataFrame({"ror": x, "a": a}).dropna()
         share[s] = {int(m): float(np.clip(g["ror"].sum() / g["a"].sum(), 0.0, 1.0)) for m, g in by.groupby(by.index.month)}
-    return RunOfRiver(rees=rees, daily=daily, share=share, table=sorted(table, key=lambda x: (x["sub"] or "", x["ree"])), check_max_err=round(err, 5))
+    return RunOfRiver(rees=rees, daily=daily, share=share, table=sorted(table, key=lambda x: (x["sub"] or "", x["ree"])), check_max_err=round(err, 5),
+                      truncated_days=truncated)
 
 
 def balance_hourly(f: ons.Fetcher, years: range, this_year: int) -> pd.DataFrame:

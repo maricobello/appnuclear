@@ -375,6 +375,33 @@ python planning/run.py --out planejamento.json   # --post https://sinos-iota.ver
 python planning/hindcast.py --from 2025-01 --to 2026-09 --out planning/validacao.json
 ```
 
+## Mercado livre & Open Energy
+
+Tela `/mercado-livre`, `GET /api/mercado-livre` e a ferramenta `radar_mercado` da Iara.
+
+**Radar regulatório** (`src/lib/market/radar.ts`): as mudanças recentes que mexem com preço, risco ou
+acesso ao mercado livre, cada uma com data, status, quem sente, próximas datas e fontes — o Open
+Energy aprovado pela ANEEL em 27/10/2026 (dados de consumo, faturamento e medição compartilháveis com
+autorização do consumidor; comparador da CCEE; migração do Grupo A em 90 dias), a abertura da baixa
+tensão (Decreto 13.097/2026: comércio e indústria em 25/11/2027, residências em 25/11/2028), a Lei
+15.269/2025, os leilões de baterias de 2 e 4/12/2026, o ressarcimento de curtailment (Portaria MME
+140/2026), o cerco à inadimplência de comercializadoras, o NovoModelo, os limites do PLD e as
+bandeiras. Quando as fontes divergem, a divergência fica escrita.
+
+**Contratação ótima** (`src/lib/market/contracting.ts`): quanto contratar em volume flat para os
+próximos 12 meses. O custo do ano é o contrato mais a diferença entre carga e contrato liquidada ao
+PLD hora a hora — afim no volume, então o CVaR é convexo e o volume ótimo minimiza
+(1 − β)·custo esperado + β·CVaR 95%. Os 2.000 cenários de preço saem da faixa publicada no
+planejamento (lognormal com mediana no P50 e cauda no P90), com os meses correlacionados pelo ρ
+implícito nos cenários do próprio SDDP e as horas na forma do PLD real do mesmo mês no último ano.
+Saem o volume ótimo, a fronteira eficiente, o preço justo do flat, o preço da carga (e o custo de
+perfil), a comparação com o mercado regulado (TE + bandeira, com o ESS estimado como encargo) e a
+**exposição de contraparte** — EE e PFE 95% da perda se a comercializadora quebrar em cada mês,
+a métrica de crédito de derivativos aplicada ao contrato de energia.
+
+A curva de carga (CSV de memória de massa, 5 a 60 min, o dado que o Open Energy vai padronizar) é
+lida no navegador e não sai da máquina; sem ela, há perfis típicos de exemplo.
+
 ## Térmicas & encargos (ESS)
 
 Tela `/termicas` e `GET /api/termicas?dias=7` (3–31). O ONS publica, hora a hora e por usina, a

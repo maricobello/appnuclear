@@ -238,7 +238,7 @@ def case_summary(cs: C.Case, base: dict) -> dict:
     fl = cs.fleet.plants
     return {
         "aproveitamento_ena": cs.k,
-        "fio_dagua": {"rees": cs.ror.rees, "tabela": cs.ror.table, "erro_soma_ree": cs.ror.check_max_err,
+        "fio_dagua": {"rees": cs.ror.rees, "tabela": cs.ror.table, "erro_soma_ree": cs.ror.check_max_err, "dias_ree_truncados": cs.ror.truncated_days,
                       "fracao_media": {s: round(float(np.mean(list(v.values()))), 3) for s, v in cs.ror.share.items()}} if cs.ror else None,
         "armazenamento": cs.store,
         "vazao_minima_mw": cs.min_outflow,

@@ -100,6 +100,19 @@ def test_run_of_river_split_and_current_configuration():
     asof = dt.date(2026, 9, 30)
     ror = I.run_of_river(ree, earmax, ena, asof)
     assert ror.rees["SE"] == ["MADEIRA"] and ror.rees["N"] == [] and ror.check_max_err < 1e-9
+    # o arquivo por REE trunca em zero a ENA armazenável negativa: a soma passa do total, mas o mapeamento é o mesmo
+    tr = ree.copy()
+    neg = (tr["ree"] == "PARANA") & tr["date"].between("2026-09-10", "2026-09-15")
+    tr.loc[neg, "armaz"] = 0.0
+    en = ena.copy()
+    se = (en["sub"] == "SE") & en["date"].between("2026-09-10", "2026-09-15")
+    en.loc[se, "armaz"] = en.loc[se, "armaz"] * 0.4 - 30.0  # PARANA negativo no total do subsistema
+    ok = I.run_of_river(tr, earmax, en, asof)
+    assert ok.truncated_days == 6 and ok.check_max_err < 1e-9
+    # já um REE que some do mapa (soma abaixo do total) continua derrubando a rodada
+    lost = ree[~((ree["ree"] == "MADEIRA") & (ree["date"] >= "2026-09-01"))]
+    with pytest.raises(RuntimeError, match="mapeamento"):
+        I.run_of_river(lost, earmax, ena, asof)
     assert ror.share["SE"][5] == pytest.approx(0.4)
     mlt = I.mlt_now(ena, asof)
     assert mlt["SE"][7] == pytest.approx(100.0)

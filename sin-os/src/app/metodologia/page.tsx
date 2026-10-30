@@ -19,6 +19,7 @@ const SECTIONS = [
   ["rede", "Modelo da rede"],
   ["termicas", "Térmicas e ESS"],
   ["planejamento", "Planejamento (SDDP)"],
+  ["mercado-livre", "Contratação no mercado livre"],
 ] as const;
 
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
@@ -392,6 +393,28 @@ export default function MetodologiaPage() {
                 <p className="mb-1 text-[13px] font-medium text-ink">Limites conhecidos</p>
                 <List items={m.planning.limits} />
               </div>
+            </div>
+          </div>
+        </Panel>
+      </section>
+
+      <section id="mercado-livre" className="scroll-mt-16">
+        <Panel
+          title="Contratação no mercado livre"
+          subtitle="Volume ótimo com CVaR, preço justo, custo de perfil e risco de contraparte sobre os cenários do planejamento"
+          right={
+            <Link href="/mercado-livre" className="text-[12px] text-accent hover:underline">
+              ver no simulador
+            </Link>
+          }
+        >
+          <div className="grid grid-cols-1 gap-4 xl:grid-cols-3">
+            <div className="xl:col-span-2">
+              <List items={m.freeMarket.steps} />
+            </div>
+            <div>
+              <p className="mb-1 text-[13px] font-medium text-ink">Limites conhecidos</p>
+              <List items={m.freeMarket.limits} />
             </div>
           </div>
         </Panel>
