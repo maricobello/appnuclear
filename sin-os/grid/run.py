@@ -27,7 +27,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import pandas as pd  # noqa: E402
 
-from sin_grid import dispatch, flows, model, ons, report  # noqa: E402
+from sin_grid import dispatch, flows, model, ons, report, shortcircuit  # noqa: E402
 
 P3S_COMMIT = os.environ.get("P3S_COMMIT", "")
 
@@ -72,11 +72,29 @@ def main() -> int:
     print(f"rede: {m.stats['barras_ilha_principal']} barras, {m.stats['linhas']} linhas, {m.stats['trafos']} transformadores ({time.time() - t0:.0f} s)", flush=True)
     d = dispatch.build(m, f, regs, date)
     r = flows.run(m, d, n_threads=args.threads)
+    # curto-circuito trifásico (IEC 60909) nas 24 horas; se falhar, o relatório do fluxo sai assim mesmo
+    try:
+        t1 = time.time()
+        try:  # potência sincronizada por usina e hora (ONS); sem ela, as unidades saem da geração
+            sync = shortcircuit.load_sync(f, date)
+        except Exception as e:  # noqa: BLE001
+            sync = None
+            print(f"::warning::disponibilidade sincronizada indisponível: {e}", flush=True)
+        sc = shortcircuit.run(m, d, regs, sync=sync)
+        st = sc.stats
+        print(f"curto: {st['usinas']} usinas ({st['usinas_pela_disponibilidade']} pela disponibilidade sincronizada, "
+              f"{100 * st['geracao_sincrona_com_disponibilidade']:.0f}% da geração síncrona) e {st['compensadores']} compensadores · "
+              f"{st['mva_sincrono_min']}–{st['mva_sincrono_max']} MVA ligados · pandapower {sc.check.get('dif_rel_max')} · {time.time() - t1:.0f} s", flush=True)
+        if not sc.check.get("ok"):
+            print(f"::warning::conferência do curto com o pandapower falhou: {sc.check.get('erro') or sc.check.get('dif_rel_max')}", flush=True)
+    except Exception as e:  # noqa: BLE001
+        sc = None
+        print(f"::warning::curto-circuito não calculado: {e}", flush=True)
     meta = {"solver": {"nome": "p3s (parallel pandapower solver, Fraunhofer IEE)", "versao": _version("parallel-pandapower-solver"),
                        "commit": P3S_COMMIT, "pandapower": _version("pandapower"),
                        "metodo": "Newton-Raphson AC em lote (C++/KLU), 24 horas; N-1 em lote na hora de maior carga",
                        "segundos": round(time.time() - t0, 1)}}
-    rep = report.build(m, d, r, f, meta)
+    rep = report.build(m, d, r, f, meta, sc)
     rep["solver"]["segundos"] = round(time.time() - t0, 1)
     Path(args.out).write_text(json.dumps(rep, ensure_ascii=False))
     v = rep["validation"]
@@ -94,8 +112,11 @@ def main() -> int:
             text = resp.read().decode(errors="replace")
         print("enviado:", resp.status, text[:300], flush=True)
         try:
-            stored = json.loads(text).get("armazenamento")
-        except ValueError:
+            answer = json.loads(text)
+            stored = answer.get("armazenamento")
+            if answer.get("curto_descartado"):
+                print(f"::warning::o app recusou a seção de curto-circuito: {answer['curto_descartado']}", flush=True)
+        except (ValueError, AttributeError):
             stored = None
         if stored != "firestore":
             # o app aceitou, mas só na memória da instância (Firestore fora ou sem cota): aparece no resumo do Actions

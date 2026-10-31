@@ -12,8 +12,12 @@ import { SUBS, type SourceResult, type SubPanel } from "../src/lib/sources/types
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { PlanReportSchema } from "../src/lib/planning/report";
+import type { GridSnapshot } from "../src/lib/grid/snapshot";
 
 const PLAN = PlanReportSchema.parse(JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/planejamento.json"), "utf8")));
+// curto-circuito de verdade (worker da rede, 29/10/2026) em 23 barras
+const CURTO = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/curto-amostra.json"), "utf8")) as NonNullable<GridSnapshot["curto"]>;
+const GRID = { date: "2026-10-29", curto: CURTO } as unknown as GridSnapshot;
 
 const ASSET: AssetCtx = { name: "BESS teste", sub: "SE", pow: 100, cap: 400, rte: 88, deg: 0.5, lcos: 312.45, wacc: 10, life: 20, opex: 2, ref: 1, maxc: 1, days: 365 };
 // 2026-09-27 15:30 BRT
@@ -57,6 +61,7 @@ function deps(pld: SourceResult<SubPanel>): AssistantDeps {
     trust: async () => ({ totalRevisions30d: 2, windowDays: 10, seals: [{ source: "ons_carga", name: "Carga", monitored: true, level: "média", revisions30d: 2, reasons: ["2 dia(s) republicado(s)"] }] }),
     renewables: async (days) => RENEW(days),
     plan: async () => ({ report: PLAN, ageDays: 0.4 }),
+    grid: async () => ({ snapshot: GRID, ageDays: 1 }),
     dataMode: () => "live",
   };
 }
@@ -148,6 +153,48 @@ describe("ferramentas da Iara", () => {
     const abertura = (await executeTool("radar_mercado", { tema: "abertura" }, { now: NOW, asset: ASSET }, deps(src(PLD)))).result as { itens: { tema: string }[] };
     expect(abertura.itens.length).toBeGreaterThan(0);
     expect(abertura.itens.every((i) => i.tema === "Abertura do mercado")).toBe(true);
+  });
+
+  it("forca_da_rede: curto mínimo e máximo, SCR simples e composto com a classe e o maior parque com SCR ≥ 3", async () => {
+    const call = (args: Record<string, unknown>) => executeTool("forca_da_rede", args, { now: NOW, asset: ASSET }, deps(src(PLD)));
+    type Bar = { nome: string; kv: number; curto_min_mva: number; scr_composto: number; scr_sozinho_na_barra: number; classe: string; maior_parque_scr_3_mw: number; ik_min_ka: number; eolica_solar_ja_ligada_mw: number; fronteira?: string; curto_min_com_todos_os_compensadores_mva?: number };
+    const r = (await call({ subestacao: "paulino", mw: 500 })).result as { dia_modelado: string; dias_desde_o_dia_modelado: number; conferencia_pandapower: string; barras: Bar[] };
+    expect(r.dia_modelado).toBe("2026-10-29");
+    expect(r.conferencia_pandapower).toBe("confere");
+    expect("dias_desde_o_dia_modelado" in r).toBe(true);
+    const b = r.barras[0];
+    expect(b.nome).toBe("PAULINO NEVES");
+    expect(b.eolica_solar_ja_ligada_mw).toBe(0);
+    expect(b.scr_composto).toBeCloseTo(b.curto_min_mva / 500, 2);
+    expect(b.scr_sozinho_na_barra).toBeCloseTo(b.curto_min_mva / 500, 2);
+    expect(b.classe).toBe(b.scr_composto >= 3 ? "forte" : b.scr_composto >= 2 ? "fraca" : "muito fraca");
+    expect(b.maior_parque_scr_3_mw).toBe(Math.round(b.curto_min_mva / 3));
+    expect(b.ik_min_ka).toBeCloseTo(b.curto_min_mva / (Math.sqrt(3) * b.kv), 2);
+    // Açu III: a eólica já ligada derruba o SCR composto; potência em texto pt-BR também vale
+    const acu = ((await call({ subestacao: "Açu III 500", mw: "1.000" })).result as { barras: Bar[] }).barras[0];
+    expect(acu.eolica_solar_ja_ligada_mw).toBeGreaterThan(3000);
+    expect(acu.scr_composto).toBeCloseTo(acu.curto_min_mva / (1000 + acu.eolica_solar_ja_ligada_mw), 1);
+    expect(acu.classe).toBe("muito fraca");
+    expect(acu.maior_parque_scr_3_mw).toBe(0);
+    // Tapajós II: o mínimo tira o único compensador da subestação e mostra o valor com ele
+    const tp = ((await call({ subestacao: "Tapajós" })).result as { barras: Bar[] }).barras[0];
+    expect(tp.curto_min_com_todos_os_compensadores_mva).toBeGreaterThan(2 * tp.curto_min_mva);
+    // potência inválida: avisa e segue sem SCR
+    const bad = (await call({ subestacao: "paulino", mw: "muito" })).result as { aviso_mw?: string; barras: Partial<Bar>[] };
+    expect(bad.aviso_mw).toContain("inválida");
+    expect(bad.barras[0].scr_composto).toBeUndefined();
+    // fronteira: Uruguai por conversora (vale como está)
+    const melo = ((await call({ subestacao: "Melo" })).result as { barras: Bar[] }).barras[0];
+    expect(melo.fronteira).toMatch(/Uruguai.*vale como está/);
+    // número da barra como número; nome vazio, sem curto e nome que não existe: erro claro
+    const num = (await call({ subestacao: 5695 })).result as { barras: Bar[] };
+    expect(num.barras[0].nome).toBe("PAULINO NEVES");
+    expect(((await call({ subestacao: "  " })).result as { erro: string }).erro).toContain("subestação");
+    const none = await executeTool("forca_da_rede", { subestacao: "x" }, { now: NOW, asset: ASSET }, { ...deps(src(PLD)), grid: async () => ({ snapshot: null, ageDays: null }) });
+    expect((none.result as { erro: string }).erro).toContain("indisponível");
+    const miss = (await call({ subestacao: "Atlantida" })).result as { erro: string; dica: string };
+    expect(miss.erro).toContain("nenhuma barra");
+    expect(miss.dica).toContain("abrevia");
   });
 
   it("planejamento_sddp: PLD mensal com faixa, média de 12 meses e retroanálise do submercado pedido", async () => {

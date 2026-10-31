@@ -7,6 +7,8 @@ import { dayRow, dayStats } from "../market/pld-summary";
 import type { ForecastResult } from "../market/forecast";
 import { buildOpportunities, pickDay } from "../market/opportunities";
 import { headline12, headlineBand, headlinePld, type PlanReport } from "../planning/report";
+import type { GridSnapshot } from "../grid/snapshot";
+import { borderNote, busRows, classify, COMPENSATOR_GAP, ikA, maxPlantMw, NO_MATCH_HINT, parseMw, scr, scrComposite, searchBuses } from "../grid/strength";
 import { MIGRACAO, RADAR_UPDATED, radarSorted, TEMA_LABEL, type RadarTema } from "../market/radar";
 import { brtDate, brtHour } from "../sources/time";
 import { SUB_NAMES, SUBS, type DailySubPanel, type SourceResult, type Sub, type SubPanel } from "../sources/types";
@@ -26,6 +28,7 @@ export const ROUTES = {
   "/previsao": "Previsão",
   "/planejamento": "Planejamento (SDDP)",
   "/mercado-livre": "Mercado livre & Open Energy",
+  "/rede": "Rede elétrica (fluxo, N-1 e força da rede)",
   "/arbitragem": "Arbitragem",
   "/bess": "BESS",
   "/carteira": "Carteira",
@@ -75,6 +78,8 @@ export interface AssistantDeps {
   renewables: (days: number) => Promise<RenewablesReport>;
   /** Último relatório do planejamento (NovoModelo no worker diário) e a idade em dias. */
   plan: () => Promise<{ report: PlanReport | null; ageDays: number | null }>;
+  /** Último retrato do modelo da rede (fluxo, N-1 e curto-circuito) e a idade em dias. */
+  grid: () => Promise<{ snapshot: GridSnapshot | null; ageDays: number | null }>;
   dataMode: () => string;
 }
 
@@ -200,6 +205,23 @@ export const TOOL_DEFS: ToolDef[] = [
       description:
         "Planejamento da operação com o NovoModelo (o SDDP oficial de ONS, CCEE e EPE) rodado todo dia sobre dados abertos do ONS: PLD publicado mês a mês nos próximos 12 meses (mediana e faixa P10–P90 calibradas pela retroanálise), média de 12 meses, armazenamento projetado, risco de déficit, valor da água, aversão a risco implícita e o erro da retroanálise contra a persistência e o DESSEM de 14 dias. Use para perguntas de médio prazo (próximos meses, fim do período seco, ano que vem); para as próximas horas e dias use previsao_pld.",
       parameters: { type: "object", properties: { sub: SUB_ENUM }, additionalProperties: false },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "forca_da_rede",
+      description:
+        "Força da rede para conectar usina com inversores (solar, eólica, bateria) numa subestação: potência de curto-circuito trifásica mínima e máxima do dia (IEC 60909, calculada todo dia sobre o modelo do SIN com os cadastros e o despacho do ONS), a relação de curto-circuito (SCR) de um parque de X MW com a classe (forte ≥ 3, fraca 2–3, muito fraca < 2), o SCR composto (somando a eólica e a solar já ligadas na subestação) e o maior parque que mantém SCR ≥ 3. Use para perguntas sobre conexão de usina ou bateria, rede fraca, nível de curto ou SCR. É triagem: não substitui o estudo de acesso do ONS.",
+      parameters: {
+        type: "object",
+        properties: {
+          subestacao: { type: "string", description: "Nome ou parte do nome da subestação; pode levar a tensão (\"Ibiúna 345\") ou o número da barra" },
+          mw: { type: "number", description: "Potência do parque em MW (opcional)" },
+        },
+        required: ["subestacao"],
+        additionalProperties: false,
+      },
     },
   },
   {
@@ -459,6 +481,55 @@ async function renovaveisCorte(args: Record<string, unknown>, _ctx: ToolCtx, dep
   };
 }
 
+async function forcaDaRede(args: Record<string, unknown>, _ctx: ToolCtx, deps: AssistantDeps): Promise<ToolOutcome> {
+  const { snapshot: s, ageDays } = await deps.grid();
+  if (!s?.curto) return { result: { erro: "curto-circuito da rede indisponível agora (o worker da rede ainda não enviou o cálculo)" } };
+  const raw = args.subestacao;
+  const q = (typeof raw === "string" ? raw : typeof raw === "number" && Number.isFinite(raw) ? String(raw) : "").trim().slice(0, 80);
+  if (!q) return { result: { erro: "diga o nome da subestação (ou o número da barra)" } };
+  const mwRaw = args.mw;
+  const mw = parseMw(typeof mwRaw === "number" || typeof mwRaw === "string" ? mwRaw : null);
+  const mwBad = mwRaw !== undefined && mwRaw !== null && mwRaw !== "" && mw === null;
+  const sc = s.curto;
+  const found = searchBuses(busRows(sc), q, 6);
+  if (!found.items.length) return { result: { erro: `nenhuma barra com "${q}" no cadastro do ONS`, dica: NO_MATCH_HINT } };
+  return {
+    result: {
+      dia_modelado: s.date,
+      dias_desde_o_dia_modelado: r2(ageDays),
+      metodo: sc.metodo,
+      conferencia_pandapower: sc.validacao.ok ? "confere" : "falhou",
+      hora_mais_fraca_do_sistema: sc.horaFraca,
+      ...(found.total > found.items.length ? { barras_encontradas: found.total, mostrando: found.items.length } : {}),
+      ...(mwBad ? { aviso_mw: "potência inválida: use só o número em MW, como 100 ou 1200" } : {}),
+      barras: found.items.map((b) => {
+        const alone = mw ? scr(b.skMin, mw) : null;
+        const comp = mw ? scrComposite(b.skMin, mw, b.ibrMw) : null;
+        const note = borderNote(sc, b);
+        return {
+          barra: b.anarede,
+          nome: b.nome,
+          kv: b.kv,
+          uf: b.uf,
+          curto_min_mva: b.skMin,
+          hora_min: b.hMin,
+          curto_max_despacho_mva: b.skMax,
+          hora_max: b.hMax,
+          ik_min_ka: r2(ikA(b.skMin, b.kv)),
+          ik_max_ka: r2(ikA(b.skMax, b.kv)),
+          ...(b.skMinAll > b.skMin * COMPENSATOR_GAP ? { curto_min_com_todos_os_compensadores_mva: b.skMinAll } : {}),
+          eolica_solar_ja_ligada_mw: Math.round(b.ibrMw),
+          maior_parque_scr_3_mw: Math.round(maxPlantMw(b.skMin, b.ibrMw)),
+          ...(comp !== null && alone !== null ? { parque_mw: mw, scr_composto: r2(comp), classe: classify(comp), scr_sozinho_na_barra: r2(alone) } : {}),
+          ...(note ? { fronteira: note } : {}),
+        };
+      }),
+      nota:
+        "Triagem com reatâncias típicas das máquinas; unidades ligadas pela disponibilidade sincronizada do ONS (ou estimadas pela geração da hora); no curto mínimo sai o maior compensador síncrono de cada subestação. O SCR composto soma a eólica e a solar já ligadas na subestação. O máximo é do despacho do dia, não serve para superação de disjuntor. O estudo de acesso oficial do ONS segue obrigatório.",
+    },
+  };
+}
+
 async function planejamentoSddp(args: Record<string, unknown>, _ctx: ToolCtx, deps: AssistantDeps): Promise<ToolOutcome> {
   const { report: r, ageDays } = await deps.plan();
   if (!r) return { result: { erro: "relatório do planejamento indisponível agora (o worker diário ainda não enviou ou o armazenamento não respondeu)" } };
@@ -580,6 +651,8 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return radarMercado(args);
       case "planejamento_sddp":
         return await planejamentoSddp(args, ctx, deps);
+      case "forca_da_rede":
+        return await forcaDaRede(args, ctx, deps);
       case "navegar":
         return navegar(args);
       case "configurar_ativo":

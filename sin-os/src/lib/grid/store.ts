@@ -1,10 +1,10 @@
 import "server-only";
 import { cached, invalidate } from "../cache";
 import { readDoc, saveDoc } from "../store";
-import { GridSnapshotSchema, mergeHistory, summarize, type GridDaySummary, type GridSnapshot } from "./snapshot";
+import { mergeHistory, parseGridSnapshot, summarize, type GridDaySummary, type GridSnapshot } from "./snapshot";
 
 /**
- * Um documento só (grid_snapshot/latest): o relatório completo como texto JSON (~260 kB, abaixo
+ * Um documento só (grid_snapshot/latest): o relatório completo como texto JSON (~400 kB com o curto, abaixo
  * do 1 MiB do Firestore e sem estourar o limite de campos indexados) e o histórico de 30 dias.
  * Cada instância relê no máximo a cada 10 min: 1 leitura por instância, não por visita.
  */
@@ -51,8 +51,9 @@ export async function loadGridSnapshot(): Promise<LoadedGrid> {
     } catch {
       parsed = null;
     }
-    const r = GridSnapshotSchema.safeParse(parsed);
-    return { snapshot: r.success ? r.data : null, history: doc.history ?? [], receivedAt: doc.receivedAt ?? null, invalid: !r.success } satisfies LoadedGrid;
+    // seção de curto num formato antigo não derruba a tela: sai só ela
+    const r = parseGridSnapshot(parsed);
+    return { snapshot: r.ok ? r.data : null, history: doc.history ?? [], receivedAt: doc.receivedAt ?? null, invalid: !r.ok } satisfies LoadedGrid;
   });
   return value;
 }

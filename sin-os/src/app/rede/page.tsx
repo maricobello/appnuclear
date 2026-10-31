@@ -9,6 +9,7 @@ import { ago, brl, dateTime, dayLabel, num, pct, tinyMw } from "@/lib/fmt";
 import { PAIR_NAMES, PAIR_SUBS, PAIRS, type Pair } from "@/lib/market/interchange";
 import { SUB_NAMES } from "@/lib/sources/types";
 import { useApi } from "@/lib/useApi";
+import { GridStrength } from "./Strength";
 
 // o ONS publica o intercâmbio de um dia no fim da tarde do seguinte: acima de ~54 h fica atrasado
 const STALE_MS = 54 * 3600_000;
@@ -320,6 +321,8 @@ export default function RedePage() {
               {n1?.nao_convergiram.length ? <p className="mt-2 text-[13px] text-warning">Sem solução (colapso de tensão ou limite do modelo): {n1.nao_convergiram.map(shortName).join("; ")}.</p> : null}
             </Panel>
           </div>
+
+          {g.curto ? <GridStrength sc={g.curto} date={g.date} /> : null}
 
           <Disclosure title="Hipóteses, fontes e histórico do modelo" hint={`${g.sources.length} arquivos do ONS`}>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

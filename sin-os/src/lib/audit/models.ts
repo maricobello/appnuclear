@@ -3,7 +3,7 @@ import type { PlanReport } from "../planning/report";
 import type { BessDay } from "../market/bess-study";
 import type { ForecastResult } from "../market/forecast";
 import type { RegimeBacktestResult } from "../market/regime-backtest";
-import { tinyMw } from "../fmt";
+import { sci, tinyMw } from "../fmt";
 import { THERMAL_CHECKS } from "../market/thermal";
 import { brtDate } from "../sources/time";
 import { TRACK_MIN_DAYS, type TrackRecord } from "./track-record";
@@ -92,6 +92,8 @@ export const GRID_CHECKS = {
   n1Converged: { pass: 0.99, warn: 0.95 },
   voltageInBand: { pass: 0.95, warn: 0.9 },
   pandapowerMw: 1,
+  /** Diferença relativa aceita entre o curto próprio (matriz de impedâncias) e o calc_sc do pandapower. */
+  curtoRel: 1e-6,
 } as const;
 
 const f = (v: number | null | undefined, d = 2) => (v === null || v === undefined || !Number.isFinite(v) ? "—" : v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d }));
@@ -538,6 +540,25 @@ function gridChecks(g: ModelAuditInput["grid"], add: (c: ModelCheck) => void) {
     status: pp.ok ? "pass" : "fail",
     detail: pp.convergiu === false ? `O solver de referência não fechou na hora ${pp.hora}: ${pp.erro ?? ""}` : `Na hora de maior carga (${pp.hora}h) o fluxo de cada linha no p3s difere do runpp do pandapower em no máximo ${tinyMw(pp.dif_max_mw)}.`,
   });
+  if (s.curto) {
+    const c = s.curto.validacao;
+    const within = c.dif_rel_max !== null && c.dif_rel_max < GRID_CHECKS.curtoRel;
+    const fs = s.curto.fontes;
+    add({
+      id: "rede.curto",
+      model,
+      sub: null,
+      label: "Curto-circuito igual ao do pandapower",
+      value: c.dif_rel_max,
+      display: sci(c.dif_rel_max),
+      target: `< ${sci(GRID_CHECKS.curtoRel, 0)}`,
+      status: c.ok && within ? "pass" : "fail",
+      detail:
+        c.ok && within
+          ? `Curto trifásico (IEC 60909) de ${s.curto.barras.length.toLocaleString("pt-BR")} barras pela matriz de impedâncias própria contra o calc_sc do pandapower nas horas ${c.horas.map((h) => `${h}h`).join(" e ")} (mais fraca e mais forte do dia): diferença relativa máxima de ${sci(c.dif_rel_max)}. Fontes: ${fs.usinas} usinas${fs.usinas_pela_disponibilidade !== undefined ? ` (${fs.usinas_pela_disponibilidade} pela disponibilidade sincronizada do ONS)` : ""} e ${fs.compensadores} compensadores síncronos.`
+          : `A conferência do curto com o pandapower falhou${c.erro ? `: ${c.erro}` : c.dif_rel_max !== null ? `: diferença relativa de ${sci(c.dif_rel_max)}` : ""}.`,
+    });
+  }
   const load = v.carga_media_mw;
   const slack = Math.max(Math.abs(v.slack_mw.min ?? 0), Math.abs(v.slack_mw.max ?? 0));
   const share = load ? slack / load : null;

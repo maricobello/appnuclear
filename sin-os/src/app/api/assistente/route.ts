@@ -12,6 +12,9 @@ import { SUBS } from "@/lib/sources/types";
 import { listAuditRuns } from "@/lib/store";
 import { planAgeDays } from "@/lib/planning/report";
 import { loadPlanReport } from "@/lib/planning/store";
+import { snapshotAgeDays } from "@/lib/grid/snapshot";
+import { loadGridSnapshot } from "@/lib/grid/store";
+import { brtDate } from "@/lib/sources/time";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -34,6 +37,10 @@ const deps: AssistantDeps = {
   plan: async () => {
     const { report } = await loadPlanReport();
     return { report, ageDays: report ? planAgeDays(report) : null };
+  },
+  grid: async () => {
+    const { snapshot } = await loadGridSnapshot();
+    return { snapshot, ageDays: snapshot ? snapshotAgeDays(snapshot.date, brtDate(Date.now())) : null };
   },
   dataMode,
 };

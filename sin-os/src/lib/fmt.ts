@@ -45,11 +45,23 @@ export const dayLabel = (iso: string) => {
   return `${d}/${m}`;
 };
 
+/** Notação científica curta com vírgula: 1,9·10⁻¹³. */
+export function sci(v: number | null | undefined, d = 1): string {
+  if (v === null || v === undefined || !Number.isFinite(v)) return "—";
+  if (v === 0) return "0";
+  let e = Math.floor(Math.log10(Math.abs(v)));
+  let m = v / 10 ** e;
+  if (Math.abs(Number(m.toFixed(d))) >= 10) {
+    m /= 10;
+    e += 1;
+  }
+  const sup = String(e).replace("-", "⁻").replace(/\d/g, (x) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+x]);
+  return `${nf(d).format(m)}·10${sup}`;
+}
+
 /** Diferença minúscula em notação científica ("4,7·10⁻⁷ MW"); a partir de 0,001 com 3 casas. */
 export function tinyMw(v: number | null | undefined): string {
   if (v === null || v === undefined || !Number.isFinite(v)) return "—";
   if (v === 0 || Math.abs(v) >= 1e-3) return `${nf(3).format(v)} MW`;
-  const e = Math.floor(Math.log10(Math.abs(v)));
-  const sup = String(e).replace("-", "⁻").replace(/\d/g, (d) => "⁰¹²³⁴⁵⁶⁷⁸⁹"[+d]);
-  return `${nf(1).format(v / 10 ** e)}·10${sup} MW`;
+  return `${sci(v)} MW`;
 }

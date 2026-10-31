@@ -18,7 +18,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Mercados globais** | Europa (SDAC, 15 min), Reino Unido (Elexon, NESO), câmbio (BCB), combustíveis (EIA) |
 | **Clima & hidrologia** | Vento, sol e temperatura nos polos do SIN; chuva nas bacias pelo ensemble ECMWF (51 membros) |
 | **Carteira** | Contratos como swap sobre o PLD mensal: liquidação de curto prazo, exposição líquida por submercado, exposição a termo dos meses em aberto e MtM contra uma curva a termo **informada pelo usuário** (ex.: cotação BBCE); editar, backup/importação JSON e CSV mês a mês |
-| **Rede elétrica** | Intercâmbio medido × programado nas 4 interligações (ONS, hora a hora) com a diferença de PLD entre os dois lados (quando a rede separou os preços); fluxo de potência AC diário do SIN montado só com dados do ONS: mapa de carregamento das linhas, as mais carregadas, N-1 e a validação contra o intercâmbio medido |
+| **Rede elétrica** | Intercâmbio medido × programado nas 4 interligações (ONS, hora a hora) com a diferença de PLD entre os dois lados (quando a rede separou os preços); fluxo de potência AC diário do SIN montado só com dados do ONS: mapa de carregamento das linhas, as mais carregadas, N-1 e a validação contra o intercâmbio medido; força da rede: curto-circuito por subestação e SCR de um parque |
 | **Planejamento (SDDP)** | O NovoModelo — o SDDP aberto de ONS, CCEE e EPE — rodado todo dia num caso do SIN montado só com dados abertos do ONS, com a aversão a risco calibrada pelo CMO recente do DESSEM: PLD esperado mês a mês com a ponta horária e faixa P10–P90 calibrada por horizonte, armazenamento contra o envelope que o ONS já operou, risco de déficit, valor da água, sensibilidades e a retroanálise de 21 meses contra o realizado, a persistência e o SDDP sem calibração |
 | **Térmicas & encargos** | Geração de cada térmica por motivo do despacho (ONS), pilha de mérito com o CMO da hora (térmica marginal e quanto o CMO precisa subir para ligar a próxima) e o ESS estimado pela regra de ressarcimento da CCEE, em R$ e em R$/MWh consumido, conferido com os boletins InfoPLD |
 | **Renováveis & corte** | Corte de eólica e solar do ONS por dia, hora, submercado e motivo, cruzado com o PLD; histórico de 12 meses com revisões; curva do pato |
@@ -41,7 +41,7 @@ Todas gratuitas e sem cadastro, exceto a EIA (chave gratuita, opcional).
 |---|---|---|
 | **CCEE — Dados Abertos** (CKAN) | PLD horário por submercado | preço de referência, alvo dos modelos |
 | **ONS — Dados Abertos** (S3 direto + CKAN) | CMO semi-horário (DESSEM), EAR, ENA, carga horária, corte de eólica/solar, balanço, intercâmbio entre subsistemas, despacho térmico por motivo e CVU do PMO | formação do preço, fallback e auditoria do PLD, drivers hidrológicos, renováveis, rede, térmicas e ESS |
-| **ONS — cadastros e operação** (S3, só no worker da rede) | linhas, subestações, transformadores, compensadores, unidades geradoras, geração por usina, fluxo programado dos elos CC | modelo e fluxo de potência AC do SIN |
+| **ONS — cadastros e operação** (S3, só no worker da rede) | linhas, subestações, transformadores, compensadores, unidades geradoras, geração e disponibilidade sincronizada por usina, fluxo programado dos elos CC | modelo, fluxo de potência AC e curto-circuito do SIN |
 | **Energy-Charts** (Fraunhofer ISE) | preços day-ahead de 12 zonas europeias (limite de 2 req/min: o app atualiza 2 zonas por vez e guarda no Firestore) | arbitragem de bateria e de fronteira |
 | **Elexon BMRS** | Market Index Price e System Buy/Sell Price (GB) | preço de curto prazo e escassez |
 | **NESO Carbon Intensity** | gCO₂/kWh e mix de geração (GB) | contexto de mercado |
@@ -311,6 +311,22 @@ pandapower, mais o N-1 das linhas de 440 kV ou mais e das interligações. Roda 
 (`.github/workflows/rede.yml`, 16:47 e 23:47 UTC) e envia o relatório para `POST /api/rede/ingest`
 (segredo `ADMIN_KEY`, o mesmo da Vercel, nos segredos do repositório no GitHub).
 
+**Curto-circuito e força da rede (diário):** `grid/sin_grid/shortcircuit.py` calcula o curto trifásico
+(IEC 60909, fonte de tensão equivalente) em todas as barras de 69 kV ou mais nas 24 horas, com as máquinas
+síncronas ligadas em cada hora — hidrelétricas, térmicas e nucleares, pela disponibilidade sincronizada que
+o ONS publica por usina e hora (onde ela não existe, pelas unidades mínimas para a geração), e os
+compensadores síncronos. Eólicas, solares e baterias não entram (o inversor limita a corrente). Saem o
+curto mínimo (c = 1,0, na hora mais fraca, sem o maior compensador de cada subestação) e o máximo do
+despacho do dia (c = 1,1 limitado a Um/Un) de cada barra; a tela mostra a relação de curto-circuito (SCR)
+de um parque de X MW, simples e composta (somando a eólica e a solar já ligadas na subestação), e as
+subestações mais fracas, e a Iara responde pela ferramenta `forca_da_rede`. A matriz de impedâncias
+própria é conferida com o `calc_sc` do pandapower nas horas mais fraca e mais forte (29/10/2026:
+diferença de 2·10⁻¹³; 146 usinas, 87 delas pela disponibilidade sincronizada, e 56 compensadores; 56–92
+GVA síncronos ligados). Três agentes auditaram o módulo (cálculo, engenharia e dados): o cálculo bateu
+com recomputações independentes em 10⁻¹³, e os erros que acharam no casamento de usinas e compensadores
+com as barras foram corrigidos (`grid/tests` tem os casos). É triagem: o estudo de acesso do ONS continua
+obrigatório.
+
 Resultado de 14/10/2026 (dia real): 1.667 barras, 1.841 linhas e 1.813 transformadores; 24/24 horas
 convergem; p3s × pandapower dentro de 4,7·10⁻⁷ MW por linha; perdas de 2,62%; 95,9% da geração
 despachada com barra; 607 contingências N-1 (606 resolvidas, nenhuma sobrecarga); 28 s no total.
@@ -547,7 +563,7 @@ da resposta (`after()`); só a primeira de todas espera o cálculo. O smoke test
 | Backtest de 1 ano | D+1 contra o ingênuo; pior regime conhecido antes de prever | rMAE < 1 e DM p < 0,05; ≤ 1,05 |
 | Bateria (LP) | despacho ótimo ≥ regra simples todo dia; ciclos | 0 dias abaixo; ≤ limite |
 | Térmicas e ESS | motivos do despacho somam a geração; geração com CVU da semana | ≤ 1%; ≥ 99% |
-| Rede elétrica | retrato em dia; fluxo AC nas 24 h; p3s × pandapower; balanço na barra de referência; usinas com barra; intercâmbio calculado × medido por interligação; N-1 resolvido; tensões plausíveis | ≤ 2 dias; 24/24; < 1 MW; ≤ 2% da carga; ≥ 95%; erro ≤ 15% (≤ 30% atenção); ≥ 99%; ≥ 95% entre 0,90 e 1,10 pu |
+| Rede elétrica | retrato em dia; fluxo AC nas 24 h; p3s × pandapower; curto próprio × pandapower; balanço na barra de referência; usinas com barra; intercâmbio calculado × medido por interligação; N-1 resolvido; tensões plausíveis | ≤ 2 dias; 24/24; < 1 MW; < 1·10⁻⁶; ≤ 2% da carga; ≥ 95%; erro ≤ 15% (≤ 30% atenção); ≥ 99%; ≥ 95% entre 0,90 e 1,10 pu |
 | Arbitragem | captura da regra simples | entre 0% e 100% |
 | Auditor de APIs | detecta falhas injetadas | ≥ 90% |
 

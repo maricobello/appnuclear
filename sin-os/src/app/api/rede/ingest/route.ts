@@ -1,6 +1,6 @@
 import { gunzipSync } from "node:zlib";
 import { authorize } from "@/lib/auth";
-import { GridSnapshotSchema } from "@/lib/grid/snapshot";
+import { parseGridSnapshot } from "@/lib/grid/snapshot";
 import { saveGridSnapshot } from "@/lib/grid/store";
 import { claimSlot, storageKind } from "@/lib/store";
 
@@ -8,8 +8,10 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 30;
 
 const noStore = { "Cache-Control": "no-store" };
-/** Corpo descompactado: o relatório tem ~260 kB; 4 MB dá folga e barra abuso. */
+/** Corpo descompactado: o relatório tem ~400 kB (com o curto-circuito); 4 MB dá folga e barra abuso. */
 const MAX_BYTES = 4_000_000;
+/** O documento do Firestore tem 1 MiB: acima disso o curto sai para o resto caber. */
+const MAX_DOC_CHARS = 900_000;
 
 /**
  * Recebe o relatório diário do modelo da rede (grid/run.py no GitHub Actions). Só com o segredo
@@ -32,12 +34,14 @@ export async function POST(req: Request) {
   } catch (e) {
     return Response.json({ error: `corpo ilegível: ${e instanceof Error ? e.message : String(e)}` }, { status: 400, headers: noStore });
   }
-  const parsed = GridSnapshotSchema.safeParse(body);
-  if (!parsed.success) {
-    const issues = parsed.error.issues.slice(0, 8).map((i) => `${i.path.join(".")}: ${i.message}`);
-    return Response.json({ error: "relatório fora do esquema", issues }, { status: 422, headers: noStore });
+  const parsed = parseGridSnapshot(body);
+  if (!parsed.ok) return Response.json({ error: "relatório fora do esquema", issues: parsed.issues }, { status: 422, headers: noStore });
+  let s = parsed.data;
+  let curtoDropped = parsed.curtoDropped;
+  if (s.curto && JSON.stringify(s).length > MAX_DOC_CHARS) {
+    s = { ...s, curto: undefined };
+    curtoDropped = "relatório grande demais para o documento do Firestore";
   }
-  const s = parsed.data;
   const { kept, history } = await saveGridSnapshot(s);
   return Response.json(
     {
@@ -46,6 +50,7 @@ export async function POST(req: Request) {
       dias_no_historico: history.length,
       convergiu: `${s.validation.converged}/${s.validation.hours}`,
       armazenamento: storageKind(),
+      ...(curtoDropped ? { curto_descartado: curtoDropped } : {}),
     },
     { headers: noStore },
   );

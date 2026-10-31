@@ -20,7 +20,7 @@ import numpy as np
 import pandas as pd
 
 from . import ons
-from .match import key, map_plants
+from .match import code_kv, key, map_plants
 from .model import GridModel
 
 SUBS = ("N", "NE", "SE", "S")
@@ -55,9 +55,28 @@ class Dispatch:
     hvdc: pd.DataFrame
     plants: pd.DataFrame
     balance: pd.DataFrame
+    #: geração por usina e hora (MW, colunas 0–23) com barra, método do casamento e tipo de usina
+    plant_hours: pd.DataFrame
     #: barras com compensador síncrono ou estático (cadastro de equipamentos de controle de reativo)
     compensators: list[int] = field(default_factory=list)
     stats: dict = field(default_factory=dict)
+
+
+def compensator_bus(m: GridModel, code: object, station: object, uf: object) -> int | None:
+    """Barra do compensador síncrono: a estação pelo código do equipamento (ou pelo nome, no estado) e a
+    tensão pelo dígito do código ("BAMDN25CS1" → 500 kV). Sem tensão no código (dígito 0, a da própria
+    máquina): a barra do terminal do elo CC, se a estação tiver um (os compensadores de Ibiúna seguram
+    a conversora em 345 kV), senão a de maior tensão da estação."""
+    kv = code_kv(code)
+    b = m.index.by_code(code, kv)
+    if b is None:
+        b = m.index.find(key(station), kv, uf=str(uf) if isinstance(uf, str) else None)
+    if b is None or kv is not None:
+        return b
+    st = m.index.station_of(b)
+    hvdc = {t for term in HVDC_TERMINALS.values() for t in term.values() if t}
+    at_dc = [bb for _, bb in m.index.station_buses.get(st, []) if bb in hvdc]
+    return at_dc[0] if len(at_dc) == 1 else b
 
 
 def _hourly(df: pd.DataFrame, col: str, date: str) -> pd.DataFrame:
@@ -87,7 +106,7 @@ def build(m: GridModel, f: ons.Fetcher, regs: dict[str, pd.DataFrame], date: str
     plants = map_plants(gen_day, regs["unidades_geradoras"], regs["modalidade_usinas"], regs["conjuntos"], m.index)
     by_plant = gen_day.groupby(["ceg", "id_ons", "nom_usina", "h"], dropna=False)["val_geracao"].sum().unstack("h").reindex(columns=range(24), fill_value=0.0).fillna(0.0)
     pl = plants.drop_duplicates(["ceg", "id_ons", "nom_usina"]).set_index(["ceg", "id_ons", "nom_usina"])
-    by_plant = by_plant.join(pl[["bus", "metodo", "id_estado", "id_subsistema"]])
+    by_plant = by_plant.join(pl[["bus", "metodo", "id_estado", "id_subsistema", "nom_tipousina"]])
 
     mapped = by_plant[by_plant["bus"].notna()]
     gen = mapped.groupby("bus")[list(range(24))].sum()
@@ -156,7 +175,10 @@ def build(m: GridModel, f: ons.Fetcher, regs: dict[str, pd.DataFrame], date: str
         eq = eq[eq["nom_tipoequipamento"].str.contains("Compensador", na=False)]
         for r in eq.itertuples():
             kvm = KV_RE.search(str(r.nom_equipamento))
-            b = m.index.find(key(r.nom_subestacao), float(kvm.group(1)) if kvm else None, uf=r.id_estado)
+            if kvm:  # compensador estático: a tensão vem no nome
+                b = m.index.find(key(r.nom_subestacao), float(kvm.group(1)), uf=r.id_estado)
+            else:
+                b = compensator_bus(m, getattr(r, "cod_equipamento", ""), r.nom_subestacao, r.id_estado)
             if b is not None:
                 comp.append(int(b))
     total_gen = by_plant[list(range(24))].sum()
@@ -174,4 +196,4 @@ def build(m: GridModel, f: ons.Fetcher, regs: dict[str, pd.DataFrame], date: str
     stats["compensadores_casados"] = len(set(comp))
     stats["compensadores_cadastro"] = int(len(eq)) if eq is not None else 0
     return Dispatch(date=date, hours=[f"{date}T{h:02d}:00" for h in range(24)], gen=gen, load=load, hvdc=hvdc, plants=plants, balance=bal,
-                    compensators=sorted(set(comp)), stats=stats)
+                    plant_hours=by_plant, compensators=sorted(set(comp)), stats=stats)

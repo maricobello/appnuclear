@@ -133,6 +133,40 @@ describe("retrato do fluxo de potência (worker)", () => {
     expect(none[0].detail).toContain("ADMIN_KEY");
     // sem o campo, nada da rede entra (auditorias antigas)
     expect(auditModels(base).checks.some((c) => c.model === "Rede elétrica")).toBe(false);
+    // retrato sem curto (anterior ao cálculo): o critério do curto não aparece
+    expect(a.checks.some((c) => c.id === "rede.curto")).toBe(false);
+  });
+
+  it("curto-circuito no retrato: esquema e critério da auditoria", () => {
+    const curto = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/curto-amostra.json"), "utf8"));
+    const s = GridSnapshotSchema.parse({ ...fixture(), curto });
+    expect(s.curto?.barras.length).toBe(curto.barras.length);
+    const base = { now: Date.parse("2026-10-16T15:00:00Z"), forecasts: {}, regimes: {}, bess: null, arbitrage: null, selfEval: null, pld: null, limits: { min: 57.31, maxHourly: 1611 }, pldSource: "teste" };
+    const check = (snap: typeof s) => auditModels({ ...base, grid: { snapshot: snap, ageDays: 2 } }).checks.find((c) => c.id === "rede.curto")!;
+    expect(check(s).status).toBe("pass");
+    expect(check(s).detail).toContain("pandapower");
+    expect(check(s).display).toMatch(/^\d,\d·10⁻[⁰¹²³⁴⁵⁶⁷⁸⁹]+$/);
+    expect(check(s).target).toBe("< 1·10⁻⁶");
+    const failed = { ...s, curto: { ...s.curto!, validacao: { horas: [10, 19], dif_rel_max: null, ok: false, erro: "não convergiu" } } };
+    expect(check(failed).status).toBe("fail");
+    expect(check(failed).detail).toContain("não convergiu");
+    // ok declarado mas diferença acima do limite: reprova assim mesmo
+    const off = { ...s, curto: { ...s.curto!, validacao: { horas: [10, 19], dif_rel_max: 3e-5, ok: true } } };
+    expect(check(off).status).toBe("fail");
+  });
+
+  it("seção de curto fora do esquema sai sozinha: o resto do retrato entra", async () => {
+    const { parseGridSnapshot } = await import("@/lib/grid/snapshot");
+    const curto = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/curto-amostra.json"), "utf8"));
+    curto.barras[0][8] = 99;
+    const r = parseGridSnapshot({ ...fixture(), curto });
+    expect(r.ok).toBe(true);
+    if (r.ok) {
+      expect(r.data.curto).toBeUndefined();
+      expect(r.curtoDropped).toContain("curto.barras");
+    }
+    // erro fora do curto continua reprovando o retrato inteiro
+    expect(parseGridSnapshot({ ...fixture(), date: "ontem", curto }).ok).toBe(false);
   });
 });
 
@@ -165,6 +199,18 @@ describe("POST /api/rede/ingest", () => {
     expect(g.history).toHaveLength(1);
     // o mesmo slot de 30 s barra reenvio imediato
     expect((await post(JSON.stringify(fixture()), { authorization: "Bearer chave-de-teste" })).status).toBe(429);
+  });
+
+  it("curto fora do esquema não derruba o envio: o retrato entra sem ele e a resposta diz por quê", async () => {
+    process.env.ADMIN_KEY = "chave-de-teste";
+    const curto = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/curto-amostra.json"), "utf8"));
+    curto.barras[0][7] = -1;
+    const r = await post(JSON.stringify({ ...fixture(), curto }), { authorization: "Bearer chave-de-teste" });
+    expect(r.status).toBe(200);
+    const j = await r.json();
+    expect(j.curto_descartado).toContain("curto.barras");
+    const { loadGridSnapshot } = await import("@/lib/grid/store");
+    expect((await loadGridSnapshot()).snapshot?.curto).toBeUndefined();
   });
 
   it("corpo fora do esquema volta 422 com o caminho do problema", async () => {

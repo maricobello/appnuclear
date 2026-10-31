@@ -11,6 +11,7 @@ import pandas as pd
 
 from . import ons
 from .dispatch import Dispatch
+from . import shortcircuit as scm
 from .flows import FlowResult, N1_MIN_KV, PV_MIN_MW, SLACK_BUS
 from .model import BASE_KV, TRAFO_VK_PERCENT, GridModel
 
@@ -51,7 +52,108 @@ def measured_interchange(f: ons.Fetcher, date: str) -> dict[str, list[float]]:
     return out
 
 
-def build(m: GridModel, d: Dispatch, r: FlowResult, f: ons.Fetcher, meta: dict) -> dict:
+#: barras abaixo disso ficam fora do curto: o modelo não tem a rede de distribuição, e o valor nelas é só
+#: o do transformador presumido (dezenas de kA sem significado físico)
+SC_MIN_KV = 69.0
+SUBSYSTEMS = ("N", "NE", "SE", "S")
+#: barras de fronteira: como a interligação com o país vizinho afeta o curto
+BORDER = {
+    "UY": ("Uruguai", "lado de 60 Hz das conversoras de frequência (Rivera, Melo): o Uruguai, em 50 Hz, não contribui para o curto, então o valor vale como está"),
+    "AR": ("Argentina", "lado de 60 Hz das conversoras de Garabi: a Argentina, em 50 Hz, não contribui para o curto, então o valor vale como está"),
+    "PY": ("Paraguai", "o lado de 50 Hz de Itaipu e a rede paraguaia ficam fora do modelo"),
+    "VE": ("Venezuela", "ligação em corrente alternada com a Venezuela: com ela em serviço, a rede venezuelana soma ao curto, e ela não está no modelo"),
+}
+
+
+def _g(x: float) -> str:
+    """Número curto com vírgula decimal: 0.25 → '0,25'."""
+    return f"{x:g}".replace(".", ",")
+
+
+def _sk(x: float) -> float:
+    return round(float(x), 1) if x < 10 else round(float(x))
+
+
+def short_circuit(m: GridModel, sc: scm.ShortCircuitResult) -> dict:
+    """Por barra (69 kV ou mais): [ANAREDE, nome, kV, UF, subsistema ou país, lat, lon, S''k mín (MVA), hora,
+    S''k máx (MVA), hora, MW eólicos/solares já ligados na subestação vistos da barra (fatores de interação),
+    S''k mín com todos os compensadores ligados (MVA)]."""
+    info = m.buses.reset_index().set_index("pp").reindex(m.net.bus.index)
+    kv = m.net.bus.vn_kv.to_numpy()
+    sk_min, h_min = sc.sk_min.min(axis=1), sc.sk_min.argmin(axis=1)
+    sk_max, h_max = sc.sk_max.max(axis=1), sc.sk_max.argmax(axis=1)
+    ibr = sc.ibr_eq_mw if sc.ibr_eq_mw is not None else np.zeros(len(kv))
+    sk_all = sc.sk_min_all if sc.sk_min_all is not None else sk_min
+    rows = []
+    countries: set[str] = set()
+    for i in range(len(kv)):
+        if kv[i] < SC_MIN_KV or not (sk_min[i] > 0 and sk_max[i] > 0):
+            continue
+        b = info.iloc[i]
+        nome = " ".join(str(b["nome"]).split())[:80] if isinstance(b["nome"], str) and b["nome"].strip() else f"barra {int(b['anarede'])}"
+        uf = b["uf"] if isinstance(b["uf"], str) else None
+        sub = b["sub"] if isinstance(b["sub"], str) else None
+        if sub and sub not in SUBSYSTEMS:
+            countries.add(sub)
+        rows.append([int(b["anarede"]), nome, _r(kv[i], 1), uf, sub, _r(b["lat"], 3), _r(b["lon"], 3), _sk(sk_min[i]), int(h_min[i]),
+                     _sk(sk_max[i]), int(h_max[i]), round(float(ibr[i])), _sk(max(sk_all[i], sk_min[i]))])
+    ck = sc.check
+    st = sc.stats
+    x = scm.X_SUBTRANSIENT
+    if st.get("disponibilidade_sincronizada"):
+        units = (f"Potência síncrona de cada usina: a disponibilidade sincronizada que o ONS publica por usina e hora "
+                 f"({st.get('usinas_pela_disponibilidade', 0)} usinas, {_g(round(100 * st.get('geracao_sincrona_com_disponibilidade', 0)))}% da geração "
+                 f"síncrona do dia; inclui unidades girando como compensador). Nas outras {st.get('usinas_pela_geracao', 0)}, as unidades mínimas para a "
+                 f"geração da hora, cada uma a até {_g(100 * scm.UNIT_LOADING)}% da potência efetiva; geração residual (abaixo de "
+                 f"{_g(100 * scm.RESIDUAL_FRACTION)}% de uma unidade) não liga unidade.")
+    else:
+        units = (f"Sem a disponibilidade sincronizada do ONS neste dia: em cada usina, as unidades mínimas para a geração da hora, cada uma "
+                 f"a até {_g(100 * scm.UNIT_LOADING)}% da potência efetiva (estimativa conservadora); geração residual não liga unidade.")
+    premissas = [
+        f"Reatância subtransitória típica: hidrelétrica {_g(x['HIDROELÉTRICA'])}, térmica {_g(x['TÉRMICA'])} e nuclear {_g(x['NUCLEAR'])} pu, mais "
+        f"{_g(scm.X_STEP_UP)} pu do transformador elevador, na potência da máquina (cos φ {_g(scm.COS_PHI)}); compensador síncrono {_g(scm.X_SYNC_COMPENSATOR)} pu.",
+        units,
+        "Compensadores síncronos do cadastro com a potência da faixa do equipamento, na barra da tensão escrita no código do equipamento; "
+        "sem ela, na do terminal do elo CC da subestação ou na de maior tensão. No mínimo sai o maior compensador de cada subestação "
+        f"(critério N-1, {st.get('compensadores_fora_no_minimo', 0)} subestações).",
+        "Ficam fora eólicas, solares e baterias (o inversor limita a corrente), elos CC e Itaipu 50 Hz; também as pequenas usinas embutidas na "
+        "distribuição e as que não têm barra no modelo, o que deixa o curto calculado de 2% a 5% abaixo do real na mediana.",
+        "Mínimo com c = 1,0, sem K_T e com a resistência das linhas a 80 °C. Máximo com c = 1,1 (limitado a Um/Un), K_T nos transformadores e "
+        "linhas a 20 °C, mas com o despacho do dia: não serve para superação de disjuntor, que pede todas as unidades ligadas e os fatores K_G/K_S.",
+        f"Transformadores com a reatância presumida do modelo ({_g(TRAFO_VK_PERCENT)}%): em 138 kV o curto depende dela (±12% entre 10% e 14%); "
+        "em 230 a 500 kV, ±2% a 3%. Compensação série das linhas fora do modelo.",
+        "Incerteza típica do curto mínimo: −5% a +10% em 230 a 500 kV e ±12% em 138 kV. Perto de hidrelétricas sem a disponibilidade "
+        "sincronizada, unidades girando como compensador podem somar mais.",
+        "SCR composto: o curto mínimo dividido pela potência nova somada à eólica e solar já ligada na mesma subestação (potência instalada "
+        "do cadastro do ONS), cada parque pesado pelo fator de interação |Z_jk/Z_kk| da CIGRE (inteiro na barra de alta; menos numa barra de "
+        "baixa). Parques de subestações vizinhas também disputam a rede e ficam fora dessa conta: a interação regional é do estudo de acesso.",
+    ]
+    fronteira = {c: {"pais": BORDER.get(c, (c, ""))[0], "nota": BORDER.get(c, (c, "a rede do país vizinho fica fora do modelo"))[1]} for c in sorted(countries)}
+    for c, v in fronteira.items():
+        premissas.append(f"Fronteira com {v['pais']}: {v['nota']}.")
+    return {
+        "metodo": "IEC 60909, fonte de tensão equivalente: S''k = c·Un²/|Zth| (c = 1,0 no mínimo; 1,1 no máximo, limitado a Um/Un), "
+                  "com as máquinas síncronas ligadas em cada hora",
+        "premissas": premissas,
+        "horaFraca": sc.weak_hour,
+        "horaForte": sc.strong_hour,
+        "mvaSincrono": [_r(v, 0) for v in sc.online_mva],
+        "fontes": {k: v for k, v in st.items() if k in ("usinas", "usinas_pela_disponibilidade", "geracao_sincrona_com_disponibilidade", "compensadores",
+                                                       "compensadores_fora_no_minimo", "usinas_sem_capacidade_no_cadastro", "mva_medio_por_tipo")},
+        "validacao": {"horas": [int(h) for h in ck.get("horas", [])], "dif_rel_max": float(ck["dif_rel_max"]) if ck.get("dif_rel_max") is not None else None,
+                      "ok": bool(ck.get("ok")), **({"erro": ck["erro"]} if ck.get("erro") else {})},
+        "fronteira": fronteira,
+        "barras": rows,
+    }
+
+
+def build(m: GridModel, d: Dispatch, r: FlowResult, f: ons.Fetcher, meta: dict, sc: scm.ShortCircuitResult | None = None) -> dict:
+    curto = None
+    if sc is not None:
+        try:  # a seção de curto nunca derruba o relatório do fluxo
+            curto = short_circuit(m, sc)
+        except Exception as e:  # noqa: BLE001
+            print(f"::warning::seção de curto-circuito fora do relatório: {type(e).__name__}: {e}", flush=True)
     real = measured_interchange(f, d.date)
     inter = []
     for pair, label in PAIR_LABEL.items():
@@ -147,6 +249,7 @@ def build(m: GridModel, d: Dispatch, r: FlowResult, f: ons.Fetcher, meta: dict) 
         "topTrafos": top_tr,
         "n1": {**r.n1_stats, "criterio": f"linhas de {N1_MIN_KV:g} kV ou mais e interligações entre subsistemas; pós-contingência contra a capacidade de curta duração", "top": n1_top, "nao_convergiram": n1_fail},
         "hvdc": {"xingu_sudeste_mw": [_r(x, 0) for x in r.hvdc_n_se]},
+        **({"curto": curto} if curto is not None else {}),
         "sources": [{"name": s.name, "url": s.url, "modified": s.modified} for s in _unique_sources(f)],
     }
 

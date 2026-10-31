@@ -94,11 +94,85 @@ export const GridSnapshotSchema = z.object({
     nao_convergiram: z.array(text(120)).max(20),
   }),
   hvdc: z.object({ xingu_sudeste_mw: hourly }),
+  /** Curto-circuito trifásico (IEC 60909) por barra; relatórios anteriores não têm. */
+  curto: z
+    .object({
+      metodo: text(300),
+      premissas: z.array(text(400)).max(20),
+      horaFraca: int.min(0).max(23),
+      horaForte: int.min(0).max(23),
+      mvaSincrono: z.array(n.min(0).nullable()).length(24),
+      fontes: z.object({
+        usinas: int.min(0),
+        compensadores: int.min(0),
+        usinas_sem_capacidade_no_cadastro: int.min(0),
+        mva_medio_por_tipo: z.record(text(40), n),
+        usinas_pela_disponibilidade: int.min(0).optional(),
+        geracao_sincrona_com_disponibilidade: n.min(0).max(1).optional(),
+        compensadores_fora_no_minimo: int.min(0).optional(),
+      }),
+      validacao: z.object({ horas: z.array(int.min(0).max(23)).max(2), dif_rel_max: n.min(0).nullable(), ok: z.boolean(), erro: text(300).optional() }),
+      /** Barras de fronteira por país: como a interligação afeta o curto (conversora de frequência ou CA). */
+      fronteira: z.record(text(4), z.object({ pais: text(40), nota: text(300) })).optional(),
+      // [ANAREDE, nome, kV, UF, subsistema ou país, lat, lon, S''k mín (MVA), hora, S''k máx (MVA), hora,
+      //  MW eólicos/solares já ligados na subestação vistos da barra, S''k mín com todos os compensadores];
+      // os dois últimos entraram depois: relatório sem eles continua válido, e campo novo no fim não reprova
+      barras: z
+        .array(
+          z.tuple(
+            [
+              int,
+              text(80),
+              n.positive(),
+              text(4).nullable(),
+              text(4).nullable(),
+              n.min(-40).max(10).nullable(),
+              n.min(-80).max(-30).nullable(),
+              n.positive(),
+              int.min(0).max(23),
+              n.positive(),
+              int.min(0).max(23),
+            ],
+            z.unknown(),
+          ),
+        )
+        .max(5000)
+        .superRefine((rows, ctx) => {
+          const seen = new Set<number>();
+          for (const r of rows) {
+            if (seen.has(r[0])) {
+              ctx.addIssue({ code: "custom", message: `barra ${r[0]} repetida` });
+              return;
+            }
+            seen.add(r[0]);
+          }
+        }),
+    })
+    .optional(),
   // só arquivos do bucket público do ONS (a tela renderiza o endereço como link)
   sources: z.array(z.object({ name: text(80), url: text(300).regex(/^https:\/\/ons-aws-prod-opendata\.s3\.amazonaws\.com\/dataset\/[\w./-]+$/), modified: text(40).nullable() })).max(30),
 });
 
 export type GridSnapshot = z.infer<typeof GridSnapshotSchema>;
+
+export type ParsedGrid = { ok: true; data: GridSnapshot; curtoDropped: string | null } | { ok: false; issues: string[] };
+
+/**
+ * Valida o relatório. Se só a seção de curto-circuito estiver fora do esquema, ela sai e o resto (fluxo,
+ * N-1, validação) entra assim mesmo: `curtoDropped` diz por quê.
+ */
+export function parseGridSnapshot(raw: unknown): ParsedGrid {
+  const full = GridSnapshotSchema.safeParse(raw);
+  if (full.success) return { ok: true, data: full.data, curtoDropped: null };
+  const issues = full.error.issues.slice(0, 8).map((i) => `${i.path.join(".")}: ${i.message}`);
+  if (raw && typeof raw === "object" && "curto" in raw && full.error.issues.every((i) => i.path[0] === "curto")) {
+    const rest = { ...(raw as Record<string, unknown>) };
+    delete rest.curto;
+    const again = GridSnapshotSchema.safeParse(rest);
+    if (again.success) return { ok: true, data: again.data, curtoDropped: issues.slice(0, 3).join("; ") };
+  }
+  return { ok: false, issues };
+}
 
 /** Resumo de um dia para o histórico (vai junto do relatório completo, no mesmo documento). */
 export interface GridDaySummary {
