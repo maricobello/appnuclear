@@ -309,7 +309,10 @@ real de cada usina na sua barra, distribui a carga de cada subsistema e roda o f
 [p3s](https://github.com/e2nIEE/parallel-pandapower-solver) (Fraunhofer IEE, C++/KLU), conferido com o
 pandapower, mais o N-1 das linhas de 440 kV ou mais e das interligações. Roda no GitHub Actions
 (`.github/workflows/rede.yml`, 16:47 e 23:47 UTC) e envia o relatório para `POST /api/rede/ingest`
-(segredo `ADMIN_KEY`, o mesmo da Vercel, nos segredos do repositório no GitHub).
+(segredo `ADMIN_KEY`, o mesmo da Vercel, nos segredos do repositório no GitHub). O dia modelado é o último
+com as 24 horas em que a geração somada usina por usina fecha com o balanço do ONS (diferença de até 2%
+da carga): em 30/10/2026 a eólica do Nordeste veio com 4 GW médios a mais nas usinas, e o dia ficou de fora
+até o ONS consolidar.
 
 **Curto-circuito e força da rede (diário):** `grid/sin_grid/shortcircuit.py` calcula o curto trifásico
 (IEC 60909, fonte de tensão equivalente) em todas as barras de 69 kV ou mais nas 24 horas, com as máquinas

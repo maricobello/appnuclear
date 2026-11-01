@@ -32,8 +32,26 @@ from sin_grid import dispatch, flows, model, ons, report, shortcircuit  # noqa: 
 P3S_COMMIT = os.environ.get("P3S_COMMIT", "")
 
 
+#: geração somada usina por usina × geração do balanço do ONS no mesmo dia: acima disso (fração da carga),
+#: um dos dois ainda não foi consolidado (30/10/2026: 4,1 GW médios a mais de eólica no Nordeste)
+GEN_BALANCE_TOL = 0.02
+
+
+def generation_gap(g: pd.DataFrame, b: pd.DataFrame, d: dt.date) -> float:
+    """|geração das usinas − geração do balanço| ÷ carga, nas médias do dia."""
+    gh = pd.to_datetime(g["din_instante"])
+    gsum = float(ons.num(g.loc[gh.dt.date == d, "val_geracao"]).fillna(0.0).sum())
+    bh = pd.to_datetime(b["din_instante"])
+    bd = b[(bh.dt.date == d) & b["id_subsistema"].astype(str).str.strip().isin(dispatch.SUBS)]
+    bgen = float(sum(ons.num(bd[c]).fillna(0.0).sum() for c in bd.columns if c.startswith("val_ger")))
+    load = float(ons.num(bd["val_carga"]).fillna(0.0).sum())
+    return abs(gsum - bgen) / load if load > 0 else 1.0
+
+
 def latest_complete_day(f: ons.Fetcher, today: dt.date) -> str:
-    """Último dia (até D−1) com geração por usina e balanço nas 24 horas e o arquivo de fluxo controlado."""
+    """Último dia (até D−1) com geração por usina e balanço nas 24 horas, as duas fechando entre si, e o
+    arquivo de fluxo controlado. Se nenhum dos 7 fechar, o mais recente completo (com aviso)."""
+    fallback: str | None = None
     for back in range(1, 8):
         d = today - dt.timedelta(days=back)
         try:
@@ -46,9 +64,17 @@ def latest_complete_day(f: ons.Fetcher, today: dt.date) -> str:
             if bh[bh.dt.date == d].dt.hour.nunique() < 24:
                 continue
             f.get(ons.controlled_flow_path(d.isoformat()), max_age_s=3 * 3600)
+            gap = generation_gap(g, b, d)
+            if gap > GEN_BALANCE_TOL:
+                print(f"::warning::{d.isoformat()} pulado: geração por usina e balanço do ONS diferem em {100 * gap:.1f}% da carga (dado ainda não consolidado)", flush=True)
+                fallback = fallback or d.isoformat()
+                continue
             return d.isoformat()
         except Exception:  # noqa: BLE001 — arquivo ainda não publicado: tenta o dia anterior
             continue
+    if fallback:
+        print(f"::warning::nenhum dia fecha geração × balanço nos últimos 7; segue com {fallback}", flush=True)
+        return fallback
     raise SystemExit("nenhum dia completo nos últimos 7 dias")
 
 

@@ -195,6 +195,21 @@ def test_inversores_vizinhos_pelo_fator_de_interacao():
     assert reg[2] == pytest.approx(500.0)
 
 
+def test_dia_com_geracao_e_balanco_que_nao_fecham():
+    """Geração somada usina por usina × balanço do ONS: 30/10/2026 veio com 4 GW médios a mais de eólica."""
+    import datetime as dt
+    import pandas as pd
+    import run as R
+
+    t = [f"2026-10-30 {h:02d}:00:00" for h in range(24)]
+    bal = pd.DataFrame({"din_instante": t * 2, "id_subsistema": ["NE"] * 24 + ["SE"] * 24, "val_carga": [40000.0] * 48,
+                        "val_gerhidraulica": [30000.0] * 48, "val_gereolica": [10000.0] * 48})
+    ok = pd.DataFrame({"din_instante": t, "val_geracao": [80000.0 + 300] * 24})  # 0,4% da carga
+    bad = pd.DataFrame({"din_instante": t, "val_geracao": [80000.0 + 4000] * 24})  # 5%
+    d = dt.date(2026, 10, 30)
+    assert R.generation_gap(ok, bal, d) < R.GEN_BALANCE_TOL < R.generation_gap(bad, bal, d)
+
+
 def test_fluxo_no_ramo_modelo_pi():
     # linha 0,01 + j0,1 p.u., carregamento 0,2 p.u.; V1 = 1∠0, V2 = 0,98∠−5°
     bp = {"lf": np.array([0]), "lt": np.array([1]), "zl": np.array([0.01 + 0.1j]), "bl": np.array([0.2]),
