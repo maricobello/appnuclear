@@ -55,13 +55,14 @@ export function GridStrength({ sc, date }: { sc: ShortCircuit; date: string }) {
   const composite = bus && mw ? scrComposite(bus.skMin, mw, bus.ibrMw) : null;
   const cls = composite !== null ? classify(composite) : null;
   const note = bus ? borderNote(sc, bus) : null;
-  const status = !query.trim()
+  const count = !query.trim()
     ? ""
     : !found.total
       ? NO_MATCH
       : found.total > found.items.length
         ? `${found.items.length} de ${num(found.total)} barras: refine a busca`
         : `${found.total} ${found.total === 1 ? "barra encontrada" : "barras encontradas"}`;
+  const status = found.note ? `${found.note} ${count}` : count;
 
   const pick = (anarede: number, scroll: boolean) => {
     setPicked(anarede);
@@ -157,7 +158,7 @@ export function GridStrength({ sc, date }: { sc: ShortCircuit; date: string }) {
                 {bus.skMinAll > bus.skMin * COMPENSATOR_GAP ? (
                   <MetricRow
                     label="Com todos os compensadores ligados"
-                    hint="o mínimo tira o maior compensador síncrono da subestação (N-1)"
+                    hint="o mínimo tira, para esta barra, o compensador síncrono cuja saída mais derruba o curto (N-1)"
                     value={`${mva(bus.skMinAll)}${mw ? ` · SCR ${num(scrComposite(bus.skMinAll, mw, bus.ibrMw), 1)}` : ""}`}
                     tone="muted"
                   />
@@ -169,7 +170,12 @@ export function GridStrength({ sc, date }: { sc: ShortCircuit; date: string }) {
                   tone="muted"
                 />
                 {bus.ibrMw > 0 ? (
-                  <MetricRow label="Eólica e solar já ligadas na subestação" hint="potência instalada, vista desta barra" value={`${num(bus.ibrMw, 0)} MW`} tone="muted" />
+                  <MetricRow
+                    label="Eólica e solar já ligadas perto"
+                    hint={`equivalente visto desta barra: ${num(bus.ibrStationMw, 0)} MW na própria subestação, as vizinhas pesadas pela proximidade elétrica`}
+                    value={`${num(bus.ibrMw, 0)} MW`}
+                    tone="muted"
+                  />
                 ) : null}
                 <MetricRow
                   label={mw ? `SCR de um parque de ${num(mw, mw < 10 ? 1 : 0)} MW` : "SCR do parque"}
@@ -183,10 +189,13 @@ export function GridStrength({ sc, date }: { sc: ShortCircuit; date: string }) {
                   tone={maxPlantMw(bus.skMin, bus.ibrMw) > 0 ? "good" : "critical"}
                 />
                 {note ? <p className="mt-2 text-[12px] leading-relaxed text-warning">{note}</p> : null}
+                {sc.inversores === false ? (
+                  <p className="mt-2 text-[12px] leading-relaxed text-warning">Neste retrato faltou a eólica e a solar já ligadas: o SCR composto saiu igual ao simples.</p>
+                ) : null}
               </>
             ) : (
               <p className="text-[13px] leading-relaxed text-muted">
-                Busque uma subestação ou toque em uma das mais fracas da lista. O SCR usa o curto mínimo do dia, na hora com menos máquinas síncronas ligadas.
+                Busque uma subestação ou toque em uma das mais fracas da lista. O SCR usa o curto mínimo do dia de cada barra, na hora mais fraca dela.
               </p>
             )}
           </div>

@@ -75,14 +75,17 @@ def _sk(x: float) -> float:
 
 
 def short_circuit(m: GridModel, sc: scm.ShortCircuitResult) -> dict:
-    """Por barra (69 kV ou mais): [ANAREDE, nome, kV, UF, subsistema ou país, lat, lon, S''k mín (MVA), hora,
-    S''k máx (MVA), hora, MW eólicos/solares já ligados na subestação vistos da barra (fatores de interação),
-    S''k mín com todos os compensadores ligados (MVA)]."""
+    """Por barra (69 kV ou mais): [ANAREDE, nome, kV nominal, UF, subsistema ou país, lat, lon, S''k mín (MVA),
+    hora, S''k máx (MVA), hora, MW eólicos/solares já ligados vistos da barra (região: fator de interação ≥ 0,7
+    e a própria subestação), S''k mín com todos os compensadores ligados (MVA), os mesmos MW só da subestação]."""
     info = m.buses.reset_index().set_index("pp").reindex(m.net.bus.index)
     kv = m.net.bus.vn_kv.to_numpy()
+    kv_nom = info["kv_nom"].to_numpy(dtype=float) if "kv_nom" in info else kv
     sk_min, h_min = sc.sk_min.min(axis=1), sc.sk_min.argmin(axis=1)
     sk_max, h_max = sc.sk_max.max(axis=1), sc.sk_max.argmax(axis=1)
-    ibr = sc.ibr_eq_mw if sc.ibr_eq_mw is not None else np.zeros(len(kv))
+    ibr_ok = sc.ibr_eq_mw is not None
+    ibr = sc.ibr_eq_mw if ibr_ok else np.zeros(len(kv))
+    ibr_st = sc.ibr_station_mw if sc.ibr_station_mw is not None else ibr
     sk_all = sc.sk_min_all if sc.sk_min_all is not None else sk_min
     rows = []
     countries: set[str] = set()
@@ -95,17 +98,19 @@ def short_circuit(m: GridModel, sc: scm.ShortCircuitResult) -> dict:
         sub = b["sub"] if isinstance(b["sub"], str) else None
         if sub and sub not in SUBSYSTEMS:
             countries.add(sub)
-        rows.append([int(b["anarede"]), nome, _r(kv[i], 1), uf, sub, _r(b["lat"], 3), _r(b["lon"], 3), _sk(sk_min[i]), int(h_min[i]),
-                     _sk(sk_max[i]), int(h_max[i]), round(float(ibr[i])), _sk(max(sk_all[i], sk_min[i]))])
+        v = kv_nom[i] if np.isfinite(kv_nom[i]) and kv_nom[i] > 0 else kv[i]
+        rows.append([int(b["anarede"]), nome, _r(v, 1), uf, sub, _r(b["lat"], 3), _r(b["lon"], 3), _sk(sk_min[i]), int(h_min[i]),
+                     _sk(sk_max[i]), int(h_max[i]), round(float(ibr[i])), _sk(max(sk_all[i], sk_min[i])), round(float(ibr_st[i]))])
     ck = sc.check
     st = sc.stats
     x = scm.X_SUBTRANSIENT
     if st.get("disponibilidade_sincronizada"):
         units = (f"Potência síncrona de cada usina: a disponibilidade sincronizada que o ONS publica por usina e hora "
                  f"({st.get('usinas_pela_disponibilidade', 0)} usinas, {_g(round(100 * st.get('geracao_sincrona_com_disponibilidade', 0)))}% da geração "
-                 f"síncrona do dia; inclui unidades girando como compensador). Nas outras {st.get('usinas_pela_geracao', 0)}, as unidades mínimas para a "
-                 f"geração da hora, cada uma a até {_g(100 * scm.UNIT_LOADING)}% da potência efetiva; geração residual (abaixo de "
-                 f"{_g(100 * scm.RESIDUAL_FRACTION)}% de uma unidade) não liga unidade.")
+                 f"síncrona do dia; pode incluir unidades girando como compensador), em unidades inteiras e nunca abaixo do que a geração da hora "
+                 f"exige. Nas outras {st.get('usinas_pela_geracao', 0)}, as unidades mínimas para a geração, cada uma a até "
+                 f"{_g(100 * scm.UNIT_LOADING)}% da potência efetiva; geração residual (abaixo de {_g(100 * scm.RESIDUAL_FRACTION)}% de uma unidade) "
+                 f"não liga unidade.")
     else:
         units = (f"Sem a disponibilidade sincronizada do ONS neste dia: em cada usina, as unidades mínimas para a geração da hora, cada uma "
                  f"a até {_g(100 * scm.UNIT_LOADING)}% da potência efetiva (estimativa conservadora); geração residual não liga unidade.")
@@ -114,19 +119,20 @@ def short_circuit(m: GridModel, sc: scm.ShortCircuitResult) -> dict:
         f"{_g(scm.X_STEP_UP)} pu do transformador elevador, na potência da máquina (cos φ {_g(scm.COS_PHI)}); compensador síncrono {_g(scm.X_SYNC_COMPENSATOR)} pu.",
         units,
         "Compensadores síncronos do cadastro com a potência da faixa do equipamento, na barra da tensão escrita no código do equipamento; "
-        "sem ela, na do terminal do elo CC da subestação ou na de maior tensão. No mínimo sai o maior compensador de cada subestação "
-        f"(critério N-1, {st.get('compensadores_fora_no_minimo', 0)} subestações).",
+        "sem ela, na do terminal do elo CC da subestação ou na de maior tensão. No mínimo, cada barra perde o compensador cuja saída mais "
+        f"derruba o curto dela (critério N-1, entre os maiores de {st.get('compensadores_n1', 0)} subestações).",
         "Ficam fora eólicas, solares e baterias (o inversor limita a corrente), elos CC e Itaipu 50 Hz; também as pequenas usinas embutidas na "
         "distribuição e as que não têm barra no modelo, o que deixa o curto calculado de 2% a 5% abaixo do real na mediana.",
         "Mínimo com c = 1,0, sem K_T e com a resistência das linhas a 80 °C. Máximo com c = 1,1 (limitado a Um/Un), K_T nos transformadores e "
-        "linhas a 20 °C, mas com o despacho do dia: não serve para superação de disjuntor, que pede todas as unidades ligadas e os fatores K_G/K_S.",
+        "linhas a 20 °C, mas com o despacho do dia: não serve para superação de disjuntor, que pede todas as unidades ligadas e os fatores K_G/K_S. "
+        "A rede de 525 kV do Sul, com a base de 500 kV no cadastro, entra com Un = 525 kV.",
         f"Transformadores com a reatância presumida do modelo ({_g(TRAFO_VK_PERCENT)}%): em 138 kV o curto depende dela (±12% entre 10% e 14%); "
         "em 230 a 500 kV, ±2% a 3%. Compensação série das linhas fora do modelo.",
         "Incerteza típica do curto mínimo: −5% a +10% em 230 a 500 kV e ±12% em 138 kV. Perto de hidrelétricas sem a disponibilidade "
         "sincronizada, unidades girando como compensador podem somar mais.",
-        "SCR composto: o curto mínimo dividido pela potência nova somada à eólica e solar já ligada na mesma subestação (potência instalada "
-        "do cadastro do ONS), cada parque pesado pelo fator de interação |Z_jk/Z_kk| da CIGRE (inteiro na barra de alta; menos numa barra de "
-        "baixa). Parques de subestações vizinhas também disputam a rede e ficam fora dessa conta: a interação regional é do estudo de acesso.",
+        "SCR composto: o curto mínimo dividido pela potência nova somada à eólica e solar já ligada (potência instalada do cadastro do ONS), "
+        f"cada parque pesado pelo fator de interação |Z_jk/Z_kk| da CIGRE: os da própria subestação e os das vizinhas com fator de "
+        f"{_g(scm.IF_REGIONAL)} ou mais. Somar os fatores pequenos de todo o sistema não diria nada; o estudo de acesso do ONS faz a conta completa.",
     ]
     fronteira = {c: {"pais": BORDER.get(c, (c, ""))[0], "nota": BORDER.get(c, (c, "a rede do país vizinho fica fora do modelo"))[1]} for c in sorted(countries)}
     for c, v in fronteira.items():
@@ -139,7 +145,8 @@ def short_circuit(m: GridModel, sc: scm.ShortCircuitResult) -> dict:
         "horaForte": sc.strong_hour,
         "mvaSincrono": [_r(v, 0) for v in sc.online_mva],
         "fontes": {k: v for k, v in st.items() if k in ("usinas", "usinas_pela_disponibilidade", "geracao_sincrona_com_disponibilidade", "compensadores",
-                                                       "compensadores_fora_no_minimo", "usinas_sem_capacidade_no_cadastro", "mva_medio_por_tipo")},
+                                                       "compensadores_n1", "usinas_sem_capacidade_no_cadastro", "mva_medio_por_tipo")},
+        "inversores": ibr_ok,
         "validacao": {"horas": [int(h) for h in ck.get("horas", [])], "dif_rel_max": float(ck["dif_rel_max"]) if ck.get("dif_rel_max") is not None else None,
                       "ok": bool(ck.get("ok")), **({"erro": ck["erro"]} if ck.get("erro") else {})},
         "fronteira": fronteira,

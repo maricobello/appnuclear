@@ -62,6 +62,10 @@ def test_casamentos_errados_achados_na_auditoria():
     assert same_place(t("Polo Petroquímico"), t("P.PETROQUIMIC"))  # nome cortado no limite de letras
     assert same_place(t("SECC LT JOAO CAMARA III MONTE VERDE"), t("J. CAMARA III"))
     assert same_place(t("Jorge Lacerda"), t("J.LACERDA-A"))  # a letra final é o pátio
+    # erro de grafia do cadastro em palavra longa; inicial de outra estação sobrando no ponto de conexão
+    assert same_place(t("SE EMBORAÇÃO 138 KV"), t("EMBORCACAO"))
+    assert not same_place(t("MIRANDINHA"), t("MIRANDOLA"))
+    assert same_place(t("Sec. LT 138 kV C. Novo do Parecis / Brasnorte"), t("BRASNORTE"))
     # nome da usina contra o da estação (último recurso): inicial não pode deixar palavra sobrando
     assert not same_place(t("UTE SAO JOSE"), t("S.JOSE CAMPOS"), full=True)
     assert same_place(t("UHE JIRAU"), t("JIRAU MAR.DIR"), full=True)
@@ -103,6 +107,9 @@ def test_estacao_no_estado_certo():
     assert code_kv("BAMDN25CS1") == 500.0 and ix.by_code("SPSTIN3CS1", code_kv("SPSTIN3CS1")) == 86
     assert ix.by_code("BAUPR10UG1") == 5021  # usina 1 da estação BAUPR
     assert ix.by_code("GOUCDR0UG2") is None  # Codora não é Cachoeira Dourada
+    # estação com o nome exato da usina, só se tiver barra na tensão do ponto (pátio de 230 kV não é a saída de 500 kV)
+    assert ix.exact("IBIUNA", "SP", 345.0) == 86 and ix.exact("IBIUNA", "SP") == 87
+    assert ix.exact("SANTO ANTONIO", "RO", 500.0) is None and ix.exact("SANTO ANTONIO", "RO", 230.0) == 91341
 
 
 def test_compensador_de_ibiuna_no_terminal_do_elo():
@@ -146,8 +153,46 @@ def test_fatores_de_interacao_na_subestacao():
 def test_c_max_limitado_pela_tensao_maxima():
     from sin_grid.shortcircuit import c_max_factor
 
-    c = c_max_factor(np.array([500.0, 230.0, 138.0, 88.0]))
-    assert c[0] == pytest.approx(1.1) and c[1] == pytest.approx(245 / 230) and c[2] == pytest.approx(145 / 138) and c[3] == pytest.approx(1.1)
+    c = c_max_factor(np.array([500.0, 230.0, 138.0, 88.0, 765.0, 13.8]))
+    assert c[0] == pytest.approx(1.1) and c[1] == pytest.approx(245 / 230) and c[2] == pytest.approx(145 / 138)
+    assert c[3] == pytest.approx(92.4 / 88) and c[4] == pytest.approx(800 / 765) and c[5] == pytest.approx(1.1)
+
+
+def test_n1_do_compensador_por_posto_1_igual_ao_calculo_direto():
+    """Tirar um compensador pela atualização de posto 1 dá o mesmo curto que refazer a matriz sem ele."""
+    from types import SimpleNamespace
+    from sin_grid.shortcircuit import C_MIN, Sources, levels, n1_worst, network_admittance, source_admittance, unit_admittance
+
+    net, b = _sc_net()
+    m = SimpleNamespace(net=net)
+    mva = np.zeros((4, 24))
+    mva[0, :], mva[1, :], mva[2, :], mva[3, :] = 2500.0, 150.0, 150.0, 300.0  # usina e três compensadores
+    src = Sources(pos=np.array([0, 3, 3, 2]), x_total=np.array([0.37, 0.35, 0.35, 0.35]), mva=mva, kind=["H", "C", "C", "C"], name=list("abcd"), n1=[1, 3])
+    Ymin = network_admittance(m, "min")
+    Y = Ymin.copy()
+    Y[np.diag_indices_from(Y)] += source_admittance(src, 0, len(Ymin), 100.0)
+    Z = np.linalg.inv(Y)
+    for k in (1, 3):
+        alone = Sources(pos=src.pos, x_total=src.x_total, mva=np.where(np.arange(4)[:, None] == k, 0.0, mva), kind=src.kind, name=src.name)
+        direct = levels(Ymin, alone, 0, C_MIN, 100.0)
+        rank1 = C_MIN * 100.0 / n1_worst(Z, [(int(src.pos[k]), unit_admittance(src, k, 100.0))])
+        assert np.max(np.abs(rank1 / direct - 1)) < 1e-10
+    # o pior N-1 de cada barra fica entre o curto com todos e o sem cada um
+    worst = C_MIN * 100.0 / n1_worst(Z, [(int(src.pos[k]), unit_admittance(src, k, 100.0)) for k in src.n1])
+    full = C_MIN * 100.0 / np.abs(np.diag(Z))
+    assert np.all(worst <= full + 1e-9)
+
+
+def test_inversores_vizinhos_pelo_fator_de_interacao():
+    from sin_grid.shortcircuit import interaction_mw
+
+    Z = np.array([[0.10, 0.09, 0.03], [0.09, 0.10, 0.03], [0.03, 0.03, 0.20]], dtype=complex)
+    ibr = np.array([0.0, 1000.0, 500.0])
+    st = ["A", "B", "C"]
+    assert interaction_mw(Z, ibr, st)[0] == pytest.approx(0.0)  # só a subestação: nada em A
+    reg = interaction_mw(Z, ibr, st, 0.7)
+    assert reg[0] == pytest.approx(0.9 * 1000)  # B é vizinha forte (0,9); C fica fora (0,3)
+    assert reg[2] == pytest.approx(500.0)
 
 
 def test_fluxo_no_ramo_modelo_pi():

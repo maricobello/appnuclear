@@ -322,7 +322,11 @@ export default function RedePage() {
             </Panel>
           </div>
 
-          {g.curto ? <GridStrength sc={g.curto} date={g.date} /> : null}
+          {g.curto ? (
+            <GridStrength sc={g.curto} date={g.date} />
+          ) : (
+            <p className="text-[13px] text-muted">A força da rede (curto-circuito e SCR por subestação) não veio neste retrato do worker; volta na próxima rodada.</p>
+          )}
 
           <Disclosure title="Hipóteses, fontes e histórico do modelo" hint={`${g.sources.length} arquivos do ONS`}>
             <div className="grid grid-cols-1 gap-4 xl:grid-cols-2">

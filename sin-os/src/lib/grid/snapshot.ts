@@ -98,7 +98,7 @@ export const GridSnapshotSchema = z.object({
   curto: z
     .object({
       metodo: text(300),
-      premissas: z.array(text(400)).max(20),
+      premissas: z.array(text(600)).max(20),
       horaFraca: int.min(0).max(23),
       horaForte: int.min(0).max(23),
       mvaSincrono: z.array(n.min(0).nullable()).length(24),
@@ -109,14 +109,17 @@ export const GridSnapshotSchema = z.object({
         mva_medio_por_tipo: z.record(text(40), n),
         usinas_pela_disponibilidade: int.min(0).optional(),
         geracao_sincrona_com_disponibilidade: n.min(0).max(1).optional(),
-        compensadores_fora_no_minimo: int.min(0).optional(),
+        compensadores_n1: int.min(0).optional(),
       }),
       validacao: z.object({ horas: z.array(int.min(0).max(23)).max(2), dif_rel_max: n.min(0).nullable(), ok: z.boolean(), erro: text(300).optional() }),
+      /** A eólica e a solar já ligadas entraram (sem elas, o SCR composto sai igual ao simples). */
+      inversores: z.boolean().optional(),
       /** Barras de fronteira por país: como a interligação afeta o curto (conversora de frequência ou CA). */
       fronteira: z.record(text(4), z.object({ pais: text(40), nota: text(300) })).optional(),
-      // [ANAREDE, nome, kV, UF, subsistema ou país, lat, lon, S''k mín (MVA), hora, S''k máx (MVA), hora,
-      //  MW eólicos/solares já ligados na subestação vistos da barra, S''k mín com todos os compensadores];
-      // os dois últimos entraram depois: relatório sem eles continua válido, e campo novo no fim não reprova
+      // [ANAREDE, nome, kV nominal, UF, subsistema ou país, lat, lon, S''k mín (MVA), hora, S''k máx (MVA), hora,
+      //  MW eólicos/solares já ligados vistos da barra (subestação e vizinhas), S''k mín com todos os
+      //  compensadores, a parte da própria subestação]; os três últimos entraram depois: relatório sem eles
+      //  continua válido, e campo novo no fim não reprova
       barras: z
         .array(
           z.tuple(

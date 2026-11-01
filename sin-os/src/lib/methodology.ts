@@ -1,4 +1,5 @@
 import { AUDIT_THRESHOLDS, CHECK_WEIGHTS } from "./audit/checks";
+import { sci } from "./fmt";
 import { GRID_CHECKS, PLAN_CHECKS } from "./audit/models";
 import { HISTORY_DAYS } from "./grid/snapshot";
 import { DEFAULT_THRESHOLDS } from "./audit/market-alerts";
@@ -492,10 +493,10 @@ export function methodology(env: Record<string, string | undefined> = process.en
         "fluxo de potência AC das 24 horas em lote no p3s (C++/KLU, Fraunhofer IEE); a hora de maior carga é refeita no pandapower e cada linha tem que bater em menos de 1 MW",
         "N-1: saída de cada linha de 440 kV ou mais e de cada interligação entre subsistemas na hora de maior carga, conferida contra a capacidade de curta duração",
         "validação: intercâmbio calculado nas linhas da fronteira (mais o elo de Belo Monte no Norte–Sudeste) contra o intercâmbio medido pelo ONS; até 15% do fluxo médio é bom, até 30% atenção",
-        "curto-circuito trifásico (IEC 60909, fonte de tensão equivalente): S''k = c·Un²/|Zth| em cada barra de 69 kV ou mais, com Zth da matriz de impedâncias da rede (linhas e transformadores, sem cargas nem capacitâncias) mais as fontes; máximo do despacho do dia com c = 1,1 (limitado a Um/Un), fator K_T nos transformadores e linhas a 20 °C; mínimo com c = 1,0, linhas a 80 °C e sem o maior compensador síncrono de cada subestação (N-1); as 24 horas pela matriz própria e as horas mais fraca e mais forte refeitas no calc_sc do pandapower (diferença tem de ficar abaixo de 1e-6)",
+        "curto-circuito trifásico (IEC 60909, fonte de tensão equivalente): S''k = c·Un²/|Zth| em cada barra de 69 kV ou mais, com Zth da matriz de impedâncias da rede (linhas e transformadores, sem cargas nem capacitâncias) mais as fontes; máximo do despacho do dia com c = 1,1 (limitado a Um/Un), fator K_T nos transformadores e linhas a 20 °C; mínimo com c = 1,0, linhas a 80 °C e, em cada barra, sem o compensador síncrono cuja saída mais derruba o curto dela (N-1, por atualização de posto 1 da matriz); barras de 525 kV com Un = 525 kV; as 24 horas pela matriz própria e as horas mais fraca e mais forte refeitas no calc_sc do pandapower (diferença tem de ficar abaixo de 1e-6)",
         "fontes do curto: hidrelétricas, térmicas e nucleares em operação na hora, com a potência girando pela disponibilidade sincronizada que o ONS publica por usina e hora (pega unidades em modo compensador ou com pouca carga); nas usinas sem esse dado, as unidades mínimas para a geração com cada uma a até 90% da potência efetiva do cadastro, e geração residual (abaixo de 5% de uma unidade) não liga unidade; cada fonte com reatância subtransitória típica do tipo (0,25; 0,17; 0,22 pu) mais 0,12 pu do elevador; compensadores síncronos do cadastro (0,35 pu na potência da faixa) na barra da tensão do código do equipamento ou do terminal do elo CC; eólicas, solares, baterias e elos CC fora",
         "casamento usina → barra só no estado da usina (vizinho só pelo nome exato e com barra na tensão do ponto de conexão), a inicial sozinha não casa nome, a ordem das palavras conta e cada usina de um CEG compartilhado (Belo Monte e Pimental, Itaipu 50 e 60 Hz) tem as próprias unidades",
-        "força da rede: relação de curto-circuito SCR = S''k mínimo do dia ÷ potência do parque; 3 ou mais é rede forte, 2 a 3 fraca e abaixo de 2 muito fraca (IEEE 1204, CIGRE); o SCR composto soma ao parque a eólica e a solar já ligadas na subestação, pesadas pelo fator de interação |Z_jk/Z_kk| da CIGRE; o maior parque com SCR ≥ 3 é S''k mínimo ÷ 3 menos esse equivalente",
+        "força da rede: relação de curto-circuito SCR = S''k mínimo do dia ÷ potência do parque; 3 ou mais é rede forte, 2 a 3 fraca e abaixo de 2 muito fraca (IEEE 1204, CIGRE); o SCR composto soma ao parque a eólica e a solar já ligadas na subestação e nas vizinhas com fator de interação |Z_jk/Z_kk| (CIGRE) de 0,7 ou mais, pesadas por ele; o maior parque com SCR ≥ 3 é S''k mínimo ÷ 3 menos esse equivalente",
         "agenda: GitHub Actions às 16:47 e 23:47 UTC sobre o último dia com as 24 horas no balanço; o relatório entra por /api/rede/ingest só com o segredo do servidor e passa por um esquema fechado",
       ],
       audit: [
@@ -506,6 +507,7 @@ export function methodology(env: Record<string, string | undefined> = process.en
         `contingências N-1 resolvidas em ${pct(GRID_CHECKS.n1Converged.pass)} dos casos ou mais (${pct(GRID_CHECKS.n1Converged.warn)} atenção)`,
         `tensões entre 0,90 e 1,10 pu em ${pct(GRID_CHECKS.voltageInBand.pass)} das barras: só plausibilidade, o ONS não publica tensões medidas`,
         "intercâmbio de cada interligação: bom aprova, atenção fica em atenção, ruim reprova",
+        `curto-circuito pela matriz de impedâncias própria igual ao calc_sc do pandapower nas horas mais fraca e mais forte: diferença relativa abaixo de ${sci(GRID_CHECKS.curtoRel, 0)}`,
       ],
       limits: [
         "transformadores com reatância presumida (12% na própria base): o cadastro do ONS não publica a impedância",

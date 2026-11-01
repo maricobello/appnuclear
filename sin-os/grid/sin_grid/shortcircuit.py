@@ -16,14 +16,15 @@ compensador ou com pouca carga); nas usinas sem esse dado, as unidades ligadas s
 geração da hora com cada uma a até 90% da potência efetiva (estimativa conservadora), e geração
 residual (abaixo de 5% de uma unidade) não liga unidade. Cada fonte entra com a reatância
 subtransitória típica do tipo de máquina mais a do transformador elevador, na base da potência
-ligada: no modelo, as usinas estão na barra de alta da estação, sem o elevador. No mínimo sai o maior
-compensador síncrono de cada subestação (critério N-1).
+ligada: no modelo, as usinas estão na barra de alta da estação, sem o elevador. No mínimo, cada barra
+perde o compensador síncrono cuja saída mais derruba o curto dela (critério N-1, por atualização de posto 1
+da matriz de impedâncias).
 
 Ficam fora as eólicas, solares e baterias (o inversor limita a corrente e a relação de curto-circuito
 padrão não conta com eles), os elos de corrente contínua (conversoras LCC não alimentam curto) e
-Itaipu 50 Hz. A potência eólica e solar já ligada na subestação vai junto no relatório, vista de cada
-barra pelos fatores de interação |Z_jk/Z_kk| (CIGRE), para a relação de curto-circuito composta: o
-parque novo disputa a mesma rede com os que já estão lá.
+Itaipu 50 Hz. A potência eólica e solar já ligada vai junto no relatório, vista de cada barra pelos
+fatores de interação |Z_jk/Z_kk| (CIGRE) — na própria subestação e na região (fator ≥ 0,7) —, para a
+relação de curto-circuito composta: o parque novo disputa a mesma rede com os que já estão lá.
 
 Por barra: o mínimo do dia (c = 1,0 na hora mais fraca) e o máximo do despacho do dia (c = 1,1 na hora
 mais forte) — este não é o máximo da IEC para superação de disjuntor, que liga todas as unidades.
@@ -61,7 +62,7 @@ RESIDUAL_MW = 1.0
 RX_SOURCE = 0.05
 C_MAX, C_MIN = 1.1, 1.0
 #: tensão máxima do equipamento por tensão nominal (kV): c_max·Un não passa de Um (IEC 60909-0, tabela 1)
-U_MAX = {69.0: 72.5, 138.0: 145.0, 230.0: 245.0, 345.0: 362.0, 440.0: 460.0, 500.0: 550.0, 525.0: 550.0, 765.0: 800.0}
+U_MAX = {69.0: 72.5, 88.0: 92.4, 138.0: 145.0, 161.0: 170.0, 230.0: 245.0, 289.0: 300.0, 345.0: 362.0, 440.0: 460.0, 500.0: 550.0, 525.0: 550.0, 765.0: 800.0}
 #: temperatura final das linhas no curto mínimo e coeficiente de temperatura da resistência
 END_TEMP_C = 80.0
 ALPHA_R = 0.004
@@ -80,7 +81,7 @@ COMPENSATOR = "COMPENSADOR SÍNCRONO"
 @dataclass
 class Sources:
     """Fontes de curto: barra (posição na rede), reatância total (pu na potência ligada) e MVA ligados por
-    hora no máximo (``mva``) e no mínimo (``mva_min``: sem o maior compensador de cada subestação)."""
+    hora. ``n1``: índice do maior compensador síncrono de cada barra com compensador (candidatos do N-1)."""
 
     pos: np.ndarray  # (k,)
     x_total: np.ndarray  # (k,)
@@ -88,10 +89,10 @@ class Sources:
     kind: list[str]
     name: list[str]
     stats: dict = field(default_factory=dict)
-    mva_min: np.ndarray | None = None  # (k, 24); None = igual a mva
+    n1: list[int] = field(default_factory=list)
 
-    def on(self, case: str) -> np.ndarray:
-        return self.mva_min if case == "min" and self.mva_min is not None else self.mva
+    def on(self, case: str) -> np.ndarray:  # noqa: ARG002 — o mesmo conjunto nos dois casos; o N-1 vem depois
+        return self.mva
 
 
 @dataclass
@@ -104,11 +105,13 @@ class ShortCircuitResult:
     strong_hour: int
     check: dict
     stats: dict
-    #: MW de eólicas, solares e baterias na barra (posição) e o equivalente visto dela, com as outras barras
-    #: da mesma subestação ponderadas pelos fatores de interação na hora mais fraca
+    #: MW de eólicas, solares e baterias na barra (posição) e o equivalente visto dela, pelos fatores de
+    #: interação na hora mais fraca: na região (fator ≥ 0,7, mais as barras da própria subestação) e só na
+    #: subestação
     ibr_mw: np.ndarray | None = None
     ibr_eq_mw: np.ndarray | None = None
-    #: S''k mínimo com todos os compensadores ligados (sem o N-1), na mesma hora do mínimo de cada barra
+    ibr_station_mw: np.ndarray | None = None
+    #: S''k mínimo do dia com todos os compensadores ligados (sem o N-1)
     sk_min_all: np.ndarray | None = None
 
 
@@ -192,9 +195,17 @@ def collect_sources(m: GridModel, d: Dispatch, regs: dict[str, pd.DataFrame], sy
         n, total = plant_units(groups, ceg, nome)
         sy = _sync_row(sync, ceg, nome)
         if sy is not None:
-            # disponibilidade sincronizada do ONS (MW das unidades girando); nunca abaixo da geração
-            cap = total / COS_PHI if total > 0 else np.inf
-            s = np.minimum(np.maximum(sy, np.maximum(p, 0.0)) / COS_PHI, max(cap, float(np.max(p)) / COS_PHI))
+            # disponibilidade sincronizada do ONS (MW das unidades girando), nunca abaixo da geração e em
+            # unidades inteiras: a disponibilidade cai com a queda baixa, a potência da máquina não
+            # e nunca abaixo das unidades mínimas para a geração: às vezes o dado vem defasado (Itá com 829 MW
+            # sincronizados o dia todo gerando até 1.417 MW)
+            base = np.maximum(sy, np.maximum(p, 0.0))
+            if n > 0 and total > 0:
+                unit = total / n
+                s = np.clip(np.ceil(base / unit - RESIDUAL_FRACTION), 0, n) * unit / COS_PHI
+            else:
+                s = base / COS_PHI
+            s = np.maximum(s, online_mva(p, n, total / n if n else 0.0))
             by_sync += int(np.any(s > 0))
             e_sync += float(np.maximum(p, 0).sum())
         else:
@@ -232,20 +243,18 @@ def collect_sources(m: GridModel, d: Dispatch, regs: dict[str, pd.DataFrame], sy
             n_comp += 1
             by_type[COMPENSATOR] = by_type.get(COMPENSATOR, 0.0) + q
     arr = np.array(mva, dtype=float).reshape(-1, 24)
-    arr_min = arr.copy()
-    for ks in comp_at.values():
-        arr_min[max(ks, key=lambda k: arr[k, 0])] = 0.0
+    n1 = [max(ks, key=lambda k: arr[k, 0]) for ks in comp_at.values()]
     stats = {
         "usinas": int(sum(1 for k in kind if k != COMPENSATOR)),
         "usinas_pela_disponibilidade": by_sync,
         "usinas_pela_geracao": by_gen,
         "geracao_sincrona_com_disponibilidade": round(e_sync / e_all, 3) if e_all > 0 else 0.0,
         "compensadores": n_comp,
-        "compensadores_fora_no_minimo": len(comp_at),
+        "compensadores_n1": len(n1),
         "usinas_sem_capacidade_no_cadastro": no_capacity,
         "mva_medio_por_tipo": {k: round(v) for k, v in sorted(by_type.items())},
     }
-    return Sources(np.array(pos, dtype=int), np.array(xt, dtype=float), arr, kind, name, stats, arr_min)
+    return Sources(np.array(pos, dtype=int), np.array(xt, dtype=float), arr, kind, name, stats, n1)
 
 
 def ibr_by_bus(m: GridModel, d: Dispatch, regs: dict[str, pd.DataFrame]) -> np.ndarray:
@@ -276,24 +285,26 @@ def ibr_by_bus(m: GridModel, d: Dispatch, regs: dict[str, pd.DataFrame]) -> np.n
     return out
 
 
-def interaction_mw(Z: np.ndarray, ibr: np.ndarray, station: list) -> np.ndarray:
-    """Inversores já ligados na mesma subestação, vistos de cada barra k: Σ_j min(1, |Z_jk / Z_kk|) · P_j
-    sobre as barras j da estação (fatores de interação da CIGRE). Na barra de alta, os parques das
-    barras de baixa da estação contam inteiros; numa barra de baixa, os da alta contam menos (o
-    transformador separa). Subestações vizinhas ficam fora: a soma regional pede o estudo de acesso."""
+#: fator de interação a partir do qual um parque de outra subestação conta no SCR composto regional
+IF_REGIONAL = 0.7
+
+
+def interaction_mw(Z: np.ndarray, ibr: np.ndarray, station: list, cut: float | None = None) -> np.ndarray:
+    """Inversores já ligados vistos de cada barra k: Σ_j min(1, |Z_jk / Z_kk|) · P_j (fatores de interação
+    da CIGRE). Sem ``cut``, só as barras j da mesma subestação (na barra de alta, os parques das barras de
+    baixa contam inteiros; numa de baixa, os da alta contam menos). Com ``cut``, também as barras de outras
+    subestações com fator ≥ cut: somar todos os fatores pequenos de dezenas de GW não diria nada."""
     out = np.zeros(len(ibr))
-    za = np.abs(Z)
-    by: dict = {}
-    for i, st in enumerate(station):
-        by.setdefault(st if st is not None else ("barra", i), []).append(i)
-    for idx in by.values():
-        J = [j for j in idx if ibr[j] > 0]
-        if not J:
-            continue
-        K = np.array(idx)
-        f = np.minimum(za[np.ix_(J, K)] / za[K, K][None, :], 1.0)
-        out[K] += f.T @ ibr[J]
-    return out
+    J = np.flatnonzero(ibr > 0)
+    if not len(J):
+        return out
+    dk = np.abs(np.diag(Z))
+    f = np.minimum(np.abs(Z[J, :]) / dk[None, :], 1.0)  # f[j, k]
+    st = np.array([x if x is not None else f"#{i}" for i, x in enumerate(station)], dtype=object)
+    mask = st[J][:, None] == st[None, :]
+    if cut is not None:
+        mask = mask | (f >= cut)
+    return (f * mask).T @ ibr[J]
 
 
 def compensator_mvar(name: object, upper: object, nominal: object) -> float:
@@ -395,6 +406,23 @@ def _clean_error(e: Exception) -> str:
     return f"{type(e).__name__}: {' '.join(msg.split())}"[:160]
 
 
+def unit_admittance(src: Sources, k: int, sb: float) -> complex:
+    """Admitância (p.u.) de uma fonte sozinha, na potência dela (compensador: constante no dia)."""
+    z = src.x_total[k] * sb / float(src.mva[k].max()) / math.sqrt(1 + RX_SOURCE**2) * complex(RX_SOURCE, 1.0)
+    return 1.0 / z
+
+
+def n1_worst(Z: np.ndarray, cands: list[tuple[int, complex]]) -> np.ndarray:
+    """|Z_kk| no pior N-1 de cada barra: tirar a fonte de admitância y da barra c muda a matriz por posto 1
+    (Sherman–Morrison), Z'_kk = Z_kk + Z_kc² · y / (1 − y · Z_cc); fica o maior |Z'_kk| entre os candidatos."""
+    zkk = np.diag(Z)
+    worst = np.abs(zkk)
+    for c, y in cands:
+        col = Z[:, c]
+        worst = np.maximum(worst, np.abs(zkk + col * col * (y / (1.0 - y * Z[c, c]))))
+    return worst
+
+
 def run(m: GridModel, d: Dispatch, regs: dict[str, pd.DataFrame], with_check: bool = True,
         sync: pd.DataFrame | None = None) -> ShortCircuitResult:
     src = collect_sources(m, d, regs, sync)
@@ -402,43 +430,55 @@ def run(m: GridModel, d: Dispatch, regs: dict[str, pd.DataFrame], with_check: bo
         raise ValueError("nenhuma fonte síncrona casada com barra")
     sb = m.net.sn_mva
     n = len(m.net.bus)
-    Ymax = network_admittance(m, "max")
-    Ymin = network_admittance(m, "min")
-    sk_max = np.zeros((n, 24))
-    sk_min = np.zeros((n, 24))
-    for h in range(24):
-        sk_max[:, h] = levels(Ymax, src, h, C_MAX, sb, "max")
-        sk_min[:, h] = levels(Ymin, src, h, C_MIN, sb, "min")
     online = src.mva.sum(axis=0)
     weak, strong = int(np.argmin(online)), int(np.argmax(online))
+    Ymax = network_admittance(m, "max")
+    Ymin = network_admittance(m, "min")
+    # N-1: para cada barra, o compensador síncrono (o maior de cada subestação) cuja saída mais derruba o curto
+    cands = [(int(src.pos[k]), unit_admittance(src, k, sb)) for k in src.n1]
+    sk_max = np.zeros((n, 24))
+    sk_min = np.zeros((n, 24))
+    sk_all = np.zeros((n, 24))
+    Zweak = None
+    for h in range(24):
+        sk_max[:, h] = levels(Ymax, src, h, C_MAX, sb)
+        Y = Ymin.copy()
+        Y[np.diag_indices_from(Y)] += source_admittance(src, h, n, sb)
+        Z = np.linalg.inv(Y)
+        sk_all[:, h] = C_MIN * sb / np.abs(np.diag(Z))
+        sk_min[:, h] = C_MIN * sb / n1_worst(Z, cands)
+        if h == weak:
+            Zweak = Z
     check: dict = {"horas": [weak, strong]}
     if with_check:
-        try:
+        try:  # o mínimo confere com todos os compensadores; o N-1 é identidade algébrica (teste próprio)
             pmin = pandapower_check(m, src, weak, "min")
             pmax = pandapower_check(m, src, strong, "max")
-            dif = max(float(np.max(np.abs(pmin - sk_min[:, weak]) / pmin)), float(np.max(np.abs(pmax - sk_max[:, strong]) / pmax)))
+            dif = max(float(np.max(np.abs(pmin - sk_all[:, weak]) / pmin)), float(np.max(np.abs(pmax - sk_max[:, strong]) / pmax)))
             check.update(dif_rel_max=dif, ok=bool(dif < PANDAPOWER_TOL))
         except Exception as e:  # noqa: BLE001 — registra e segue: a tela mostra a conferência como falha
             check.update(ok=False, erro=_clean_error(e))
-    # c_max·Un ≤ Um: o pandapower usa 1,1 em todas as barras, então a correção vem depois da conferência
-    sk_max *= (c_max_factor(m.net.bus.vn_kv.to_numpy()) / C_MAX)[:, None]
-    # o mesmo mínimo com todos os compensadores ligados, nas horas em que cada barra tem o seu mínimo
-    h_min = sk_min.argmin(axis=1)
-    sk_all = np.zeros(n)
-    for h in np.unique(h_min):
-        sel = h_min == h
-        sk_all[sel] = levels(Ymin, src, int(h), C_MIN, sb, "max")[sel]
-    ibr = ibr_eq = None
+    # depois da conferência (o pandapower usa 1,1 e a base da barra em todas): c_max·Un ≤ Um e a tensão
+    # nominal das barras de 525 kV, que no ANAREDE têm a base de 500 kV (o mínimo usa c·Un com Un = 525)
+    vn = m.net.bus.vn_kv.to_numpy()
+    info = m.buses.reset_index().set_index("pp").reindex(m.net.bus.index)
+    nominal = info["kv_nom"].to_numpy(dtype=float) if "kv_nom" in info else vn
+    r = np.where(np.isfinite(nominal) & (nominal > 0), nominal / vn, 1.0)
+    sk_max *= (c_max_factor(vn) / C_MAX * r)[:, None]
+    sk_min *= (r * r)[:, None]
+    sk_all *= (r * r)[:, None]
+    ibr = ibr_eq = ibr_st = None
     try:  # eólica e solar já ligadas: na barra e vistas de cada barra (fatores de interação na hora mais fraca)
         ibr = ibr_by_bus(m, d, regs)
-        Y = Ymin.copy()
-        Y[np.diag_indices_from(Y)] += source_admittance(src, weak, n, sb, "min")
         pp_to_bus = dict(zip(m.buses["pp"], m.buses.index))
         station = [m.index.station_of(pp_to_bus[b]) if b in pp_to_bus else None for b in m.net.bus.index]
-        ibr_eq = interaction_mw(np.linalg.inv(Y), ibr, station)
-    except Exception:  # noqa: BLE001 — sem isso, o SCR sai só o simples
-        ibr = ibr_eq = None
+        ibr_st = interaction_mw(Zweak, ibr, station)
+        ibr_eq = interaction_mw(Zweak, ibr, station, IF_REGIONAL)
+    except Exception as e:  # noqa: BLE001 — sem isso, o SCR sai só o simples (e a tela avisa)
+        print(f"::warning::eólica e solar por barra fora do curto: {_clean_error(e)}", flush=True)
+        ibr = ibr_eq = ibr_st = None
     stats = {**src.stats, "mva_sincrono_min": round(float(online.min())), "mva_sincrono_max": round(float(online.max())),
              "disponibilidade_sincronizada": sync is not None}
     return ShortCircuitResult(sk_min=sk_min, sk_max=sk_max, online_mva=online, weak_hour=weak, strong_hour=strong,
-                              check=check, stats=stats, ibr_mw=ibr, ibr_eq_mw=ibr_eq, sk_min_all=sk_all)
+                              check=check, stats=stats, ibr_mw=ibr, ibr_eq_mw=ibr_eq, ibr_station_mw=ibr_st,
+                              sk_min_all=sk_all.min(axis=1))

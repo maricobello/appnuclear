@@ -15,7 +15,7 @@ import { PlanReportSchema } from "../src/lib/planning/report";
 import type { GridSnapshot } from "../src/lib/grid/snapshot";
 
 const PLAN = PlanReportSchema.parse(JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/planejamento.json"), "utf8")));
-// curto-circuito de verdade (worker da rede, 29/10/2026) em 23 barras
+// curto-circuito de verdade (worker da rede, 29/10/2026) em 46 barras
 const CURTO = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/curto-amostra.json"), "utf8")) as NonNullable<GridSnapshot["curto"]>;
 const GRID = { date: "2026-10-29", curto: CURTO } as unknown as GridSnapshot;
 
@@ -157,14 +157,14 @@ describe("ferramentas da Iara", () => {
 
   it("forca_da_rede: curto mínimo e máximo, SCR simples e composto com a classe e o maior parque com SCR ≥ 3", async () => {
     const call = (args: Record<string, unknown>) => executeTool("forca_da_rede", args, { now: NOW, asset: ASSET }, deps(src(PLD)));
-    type Bar = { nome: string; kv: number; curto_min_mva: number; scr_composto: number; scr_sozinho_na_barra: number; classe: string; maior_parque_scr_3_mw: number; ik_min_ka: number; eolica_solar_ja_ligada_mw: number; fronteira?: string; curto_min_com_todos_os_compensadores_mva?: number };
+    type Bar = { nome: string; kv: number; curto_min_mva: number; scr_composto: number; scr_sozinho_na_barra: number; classe: string; maior_parque_scr_3_mw: number; ik_min_ka: number; eolica_solar_ja_ligada_perto_mw: number; eolica_solar_na_subestacao_mw: number; fronteira?: string; curto_min_com_todos_os_compensadores_mva?: number };
     const r = (await call({ subestacao: "paulino", mw: 500 })).result as { dia_modelado: string; dias_desde_o_dia_modelado: number; conferencia_pandapower: string; barras: Bar[] };
     expect(r.dia_modelado).toBe("2026-10-29");
     expect(r.conferencia_pandapower).toBe("confere");
     expect("dias_desde_o_dia_modelado" in r).toBe(true);
     const b = r.barras[0];
     expect(b.nome).toBe("PAULINO NEVES");
-    expect(b.eolica_solar_ja_ligada_mw).toBe(0);
+    expect(b.eolica_solar_ja_ligada_perto_mw).toBe(0);
     expect(b.scr_composto).toBeCloseTo(b.curto_min_mva / 500, 2);
     expect(b.scr_sozinho_na_barra).toBeCloseTo(b.curto_min_mva / 500, 2);
     expect(b.classe).toBe(b.scr_composto >= 3 ? "forte" : b.scr_composto >= 2 ? "fraca" : "muito fraca");
@@ -172,8 +172,9 @@ describe("ferramentas da Iara", () => {
     expect(b.ik_min_ka).toBeCloseTo(b.curto_min_mva / (Math.sqrt(3) * b.kv), 2);
     // Açu III: a eólica já ligada derruba o SCR composto; potência em texto pt-BR também vale
     const acu = ((await call({ subestacao: "Açu III 500", mw: "1.000" })).result as { barras: Bar[] }).barras[0];
-    expect(acu.eolica_solar_ja_ligada_mw).toBeGreaterThan(3000);
-    expect(acu.scr_composto).toBeCloseTo(acu.curto_min_mva / (1000 + acu.eolica_solar_ja_ligada_mw), 1);
+    expect(acu.eolica_solar_na_subestacao_mw).toBeGreaterThan(3000);
+    expect(acu.eolica_solar_ja_ligada_perto_mw).toBeGreaterThan(acu.eolica_solar_na_subestacao_mw);
+    expect(acu.scr_composto).toBeCloseTo(acu.curto_min_mva / (1000 + acu.eolica_solar_ja_ligada_perto_mw), 1);
     expect(acu.classe).toBe("muito fraca");
     expect(acu.maior_parque_scr_3_mw).toBe(0);
     // Tapajós II: o mínimo tira o único compensador da subestação e mostra o valor com ele

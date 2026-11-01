@@ -20,7 +20,7 @@ import {
 } from "@/lib/grid/strength";
 import { sci } from "@/lib/fmt";
 
-// curto-circuito de verdade (worker da rede, 29/10/2026) em 23 barras
+// curto-circuito de verdade (worker da rede, 29/10/2026) em 46 barras
 const CURTO = JSON.parse(readFileSync(path.join(import.meta.dirname, "fixtures/curto-amostra.json"), "utf8")) as ShortCircuit;
 const rows = busRows(CURTO);
 const names = (q: string) => searchBuses(rows, q).items.map((b) => b.nome);
@@ -35,11 +35,15 @@ describe("força da rede (curto-circuito e SCR)", () => {
       expect(b.skMax).toBeGreaterThanOrEqual(b.skMin);
       expect(b.skMinAll).toBeGreaterThanOrEqual(b.skMin);
       expect(b.ibrMw).toBeGreaterThanOrEqual(0);
+      expect(b.ibrMw).toBeGreaterThanOrEqual(b.ibrStationMw);
     }
     // relatório anterior (11 campos por barra): sem eólica/solar e com o mínimo igual ao de todos os compensadores
     const old = busRows({ ...CURTO, barras: CURTO.barras.map((r) => r.slice(0, 11) as typeof r) });
     expect(old[0].ibrMw).toBe(0);
+    expect(old[0].ibrStationMw).toBe(0);
     expect(old[0].skMinAll).toBe(old[0].skMin);
+    // barras de 525 kV do Sul com a tensão nominal (no cadastro, a base é 500 kV)
+    expect(bus(976)).toMatchObject({ nome: "GRAVATAI", kv: 525 });
   });
 
   it("busca: sem acento, abreviações do ONS, tensão, número de barra e romanos", () => {
@@ -52,11 +56,34 @@ describe("força da rede (curto-circuito e SCR)", () => {
     expect(names("Paulo Afonso")).toEqual(expect.arrayContaining(["P. AFONSO IV_SE", "P.AFONSO III"]));
     expect(names("Paulo Afonso 3")).toEqual(["P.AFONSO III"]);
     expect(names("Paulo Afonso IV")).not.toContain("P.AFONSO III");
-    expect(names("Serra da Mesa")).toEqual(["S.DA MESA"]);
+    expect(names("Serra da Mesa")).toEqual(["S.DA MESA", "S.DA MESA"]);
     expect(names("Foz do Iguaçu")).toEqual(["F.IGUACUNORTE"]);
     expect(names("Ribeirão Preto")).toEqual(["RIBEIRAOPRETO"]);
     expect(names("Mossoró 2")).toEqual(["MOSSORO II"]);
     expect(names("Açu")[0]).toBe("ACU III");
+    // abreviações de duas letras ou mais do cadastro ("SANT.", "FERREI.", "CURIT.")
+    expect(names("Santana do Araguaia")).toEqual(["SANT. ARAGUAIA"]);
+    expect(names("Ferreira Gomes")).toEqual(["FERREI.GOMES"]);
+    expect(names("Presidente Médici")).toEqual(["PRE.MEDICI"]);
+    expect(names("Brasília Sul")).toEqual(["BRAS. SUL"]);
+    expect(names("Ilha Solteira")).toEqual(expect.arrayContaining(["ILHA SOLTEIRA", "IL.SOLTEIRA 2"]));
+    expect(names("Ilha Solteira 2")).toEqual(["IL.SOLTEIRA 2"]);
+    expect(names("Curitiba Leste")).toEqual(["CURIT.LESTE", "CURIT.LESTE"]);
+    // a inicial não casa fora de ordem: "Curitiba Centro" não é C.I.CURITIBA (Cidade Industrial)
+    expect(names("Curitiba Centro")).toEqual(["CURIT. CENTRO"]);
+    expect(names("Cidade Industrial Curitiba")).toContain("C.I.CURITIBA");
+    // "barra" é nome quando não vem antes de número
+    expect(names("Barra Grande")[0]).toBe("BARRA GRANDE");
+    expect(names("Barra do Peixe")[0]).toBe("BARRA PEIXE");
+    // tensões de 161, 289 e 525 kV; número sozinho que também é tensão vale como número de barra
+    expect(searchBuses(rows, "Braúnas 161").items.map((b) => b.anarede)).toEqual([9063]);
+    expect(searchBuses(rows, "Três Marias 289").items.map((b) => b.anarede)).toEqual([381]);
+    expect(searchBuses(rows, "Gravataí 525").items.map((b) => b.anarede)).toEqual([976]);
+    expect(searchBuses(rows, "230").items.map((b) => b.anarede)).toEqual([230]);
+    // tensão que a subestação não tem: mostra as outras e avisa
+    const i440 = searchBuses(rows, "Ibiúna 440");
+    expect(i440.items.map((b) => b.anarede).sort((a, b) => a - b)).toEqual([86, 122]);
+    expect(i440.note).toMatch(/440 kV.*500, 345 kV/);
     // a inicial sozinha não casa; busca vazia não lista nada
     expect(names("Paulo")).toEqual([]);
     expect(searchBuses(rows, "")).toEqual({ items: [], total: 0 });
@@ -105,12 +132,19 @@ describe("força da rede (curto-circuito e SCR)", () => {
     expect(pn.ibrMw).toBe(0);
     expect(classify(scrComposite(pn.skMin, 500, pn.ibrMw))).toBe("forte");
     expect(Math.round(maxPlantMw(pn.skMin, pn.ibrMw))).toBe(Math.round(pn.skMin / 3));
-    // Açu III 500 kV: barra forte para um parque sozinho, mas a subestação já tem 3,6 GW eólicos
+    // Açu III 500 kV: barra forte para um parque sozinho, mas a subestação já tem 3,6 GW eólicos e as
+    // vizinhas eletricamente próximas, mais 8 GW
     const acu = bus(5350);
-    expect(acu.ibrMw).toBeGreaterThan(3000);
+    expect(acu.ibrStationMw).toBeGreaterThan(3000);
+    expect(acu.ibrMw).toBeGreaterThan(2 * acu.ibrStationMw);
     expect(classify(scr(acu.skMin, 100))).toBe("forte");
     expect(classify(scrComposite(acu.skMin, 100, acu.ibrMw))).toBe("muito fraca");
     expect(maxPlantMw(acu.skMin, acu.ibrMw)).toBe(0);
+    // Milagres II 500 kV: nada na própria subestação, mas cercada de parques: só a subestação daria "forte"
+    const mil = bus(5380);
+    expect(mil.ibrStationMw).toBe(0);
+    expect(classify(scrComposite(mil.skMin, 300, mil.ibrStationMw))).toBe("forte");
+    expect(classify(scrComposite(mil.skMin, 300, mil.ibrMw))).toBe("muito fraca");
     // Tapajós II 230 kV: o mínimo tira o único compensador; com ele, o curto mais que dobra
     const tp = bus(6551);
     expect(tp.skMinAll / tp.skMin).toBeGreaterThan(2);

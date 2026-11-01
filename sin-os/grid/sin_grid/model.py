@@ -61,7 +61,7 @@ def _num(x) -> float:
 @dataclass
 class GridModel:
     net: pp.pandapowerNet
-    #: por barra ANAREDE: índice pandapower, tensão, subsistema, estado, nome, coordenadas
+    #: por barra ANAREDE: índice pandapower, tensão (base e nominal), subsistema, estado, nome, coordenadas
     buses: pd.DataFrame
     #: por linha pandapower: código ONS, nome, capacidade, subsistemas das pontas
     lines: pd.DataFrame
@@ -96,10 +96,13 @@ def build(regs: dict[str, pd.DataFrame], on: str) -> GridModel:
 
     # ---- barras: tensão pela linha (a mais confiável), senão pelo transformador
     kv: dict[int, float] = {}
+    kv_nom: dict[int, float] = {}  # tensão nominal (525 kV do Sul tem a base de 500 kV no ANAREDE)
     for b, v in list(zip(ac["b_de"], ac["kv"])) + list(zip(ac["b_para"], ac["kv"])):
         kv.setdefault(int(b), base_kv(v))
+        kv_nom.setdefault(int(b), float(v))
     for b, v in list(zip(tr["b_p"], tr["kv_p"])) + list(zip(tr["b_s"], tr["kv_s"])):
         kv.setdefault(int(b), base_kv(v))
+        kv_nom.setdefault(int(b), float(v))
 
     s = subs[subs["num_barra"].notna() & (subs["num_barra"] != "")].copy()
     s["bus"] = s["num_barra"].map(_num).astype(int)
@@ -109,7 +112,7 @@ def build(regs: dict[str, pd.DataFrame], on: str) -> GridModel:
 
     info = []
     for b, v in kv.items():
-        row = {"anarede": b, "kv": v, "sub": None, "uf": None, "nome": None, "lat": np.nan, "lon": np.nan}
+        row = {"anarede": b, "kv": v, "kv_nom": kv_nom.get(b, v), "sub": None, "uf": None, "nome": None, "lat": np.nan, "lon": np.nan}
         if b in s.index:
             r = s.loc[b]
             row.update(sub=r["id_subsistema"], uf=r["id_estado"], nome=r["nom_subestacao"], lat=_num(r["val_latitude"]), lon=_num(r["val_longitude"]))

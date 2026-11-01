@@ -25,7 +25,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
 | **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão), política de dados faltantes e de invalidação de séries e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
-| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, planejamento de médio prazo (SDDP), estudo BESS, oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
+| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, planejamento de médio prazo (SDDP), estudo BESS, força da rede (curto e SCR por subestação), oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
 mostra a idade do dado. O painel **APIs conectadas** (Sala de Comando) e a barra do modo Terminal mostram,
@@ -316,15 +316,16 @@ pandapower, mais o N-1 das linhas de 440 kV ou mais e das interligações. Roda 
 síncronas ligadas em cada hora — hidrelétricas, térmicas e nucleares, pela disponibilidade sincronizada que
 o ONS publica por usina e hora (onde ela não existe, pelas unidades mínimas para a geração), e os
 compensadores síncronos. Eólicas, solares e baterias não entram (o inversor limita a corrente). Saem o
-curto mínimo (c = 1,0, na hora mais fraca, sem o maior compensador de cada subestação) e o máximo do
-despacho do dia (c = 1,1 limitado a Um/Un) de cada barra; a tela mostra a relação de curto-circuito (SCR)
-de um parque de X MW, simples e composta (somando a eólica e a solar já ligadas na subestação), e as
-subestações mais fracas, e a Iara responde pela ferramenta `forca_da_rede`. A matriz de impedâncias
+curto mínimo (c = 1,0, na hora mais fraca, sem o compensador síncrono cuja saída mais pesa em cada barra)
+e o máximo do despacho do dia (c = 1,1 limitado a Um/Un) de cada barra; a tela mostra a relação de
+curto-circuito (SCR) de um parque de X MW, simples e composta (somando a eólica e a solar já ligadas na
+subestação e nas vizinhas eletricamente próximas), e as subestações mais fracas, e a Iara responde pela
+ferramenta `forca_da_rede`. A matriz de impedâncias
 própria é conferida com o `calc_sc` do pandapower nas horas mais fraca e mais forte (29/10/2026:
-diferença de 2·10⁻¹³; 146 usinas, 87 delas pela disponibilidade sincronizada, e 56 compensadores; 56–92
-GVA síncronos ligados). Três agentes auditaram o módulo (cálculo, engenharia e dados): o cálculo bateu
-com recomputações independentes em 10⁻¹³, e os erros que acharam no casamento de usinas e compensadores
-com as barras foram corrigidos (`grid/tests` tem os casos). É triagem: o estudo de acesso do ONS continua
+diferença de 2·10⁻¹³; 143 usinas, 84 delas pela disponibilidade sincronizada, e 56 compensadores; 60–97
+GVA síncronos ligados). Três agentes auditaram o módulo (cálculo, engenharia e dados) em duas rodadas: o
+cálculo bateu com recomputações independentes em 10⁻¹³, e os erros que acharam no casamento de usinas e
+compensadores com as barras, no N-1 e no SCR composto foram corrigidos (`grid/tests` tem os casos). É triagem: o estudo de acesso do ONS continua
 obrigatório.
 
 Resultado de 14/10/2026 (dia real): 1.667 barras, 1.841 linhas e 1.813 transformadores; 24/24 horas

@@ -212,7 +212,7 @@ export const TOOL_DEFS: ToolDef[] = [
     function: {
       name: "forca_da_rede",
       description:
-        "Força da rede para conectar usina com inversores (solar, eólica, bateria) numa subestação: potência de curto-circuito trifásica mínima e máxima do dia (IEC 60909, calculada todo dia sobre o modelo do SIN com os cadastros e o despacho do ONS), a relação de curto-circuito (SCR) de um parque de X MW com a classe (forte ≥ 3, fraca 2–3, muito fraca < 2), o SCR composto (somando a eólica e a solar já ligadas na subestação) e o maior parque que mantém SCR ≥ 3. Use para perguntas sobre conexão de usina ou bateria, rede fraca, nível de curto ou SCR. É triagem: não substitui o estudo de acesso do ONS.",
+        "Força da rede para conectar usina com inversores (solar, eólica, bateria) numa subestação: potência de curto-circuito trifásica mínima e máxima do dia (IEC 60909, calculada todo dia sobre o modelo do SIN com os cadastros e o despacho do ONS), a relação de curto-circuito (SCR) de um parque de X MW com a classe (forte ≥ 3, fraca 2–3, muito fraca < 2), o SCR composto (somando a eólica e a solar já ligadas na subestação e nas vizinhas eletricamente próximas) e o maior parque que mantém SCR ≥ 3. Use para perguntas sobre conexão de usina ou bateria, rede fraca, nível de curto ou SCR. É triagem: não substitui o estudo de acesso do ONS.",
       parameters: {
         type: "object",
         properties: {
@@ -518,14 +518,15 @@ async function forcaDaRede(args: Record<string, unknown>, _ctx: ToolCtx, deps: A
           ik_min_ka: r2(ikA(b.skMin, b.kv)),
           ik_max_ka: r2(ikA(b.skMax, b.kv)),
           ...(b.skMinAll > b.skMin * COMPENSATOR_GAP ? { curto_min_com_todos_os_compensadores_mva: b.skMinAll } : {}),
-          eolica_solar_ja_ligada_mw: Math.round(b.ibrMw),
+          eolica_solar_ja_ligada_perto_mw: Math.round(b.ibrMw),
+          eolica_solar_na_subestacao_mw: Math.round(b.ibrStationMw),
           maior_parque_scr_3_mw: Math.round(maxPlantMw(b.skMin, b.ibrMw)),
           ...(comp !== null && alone !== null ? { parque_mw: mw, scr_composto: r2(comp), classe: classify(comp), scr_sozinho_na_barra: r2(alone) } : {}),
           ...(note ? { fronteira: note } : {}),
         };
       }),
       nota:
-        "Triagem com reatâncias típicas das máquinas; unidades ligadas pela disponibilidade sincronizada do ONS (ou estimadas pela geração da hora); no curto mínimo sai o maior compensador síncrono de cada subestação. O SCR composto soma a eólica e a solar já ligadas na subestação. O máximo é do despacho do dia, não serve para superação de disjuntor. O estudo de acesso oficial do ONS segue obrigatório.",
+        "Triagem com reatâncias típicas das máquinas; unidades ligadas pela disponibilidade sincronizada do ONS (ou estimadas pela geração da hora); no curto mínimo cada barra perde o compensador síncrono cuja saída mais pesa (N-1). O SCR composto soma a eólica e a solar já ligadas na subestação e nas vizinhas eletricamente próximas (fator de interação ≥ 0,7). O máximo é do despacho do dia, não serve para superação de disjuntor. O estudo de acesso oficial do ONS segue obrigatório.",
     },
   };
 }

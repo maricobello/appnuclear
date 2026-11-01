@@ -4,6 +4,7 @@ Ordem das tentativas (a primeira que acha vence), cada uma registrada no resulta
 
 1. ``codigo``: o código de equipamento das unidades geradoras (cadastro de capacidade instalada,
    ex. ``ALUXG-0UG5``) começa pelo código da estação, o mesmo do cadastro de subestações (``ALUXG``);
+   ``estacao``: uma estação com exatamente o nome da usina, no mesmo estado;
 2. ``conjunto``: conjuntos eólicos/solares vão para o ponto de conexão mais citado pelas usinas que
    os compõem (cadastro de modalidade, ex. ``SE OUROLANDIA II 230,0 kV``);
 3. ``ponto``: o ponto de conexão da própria usina;
@@ -95,6 +96,20 @@ def _tok_eq(a: str, b: str) -> int:
     return 2 if lo >= 6 and hi >= 8 and hi - lo <= 2 else 1
 
 
+def _one_typo(a: str, b: str) -> bool:
+    """Palavras longas (8 letras ou mais) que diferem por uma letra trocada, sobrando ou faltando, com a
+    mesma inicial: erro de grafia do cadastro ("EMBORAÇÃO" por "EMBORCAÇÃO")."""
+    if a[0] != b[0] or min(len(a), len(b)) < 8 or abs(len(a) - len(b)) > 1 or not (a.isalpha() and b.isalpha()):
+        return False
+    if len(a) == len(b):
+        return sum(x != y for x, y in zip(a, b)) == 1
+    s, t = (a, b) if len(a) < len(b) else (b, a)
+    i = 0
+    while i < len(s) and s[i] == t[i]:
+        i += 1
+    return s[i:] == t[i + 1:]
+
+
 def same_place(q: list[str], c: list[str], full: bool = False) -> bool:
     """Cada palavra do nome mais curto casa com uma palavra DIFERENTE do outro, na mesma ordem; os
     números têm de ser iguais e pelo menos uma palavra tem de ser a mesma por inteiro.
@@ -113,14 +128,16 @@ def same_place(q: list[str], c: list[str], full: bool = False) -> bool:
     if nq != nc and (nq or nc):
         return False
     short, long_ = (q, c) if len(q) <= len(c) else (c, q)
-    initials = {j for j, w in enumerate(long_[:-1]) if len(w) == 1 and w.isalpha()}
+    # só o nome da estação (c) abreviado precisa ser explicado por inteiro; no ponto de conexão sobra
+    # inicial de outra estação ("Sec. LT C. Novo do Parecis / Brasnorte")
+    initials = {j for j, w in enumerate(long_[:-1]) if len(w) == 1 and w.isalpha()} if long_ is c else set()
     every = set(range(len(long_) - 1 if len(long_[-1]) == 1 and long_[-1].isalpha() else len(long_)))
 
     def assign(i: int, start: int, whole: bool, used: frozenset, init: bool = False) -> bool:  # busca em profundidade
         if i == len(short):
             return whole and initials <= used and not (full and init and not every <= used)
         for j in range(start, len(long_)):
-            e = _tok_eq(short[i], long_[j])
+            e = _tok_eq(short[i], long_[j]) or (2 if _one_typo(short[i], long_[j]) else 0)
             ini = e == 1 and (len(short[i]) == 1 or len(long_[j]) == 1)
             if e and assign(i + 1, j + 1, whole or e == 2, used | {j}, init or ini):
                 return True
@@ -188,6 +205,17 @@ class BusIndex:
                 if same_place(q, toks, full):
                     hits.setdefault(k, []).append((kv_, bus))
         return hits
+
+    def exact(self, name_key: str | None, uf: str | None, kv: float | None = None) -> int | None:
+        """Barra da estação de nome exatamente `name_key` no estado, na tensão mais próxima de `kv` (sem
+        casamento por palavras). Estação toda abaixo da tensão pedida não serve: é pátio auxiliar (a
+        "SANTO ANTONIO" de 230 kV não é a saída de 500 kV da usina)."""
+        if not name_key or not uf:
+            return None
+        same = [(v, b) for v, b, u in self.by_key.get(name_key, []) if u == uf]
+        if not same or (kv is not None and max(v for v, _ in same) < 0.9 * kv):
+            return None
+        return self._pick(same, kv)
 
     def find(self, name_key: str | None, kv: float | None, uf: str | None, full: bool = False) -> int | None:
         """Barra da estação de nome `name_key` no estado `uf`, na tensão mais próxima de `kv` (sem tensão,
@@ -312,6 +340,11 @@ def map_plants(gen: pd.DataFrame, units: pd.DataFrame, modality: pd.DataFrame, c
             if b is not None:
                 return b, "codigo"
         pk, pkv = parse_point(points.get(r.ceg))
+        # estação com o nome exato da usina no estado, na tensão do ponto de conexão: é a da própria usina
+        # (Foz do Chapecó tem a sua, e o ponto do cadastro ainda cita Xanxerê, cujas linhas foram desativadas)
+        b = index.exact(key(r.nom_usina), r.id_estado, pkv)
+        if b is not None:
+            return b, "estacao"
         b = index.find(pk, pkv, uf=r.id_estado)
         if b is None and pk and re.search(r" [A-Z]$", pk):
             # "SE 230 kV Jorge Lacerda C": o pátio C não está no cadastro de subestações; vale o complexo
