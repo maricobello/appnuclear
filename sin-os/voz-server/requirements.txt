@@ -1,0 +1,19 @@
+# torch (CPU) é instalado antes, pelo Dockerfile, do índice da PyTorch
+fastapi>=0.115,<1
+uvicorn>=0.30,<1
+pydantic>=2.7,<3
+numpy==1.26.4
+lameenc>=1.7,<2
+huggingface_hub>=0.25
+soundfile>=0.12
+librosa==0.10.2.post1
+kokoro==0.9.4
+# dependências do código do OpenVoice V2 (instalado com --no-deps para fugir das versões antigas fixadas)
+inflect>=7
+unidecode>=1.3
+eng_to_ipa==0.0.2
+pypinyin>=0.50
+jieba==0.42.1
+cn2an>=0.5.22
+langid==1.1.6
+wavmark==0.0.3

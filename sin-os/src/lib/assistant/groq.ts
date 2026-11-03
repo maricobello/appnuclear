@@ -11,7 +11,9 @@ import { recordProbe } from "../sources/http";
 export const GROQ_BASE = (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1").replace(/\/+$/, "");
 export const groqConfigured = () => !!process.env.GROQ_API_KEY;
 
-const CHAT_DEFAULTS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
+// Kimi K2 primeiro (melhor em uso de ferramentas); na Groq cada modelo tem cota própria,
+// então cair para o próximo no 429 também multiplica a capacidade diária gratuita
+const CHAT_DEFAULTS = ["moonshotai/kimi-k2-instruct-0905", "openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
 const STT_DEFAULTS = ["whisper-large-v3-turbo", "whisper-large-v3"];
 const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x))];
 export const chatModels = () => uniq([process.env.GROQ_MODEL, ...CHAT_DEFAULTS]);
@@ -38,10 +40,17 @@ export interface ChatRequest {
   maxTokens?: number;
   temperature?: number;
 }
+export interface ChatUsage {
+  prompt_tokens?: number;
+  completion_tokens?: number;
+  /** Tokens do prompt servidos do cache do provedor (Groq, Gemini, DeepSeek). */
+  cached_tokens?: number;
+}
 export interface ChatResult {
   message: ChatMessage;
   model: string;
-  usage: { prompt_tokens?: number; completion_tokens?: number } | null;
+  usage: ChatUsage | null;
+  provider?: string;
 }
 export type ChatFn = (req: ChatRequest) => Promise<ChatResult>;
 

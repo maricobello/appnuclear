@@ -1,14 +1,17 @@
 "use client";
 
 import { AnimatePresence, motion, useMotionValue, useSpring, useTransform, type MotionValue } from "motion/react";
-import { Mic, Send, Settings2, Square, X } from "lucide-react";
+import { Check, Mic, Paperclip, Send, Settings2, Square, X } from "lucide-react";
 import { usePathname, useRouter } from "next/navigation";
 import { Fragment, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { saveAsset, useAsset } from "@/lib/asset";
+import { senhaConfere } from "@/lib/assistant/access";
 import { saveIara, useIara } from "@/lib/assistant/settings";
 import { pickVoice } from "@/lib/assistant/speech";
 import type { AssistantAction } from "@/lib/assistant/tools";
-import { isHallucination, primeSpeech, recordUtterance, speak, stopSpeaking, supportsRecording, supportsSpeech, type RecordControl, type SpeakControl } from "@/lib/assistant/voice";
+import { isHallucination, primeAudio, primeSpeech, recordUtterance, speak, speakNatural, stopSpeaking, supportsRecording, supportsSpeech, type RecordControl, type SpeakControl } from "@/lib/assistant/voice";
+import { conferirLote } from "@/lib/gd/bill";
+import { getCarteira, lerFaturas, upsertUc } from "@/lib/gd/workspace";
 import { useApi } from "@/lib/useApi";
 import { Button } from "../ui";
 
@@ -26,16 +29,29 @@ interface Msg {
   tools?: { name: string; ms: number; ok: boolean }[];
   actions?: AssistantAction[];
   error?: boolean;
+  /** Tokens gastos nesta resposta (0 = cache ou mensagem local, sem IA). */
+  tokens?: number;
+  model?: string;
+  /** Gerada no navegador (leitura de faturas): não vai para a IA como histórico. */
+  local?: boolean;
+  /** Ações que pedem confirmação e já foram aplicadas/descartadas. */
+  resolved?: number[];
 }
 
 interface IaraStatus {
   configured: boolean;
   online: boolean;
   model: string | null;
+  provider?: string | null;
+  providers?: string[];
   sttModel: string | null;
   latencyMs: number | null;
   error: string | null;
   accessCodeRequired: boolean;
+  /** Voz natural no servidor (rótulo do provedor) ou null. */
+  tts?: string | null;
+  tokensHoje?: number;
+  tokensLimite?: number;
 }
 
 const TOOL_LABEL: Record<string, string> = {
@@ -47,15 +63,31 @@ const TOOL_LABEL: Record<string, string> = {
   saude_dados: "Saúde dos dados",
   navegar: "Navegação",
   configurar_ativo: "Ativo",
+  confianca_dados: "Confiança",
+  renovaveis_corte: "Corte renovável",
+  radar_mercado: "Radar",
+  planejamento_sddp: "SDDP",
+  forca_da_rede: "Força da rede",
+  carregar_ferramentas: "Mais ferramentas",
+  gd_carteira: "Carteira GD",
+  gd_conferir_faturas: "Conferência",
+  gd_fatura_esperada: "Fatura esperada",
+  gd_enquadramento: "Enquadramento",
+  gd_viabilidade: "Viabilidade",
+  gd_contrato_assinatura: "Assinatura",
+  gd_regras: "Regras GD",
+  gd_otimizar_demanda: "Demanda",
+  gd_registrar_uc: "Cadastro UC",
 };
+const kTok = (n: number) => (n >= 1000 ? `${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : String(n));
 
 const SUGGESTIONS = [
   "Qual o PLD agora?",
   "Como fica o PLD amanhã no Sudeste?",
   "Vale rodar a bateria hoje?",
-  "Simula uma bateria de 50 MW por 200 MWh",
-  "Como estão os reservatórios?",
-  "Alguma fonte fora do ar?",
+  "Confere minhas faturas de GD",
+  "Protocolei em março de 2023: sou GD I ou GD II?",
+  "Assinatura com 15% de desconto ainda compensa em 2028?",
 ];
 
 const PHASE_LABEL: Record<Phase, string> = {
@@ -210,7 +242,10 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
   const [draft, setDraft] = useState("");
   const [notice, setNotice] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
+  const [reading, setReading] = useState<{ done: number; total: number } | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
   const level = useMotionValue(0);
+  const statusRef = useRef<IaraStatus | undefined>(undefined);
 
   const msgsRef = useRef(msgs);
   const cfgRef = useRef(cfg);
@@ -227,6 +262,7 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
     assetRef.current = asset;
     pathRef.current = path;
     openRef.current = open;
+    statusRef.current = status.data;
   });
 
   const voice = useMemo(() => pickVoice(voices, cfg.voiceURI), [voices, cfg.voiceURI]);
@@ -275,9 +311,23 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
       for (const a of acts) {
         if (a.type === "asset") saveAsset({ ...assetRef.current, ...a.patch });
         if (a.type === "navigate") router.push(a.href);
+        // gd_uc grava dados do usuário: só com o toque em "confirmar"
       }
     },
     [router],
+  );
+
+  const resolveAction = useCallback(
+    (msgId: string, idx: number, apply: boolean) => {
+      const next = msgsRef.current.map((m) => {
+        if (m.id !== msgId) return m;
+        const a = m.actions?.[idx];
+        if (apply && a?.type === "gd_uc") upsertUc(a.patch);
+        return { ...m, resolved: [...(m.resolved ?? []), idx] };
+      });
+      setChat(next);
+    },
+    [setChat],
   );
 
   const listenRef = useRef<() => void>(() => undefined);
@@ -299,13 +349,26 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
           signal: ac.signal,
           headers: { "Content-Type": "application/json", ...headers() },
           body: JSON.stringify({
-            messages: history.filter((m) => !m.error).slice(-12).map((m) => ({ role: m.role, content: m.text.slice(0, 4000) })),
+            messages: history.filter((m) => !m.error && !m.local).slice(-12).map((m) => ({ role: m.role, content: m.text.slice(0, 4000) })),
             page: pathRef.current,
             asset: assetRef.current,
             voice: viaVoice && cfgRef.current.speak,
+            // carteira de GD: só números das faturas (sem nome/CPF), calculados no servidor
+            ...(() => {
+              const gd = getCarteira();
+              return gd.faturas.length || gd.ucs.length ? { gd } : {};
+            })(),
           }),
         });
-        const j = (await res.json().catch(() => ({}))) as { reply?: string; actions?: AssistantAction[]; tools?: Msg["tools"]; error?: string; code?: string };
+        const j = (await res.json().catch(() => ({}))) as {
+          reply?: string;
+          actions?: AssistantAction[];
+          tools?: Msg["tools"];
+          error?: string;
+          code?: string;
+          model?: string;
+          usage?: { prompt?: number; completion?: number };
+        };
         if (!res.ok || !j.reply) {
           if (j.code === "access_code") setShowSettings(true);
           setChat([...msgsRef.current, { id: uid(), role: "assistant", text: j.error ?? `Falha ao consultar (HTTP ${res.status}).`, error: true }]);
@@ -313,13 +376,15 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
           return;
         }
         const acts = j.actions ?? [];
-        setChat([...msgsRef.current, { id: uid(), role: "assistant", text: j.reply, tools: j.tools, actions: acts }]);
+        setChat([...msgsRef.current, { id: uid(), role: "assistant", text: j.reply, tools: j.tools, actions: acts, tokens: (j.usage?.prompt ?? 0) + (j.usage?.completion ?? 0), model: j.model }]);
         applyActions(acts);
         if (viaVoice && cfgRef.current.speak && openRef.current) {
           setPhase("speaking");
           const ctl: SpeakControl = { stopped: false };
           speakRef.current = ctl;
-          await speak(j.reply, voiceRef.current, ctl, (v) => level.set(v));
+          // voz natural do servidor (OpenVoice/ElevenLabs/Azure); se falhar, a do sistema
+          const how = statusRef.current?.tts && cfgRef.current.natural ? await speakNatural(j.reply, headers(), ctl, (v) => level.set(v)) : "fallback";
+          if (how === "fallback" && !ctl.stopped) await speak(j.reply, voiceRef.current, ctl, (v) => level.set(v));
           if (ctl.stopped) {
             setPhase("idle");
             return;
@@ -348,6 +413,7 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
     }
     setNotice(null);
     primeSpeech();
+    primeAudio();
     const ctl: RecordControl = { stop: false, cancel: false };
     recRef.current = ctl;
     setPhase("listening");
@@ -398,6 +464,29 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
     listenRef.current = () => void listen();
   });
 
+  const onFiles = async (list: FileList | null) => {
+    const files = [...(list ?? [])].slice(0, 60);
+    if (fileRef.current) fileRef.current.value = "";
+    if (!files.length) return;
+    setNotice(null);
+    setReading({ done: 0, total: files.length });
+    const res = await lerFaturas(files, headers(), (done, total) => setReading({ done, total }));
+    setReading(null);
+    const ok = res.filter((r) => r.fatura);
+    const bad = res.filter((r) => r.erro);
+    const lines = [`Li ${ok.length} de ${files.length} fatura(s)${bad.length ? `; ${bad.length} com problema: ${bad.slice(0, 3).map((b) => `${b.nome} (${b.erro})`).join("; ")}` : ""}.`];
+    if (ok.length) {
+      const c = getCarteira();
+      const ucs = new Set(ok.map((r) => r.fatura!.uc ?? "sem UC"));
+      const lote = conferirLote(c.faturas.filter((f) => ucs.has(f.uc ?? "sem UC")), c.ucs);
+      const rs = (v: number) => v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      lines.push(`Conferência automática (sem IA, 0 token): **${lote.totais.alta} alerta(s) alto(s)** e ${lote.totais.media} médio(s)${lote.totais.impactoRs ? `; impacto estimado **R$ ${rs(lote.totais.impactoRs)}**` : ""}.`);
+      for (const a of lote.alertas.slice(0, 3)) lines.push(`- UC ${a.uc} · ${a.ref}: ${a.msg}`);
+      lines.push(`Peça "explica os alertas" ou abra a tela Geração distribuída para ver tudo.`);
+    }
+    setChat([...msgsRef.current, { id: uid(), role: "assistant", text: lines.join("\n"), local: true, tokens: 0 }]);
+  };
+
   const onOrb = () => {
     if (phase === "idle") void listen();
     else if (phase === "listening" && recRef.current) recRef.current.stop = true;
@@ -432,9 +521,9 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
     : !st
       ? "verificando…"
       : st.online
-        ? `online · ${st.model ?? "Groq"}${st.latencyMs ? ` · ${st.latencyMs} ms` : ""}`
+        ? `online · ${st.provider ?? "IA"} ${st.model ?? ""}${st.latencyMs ? ` · ${st.latencyMs} ms` : ""}`
         : st.configured
-          ? `Groq fora do ar — ${st.error ?? "erro"}`
+          ? `${st.provider ?? "IA"} fora do ar — ${st.error ?? "erro"}`
           : "IA não configurada no servidor";
   const statusTone = !cfg.enabled || !st ? "text-muted" : st.online ? "text-good" : st.configured ? "text-critical" : "text-warning";
 
@@ -472,7 +561,7 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
           </div>
 
           {!cfg.enabled ? (
-            <Intro level={level} onEnable={() => saveIara({ enabled: true })} />
+            <Intro level={level} onEnable={(code) => saveIara({ enabled: true, code })} />
           ) : (
             <>
               <AnimatePresence initial={false}>
@@ -481,6 +570,8 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                     <SettingsView
                       ptVoices={ptVoices}
                       voiceURI={voice?.voiceURI ?? null}
+                      tts={st?.tts ?? null}
+                      tokens={st?.tokensHoje !== undefined && st?.tokensLimite ? `${kTok(st.tokensHoje)} de ${kTok(st.tokensLimite)} tokens hoje` : null}
                       needsCode={!!st?.accessCodeRequired}
                       onClear={() => setChat([])}
                       onDisable={() => {
@@ -519,18 +610,41 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                             <div className={`max-w-[95%] text-[13px] leading-relaxed ${m.error ? "text-critical" : "text-ink-2"}`}>
                               <RichText text={m.text} />
                             </div>
-                            {m.tools?.length || m.actions?.length ? (
-                              <div className="flex flex-wrap gap-1">
+                            {m.tools?.length || m.actions?.length || m.tokens !== undefined ? (
+                              <div className="flex flex-wrap items-center gap-1">
                                 {m.tools?.map((t, i) => (
                                   <span key={`t${i}`} className={`rounded-full px-2 py-px text-[11px] ${t.ok ? "border-line text-muted" : "border-critical/40 text-critical"}`} title={`${t.ms} ms`}>
                                     {TOOL_LABEL[t.name] ?? t.name}
                                   </span>
                                 ))}
-                                {m.actions?.map((a, i) => (
-                                  <span key={`a${i}`} className="rounded-[4px] border border-accent/40 px-1.5 py-px text-[11px] text-accent">
-                                    {a.type === "navigate" ? `abriu ${a.label}` : `ativo → ${a.label}`}
+                                {m.actions?.map((a, i) =>
+                                  a.type === "gd_uc" ? (
+                                    m.resolved?.includes(i) ? (
+                                      <span key={`a${i}`} className="rounded-[4px] border border-line px-1.5 py-px text-[11px] text-muted">
+                                        {a.label} · resolvido
+                                      </span>
+                                    ) : (
+                                      <span key={`a${i}`} className="inline-flex items-center gap-1 rounded-[4px] border border-accent/40 py-px pr-0.5 pl-1.5 text-[11px] text-accent">
+                                        gravar {a.label}?
+                                        <button onClick={() => resolveAction(m.id, i, true)} className="grid h-6 w-6 place-items-center rounded hover:bg-accent/15" aria-label={`Confirmar: ${a.label}`}>
+                                          <Check size={13} />
+                                        </button>
+                                        <button onClick={() => resolveAction(m.id, i, false)} className="grid h-6 w-6 place-items-center rounded text-muted hover:bg-surface-2" aria-label="Descartar">
+                                          <X size={13} />
+                                        </button>
+                                      </span>
+                                    )
+                                  ) : (
+                                    <span key={`a${i}`} className="rounded-[4px] border border-accent/40 px-1.5 py-px text-[11px] text-accent">
+                                      {a.type === "navigate" ? `abriu ${a.label}` : `ativo → ${a.label}`}
+                                    </span>
+                                  ),
+                                )}
+                                {m.tokens !== undefined && !m.error ? (
+                                  <span className="px-1 text-[11px] text-muted" title={m.model ?? undefined}>
+                                    {m.tokens ? `${kTok(m.tokens)} tokens` : "0 token"}
                                   </span>
-                                ))}
+                                ) : null}
                               </div>
                             ) : null}
                           </>
@@ -570,6 +684,17 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
                     submit();
                   }}
                 >
+                  <input ref={fileRef} type="file" accept="application/pdf,.pdf,.txt" multiple hidden onChange={(e) => void onFiles(e.target.files)} />
+                  <button
+                    type="button"
+                    onClick={() => fileRef.current?.click()}
+                    disabled={!!reading}
+                    className="grid h-11 w-11 shrink-0 place-items-center rounded-full bg-surface-2 text-muted transition-colors hover:text-ink disabled:opacity-50"
+                    aria-label="Anexar faturas de energia (PDF)"
+                    title="Anexar faturas (PDF) — leitura e conferência sem IA"
+                  >
+                    {reading ? <span className="text-[11px] tabular-nums">{reading.done}/{reading.total}</span> : <Paperclip size={16} />}
+                  </button>
                   <input
                     ref={inputRef}
                     value={draft}
@@ -595,24 +720,59 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
   );
 }
 
-function Intro({ level, onEnable }: { level: MotionValue<number>; onEnable: () => void }) {
+function Intro({ level, onEnable }: { level: MotionValue<number>; onEnable: (code: string) => void }) {
+  const [senha, setSenha] = useState("");
+  const [erro, setErro] = useState(false);
+  const tentar = () => {
+    if (senhaConfere(senha)) onEnable(senha.trim());
+    else setErro(true);
+  };
   return (
-    <div className="flex flex-1 flex-col items-center justify-center gap-4 px-6 text-center">
+    <div className="flex flex-1 flex-col items-center justify-center gap-4 overflow-y-auto px-6 text-center">
       <Orb level={level} phase="off" size={84} />
       <div>
         <h2 className="text-[16px] font-semibold text-ink">Iara, sua assistente de voz</h2>
         <p className="mt-2 text-[12.5px] leading-relaxed text-ink-2">
-          Converse por voz ou texto com o SIN OS. A Iara consulta o PLD, a previsão, o estudo da bateria, os reservatórios e a saúde das fontes, e responde falando. Também abre telas e configura o seu ativo.
+          Converse por voz ou texto com o SIN OS. A Iara consulta o PLD, a previsão, a bateria, a rede, os reservatórios e as suas faturas de geração distribuída, e responde falando. Também abre telas e configura o seu ativo.
         </p>
         <ul className="mt-3 space-y-1 text-left text-[13px] text-muted">
           <li>• Fica desligada até você ativar; o microfone só abre quando você toca.</li>
           <li>• Só usa dado real das ferramentas do app — sem número inventado.</li>
-          <li>• Voz: transcrição Whisper e raciocínio na Groq; fala com a voz pt-BR do seu sistema.</li>
+          <li>• Faturas são lidas e conferidas sem IA; a IA só recebe o resumo.</li>
         </ul>
       </div>
-      <Button variant="primary" onClick={onEnable}>
-        Ativar Iara
-      </Button>
+      <form
+        className="flex w-full max-w-[280px] flex-col gap-2"
+        onSubmit={(e) => {
+          e.preventDefault();
+          tentar();
+        }}
+      >
+        <input
+          value={senha}
+          onChange={(e) => {
+            setSenha(e.target.value);
+            setErro(false);
+          }}
+          type="password"
+          placeholder="Senha da Iara"
+          autoComplete="off"
+          aria-label="Senha da Iara"
+          aria-invalid={erro}
+          className="h-10 rounded-full bg-surface-2 px-4 text-center text-[13px] text-ink placeholder:text-muted focus:outline-none"
+        />
+        {erro ? (
+          <p className="text-[12px] text-critical" role="alert">
+            Senha incorreta.{" "}
+            <button type="button" className="underline" onClick={() => onEnable(senha.trim())}>
+              Usar como código da Vercel
+            </button>
+          </p>
+        ) : null}
+        <Button variant="primary" type="submit" disabled={!senha.trim()}>
+          Ativar Iara
+        </Button>
+      </form>
     </div>
   );
 }
@@ -636,16 +796,33 @@ function Toggle({ label, hint, checked, onChange }: { label: string; hint?: stri
   );
 }
 
-function SettingsView({ ptVoices, voiceURI, needsCode, onClear, onDisable }: { ptVoices: SpeechSynthesisVoice[]; voiceURI: string | null; needsCode: boolean; onClear: () => void; onDisable: () => void }) {
+function SettingsView({
+  ptVoices,
+  voiceURI,
+  tts,
+  tokens,
+  needsCode,
+  onClear,
+  onDisable,
+}: {
+  ptVoices: SpeechSynthesisVoice[];
+  voiceURI: string | null;
+  tts: string | null;
+  tokens: string | null;
+  needsCode: boolean;
+  onClear: () => void;
+  onDisable: () => void;
+}) {
   const cfg = useIara();
   const [code, setCode] = useState(cfg.code);
   return (
     <div className="flex flex-col gap-1 px-3 py-2.5">
       <Toggle label="Responder falando" hint="quando a pergunta vier por voz" checked={cfg.speak} onChange={(v) => saveIara({ speak: v })} />
       <Toggle label="Conversa contínua" hint="volta a ouvir depois de responder" checked={cfg.continuous} onChange={(v) => saveIara({ continuous: v })} />
-      {ptVoices.length ? (
+      {tts ? <Toggle label="Voz natural" hint={`${tts} (desligue para usar a voz do sistema)`} checked={cfg.natural} onChange={(v) => saveIara({ natural: v })} /> : null}
+      {ptVoices.length && (!tts || !cfg.natural) ? (
         <label className="flex items-center justify-between gap-3 py-1 text-[13px] text-ink">
-          Voz
+          Voz do sistema
           <select value={voiceURI ?? ""} onChange={(e) => saveIara({ voiceURI: e.target.value || null })} className="h-7 max-w-[210px] rounded-md border border-line-strong bg-surface-2 px-1.5 text-[13px] text-ink">
             {ptVoices.map((v) => (
               <option key={v.voiceURI} value={v.voiceURI}>
@@ -655,20 +832,19 @@ function SettingsView({ ptVoices, voiceURI, needsCode, onClear, onDisable }: { p
           </select>
         </label>
       ) : null}
-      {needsCode || cfg.code ? (
-        <form
-          className="flex items-center gap-1.5 py-1"
-          onSubmit={(e) => {
-            e.preventDefault();
-            saveIara({ code: code.trim() });
-          }}
-        >
-          <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder="Código de acesso" className="h-7 min-w-0 flex-1 rounded-md border border-line-strong bg-surface-2 px-2 text-[13px] text-ink" aria-label="Código de acesso da Iara" autoComplete="off" />
-          <Button type="submit" variant="secondary">
-            Salvar
-          </Button>
-        </form>
-      ) : null}
+      <form
+        className="flex items-center gap-1.5 py-1"
+        onSubmit={(e) => {
+          e.preventDefault();
+          saveIara({ code: code.trim() });
+        }}
+      >
+        <input value={code} onChange={(e) => setCode(e.target.value)} type="password" placeholder={needsCode ? "Código da Vercel" : "Senha da Iara"} className="h-7 min-w-0 flex-1 rounded-md border border-line-strong bg-surface-2 px-2 text-[13px] text-ink" aria-label="Senha ou código de acesso da Iara" autoComplete="off" />
+        <Button type="submit" variant="secondary">
+          Salvar
+        </Button>
+      </form>
+      {tokens ? <p className="py-0.5 text-[12px] text-muted">Consumo: {tokens}</p> : null}
       <div className="mt-1 flex gap-1.5">
         <Button variant="ghost" onClick={onClear}>
           Limpar conversa

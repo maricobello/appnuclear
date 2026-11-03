@@ -12,6 +12,8 @@ import { borderNote, busRows, classify, COMPENSATOR_GAP, ikA, maxPlantMw, NO_MAT
 import { MIGRACAO, RADAR_UPDATED, radarSorted, TEMA_LABEL, type RadarTema } from "../market/radar";
 import { brtDate, brtHour } from "../sources/time";
 import { SUB_NAMES, SUBS, type DailySubPanel, type SourceResult, type Sub, type SubPanel } from "../sources/types";
+import type { CarteiraGD } from "../gd/types";
+import { executeGdTool, type GdAction } from "./gd-tools";
 import type { ToolDef } from "./groq";
 
 /**
@@ -29,6 +31,7 @@ export const ROUTES = {
   "/planejamento": "Planejamento (SDDP)",
   "/mercado-livre": "Mercado livre & Open Energy",
   "/rede": "Rede elétrica (fluxo, N-1 e força da rede)",
+  "/gd": "Geração distribuída (faturas, contratos e encargos)",
   "/arbitragem": "Arbitragem",
   "/bess": "BESS",
   "/carteira": "Carteira",
@@ -57,11 +60,14 @@ export interface AssetCtx {
 
 export type AssistantAction =
   | { type: "navigate"; href: string; label: string }
-  | { type: "asset"; patch: Partial<AssetCtx>; label: string };
+  | { type: "asset"; patch: Partial<AssetCtx>; label: string }
+  | GdAction;
 
 export interface ToolCtx {
   now: number;
   asset: AssetCtx;
+  /** Carteira de GD enviada pelo navegador (faturas já lidas, UCs). */
+  gd?: CarteiraGD;
 }
 
 export interface AssistantDeps {
@@ -658,8 +664,10 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return navegar(args);
       case "configurar_ativo":
         return configurarAtivo(args, ctx);
-      default:
-        return { result: { erro: `ferramenta desconhecida: ${name}` } };
+      default: {
+        const gd = name.startsWith("gd_") ? executeGdTool(name, args, ctx.gd ?? { ucs: [], faturas: [] }) : null;
+        return gd ?? { result: { erro: `ferramenta desconhecida: ${name}` } };
+      }
     }
   } catch (e) {
     return { result: { erro: e instanceof Error ? e.message.slice(0, 300) : String(e) } };

@@ -269,6 +269,35 @@ export async function takeDailyQuota(key: string, limit: number, now = Date.now(
   );
 }
 
+const counters = new Map<string, number>();
+const dayId = (key: string, now: number) => `${key}_${new Date(now).toISOString().slice(0, 10)}`;
+
+/** Soma `n` ao contador diário `key` (ex.: tokens gastos pela Iara) e devolve o total do dia UTC. */
+export async function addDailyCounter(key: string, n: number, now = Date.now()): Promise<number> {
+  const id = dayId(key, now);
+  const local = () => {
+    const v = (counters.get(id) ?? 0) + n;
+    counters.set(id, v);
+    return v;
+  };
+  return withDb(
+    (db) =>
+      db.runTransaction(async (tx) => {
+        const ref = db.collection("meta").doc(`count_${id}`);
+        const v = Number((await tx.get(ref)).data()?.n ?? 0) + n;
+        tx.set(ref, { n: v, at: now });
+        counters.set(id, v);
+        return v;
+      }),
+    local,
+  );
+}
+
+export async function readDailyCounter(key: string, now = Date.now()): Promise<number> {
+  const id = dayId(key, now);
+  return withDb(async (db) => Number((await db.collection("meta").doc(`count_${id}`).get()).data()?.n ?? 0), () => counters.get(id) ?? 0);
+}
+
 /**
  * Camada de confiança (ver audit/trust.ts): impressão digital por fonte/dia fechado e o
  * registro das revisões retroativas detectadas.

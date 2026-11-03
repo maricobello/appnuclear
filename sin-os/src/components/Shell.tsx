@@ -26,6 +26,7 @@ import {
   Wind,
   X,
   Zap,
+  SolarPanel,
 } from "lucide-react";
 import type { BrasilResp } from "@/lib/apiTypes";
 import { useAsset } from "@/lib/asset";
@@ -56,6 +57,7 @@ const NAV: { group: string; items: { href: string; label: string; Icon: typeof G
     items: [
       { href: "/bess", label: "BESS", Icon: BatteryCharging },
       { href: "/carteira", label: "Carteira", Icon: Wallet },
+      { href: "/gd", label: "Geração distribuída", Icon: SolarPanel },
     ],
   },
   {
@@ -336,6 +338,12 @@ export function Shell({ children }: { children: ReactNode }) {
   const [iara, setIara] = useState(false);
   const current = ALL.find((n) => (n.href === "/" ? path === "/" : path.startsWith(n.href)));
   const toggleIara = () => setIara((v) => !v);
+  // outras telas abrem a Iara (ex.: "Perguntar à Iara" na tela de GD)
+  useEffect(() => {
+    const on = () => setIara(true);
+    window.addEventListener("iara:abrir", on);
+    return () => window.removeEventListener("iara:abrir", on);
+  }, []);
   // como no iOS: o título pequeno da barra aparece quando o título grande da página sai da tela
   const [scrolled, setScrolled] = useState(false);
   useEffect(() => {

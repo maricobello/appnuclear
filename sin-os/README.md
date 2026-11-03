@@ -25,7 +25,8 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
 | **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão), política de dados faltantes e de invalidação de séries e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
-| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional: consulta PLD, previsão, planejamento de médio prazo (SDDP), estudo BESS, força da rede (curto e SCR por subestação), oportunidades, reservatórios e saúde das fontes pelas mesmas funções das telas, responde falando, abre telas e configura o ativo |
+| **Geração distribuída** | Leitura de faturas em PDF sem IA (CPFL, Enel, Cemig e outros layouts), conferência em lote (créditos parados, Fio B indevido, custo de disponibilidade em dobro, PIS/Cofins/ICMS sobre a compensada, saldo, ultrapassagem, reativo, queda de injeção), enquadramento GD I/II/III com o Fio B ano a ano, viabilidade (VPL, TIR, payback, LCOE), desconto efetivo de contratos de assinatura e demanda contratada ótima |
+| **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional (harness com economia de tokens e vários provedores gratuitos): consulta PLD, previsão, SDDP, BESS, força da rede, oportunidades, reservatórios, saúde das fontes e a carteira de GD pelas mesmas funções das telas; responde falando (voz natural opcional, OpenVoice), abre telas, configura o ativo e cadastra UCs com confirmação |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
 mostra a idade do dado. O painel **APIs conectadas** (Sala de Comando) e a barra do modo Terminal mostram,
@@ -234,26 +235,87 @@ Sala de Comando e em `GET /api/alertas`. Para checar com frequência, um agendad
 `/api/alertas/run` com `Authorization: Bearer <ADMIN_KEY>` — passo a passo em
 [docs/agendador.md](docs/agendador.md).
 
-## Iara — assistente de voz (Groq)
+## Iara — harness com economia de tokens
 
-Botão **Iara** no cabeçalho (ou ⌘J / Ctrl+J). Fica **desligada** até o usuário ativar, e o microfone só abre
-num toque. Fluxo: fala → gravação com detecção de fim de frase (VAD por energia) → transcrição Whisper
-(`whisper-large-v3-turbo`) → agente com *tool calling* (`openai/gpt-oss-120b`, com fallback para outros
-modelos se a Groq descontinuar o configurado) → resposta falada com a voz pt-BR do sistema. Também aceita
-texto. "Conversa contínua" volta a ouvir depois de responder.
+Botão **Iara** no cabeçalho (ou ⌘J / Ctrl+J). Fica **desligada** até o usuário ativar com a senha, e o
+microfone só abre num toque. Fluxo: fala → gravação com detecção de fim de frase → transcrição Whisper
+(Groq) → harness com *tool calling* → resposta em texto e falada.
 
-- **Só dado real:** a Iara não tem números próprios. Cada número vem de uma ferramenta que chama as mesmas
-  funções das telas (`pld_agora`, `previsao_pld`, `estudo_bess`, `oportunidades`, `reservatorios`,
-  `saude_dados`); dado simulado é recusado pela ferramenta. Ações: `navegar` (abre telas) e
-  `configurar_ativo` (muda o ativo BESS e abre a tela BESS).
-- **Chave:** `GROQ_API_KEY` só no servidor — crie em console.groq.com e cadastre na Vercel como
-  **Sensitive**. Nunca no código nem no chat. `GET /api/assistente` confirma se a Groq está online
-  (sonda de 5 min) e qual modelo responde; `/api/status` mostra se está configurada.
-- **Proteção de custo (site público):** `ASSISTANT_ACCESS_CODE` exige um código (digitado uma vez nos
-  ajustes da Iara); limite por IP; cota diária global no Firestore (`ASSISTANT_DAILY_LIMIT`, padrão 400
-  perguntas; `ASSISTANT_STT_DAILY_LIMIT`, padrão 250 transcrições).
-- **Privacidade:** o áudio vai direto para a transcrição e não é guardado; a conversa fica só na aba
-  (sessionStorage).
+**Harness** (`src/lib/assistant/agent.ts`, `harness.ts`, `llm.ts`):
+
+- **Só dado real:** cada número vem de uma ferramenta que chama as mesmas funções das telas; dado
+  simulado é recusado. As faturas são lidas e conferidas sem IA, e o modelo só recebe o resumo.
+- **Roteamento por assunto:** cada pergunta leva só as ferramentas do domínio (mercado, BESS, hidrologia,
+  dados, renováveis, regulatório, planejamento, rede, GD). Isso corta cerca de 60 a 80% dos tokens de
+  ferramentas por rodada. A meta-ferramenta `carregar_ferramentas` abre outro domínio se o modelo precisar.
+- **Contexto enxuto:** resultados compactados (números arredondados, nulos fora, listas cortadas, teto por
+  ferramenta), histórico resumido, prompt com a parte estável primeiro (aproveita o cache de prompt do
+  provedor) e chamada repetida na mesma pergunta servida da memória.
+- **Lote em vez de laço:** `gd_conferir_faturas` confere centenas de faturas numa chamada só.
+- **Orçamentos:** teto por pergunta (`IARA_REQUEST_TOKENS`, padrão 24 mil tokens de prompt somados) e teto
+  diário (`IARA_DAILY_TOKENS`, padrão 600 mil), contados no Firestore. A resposta mostra os tokens gastos,
+  e a mesma pergunta em até 90 s sai do cache sem custo.
+- **Permissões:** leitura é automática; navegar e configurar o ativo são ações reversíveis; gravar dados de
+  UC (`gd_registrar_uc`) só acontece com o toque em "confirmar" no painel.
+- **Vários provedores, com troca automática:** `IARA_PROVIDERS` (ex.: `groq,gemini,deepseek`) ou todos os
+  que tiverem chave: `GROQ_API_KEY`, `GEMINI_API_KEY` (AI Studio), `DEEPSEEK_API_KEY`, `OPENROUTER_API_KEY`,
+  `MOONSHOT_API_KEY` ou um endpoint próprio (`IARA_BASE_URL` + `IARA_API_KEY` + `IARA_MODELS_CUSTOM`).
+  Modelos por provedor: `IARA_MODELS_GROQ`, `IARA_MODELS_GEMINI` etc. (vírgula). Na Groq, o padrão é Kimi K2
+  e depois gpt-oss-120b, Llama 3.3 70B e gpt-oss-20b. Os limites de cota grátis são por modelo, então o
+  429 de um passa para o próximo, e o modelo limitado fica de molho até o `Retry-After`.
+- **Chaves:** só no servidor (Vercel, **Sensitive**). Nunca no código nem no chat. `GET /api/assistente`
+  mostra o provedor no ar, a voz e os tokens do dia.
+- **Senha (temporária, modo de teste):** a senha simples fica no front (`src/lib/assistant/access.ts`,
+  ou `NEXT_PUBLIC_IARA_SENHA`) e qualquer um pode lê-la no código do site. A estrutura antiga continua
+  valendo: `ASSISTANT_ACCESS_CODE` na Vercel segue aceito, e `ASSISTANT_SIMPLE_CODE=off` volta a exigir só
+  ele. Limite por IP e cota diária (`ASSISTANT_DAILY_LIMIT`, `ASSISTANT_STT_DAILY_LIMIT`,
+  `ASSISTANT_TTS_DAILY_LIMIT`, `GD_DAILY_LIMIT`) seguem ativos.
+- **Voz natural:** `POST /api/assistente/fala` com um destes provedores:
+  - servidor compatível com OpenAI, como o OpenVoice deste repositório em `voz-server/`, que sobe num Space
+    gratuito do Hugging Face (`TTS_BASE_URL`, `TTS_API_KEY`, `TTS_VOICE`, `TTS_SPEED`);
+  - ElevenLabs (`ELEVENLABS_API_KEY`, `ELEVENLABS_VOICE_ID`);
+  - Azure (`AZURE_SPEECH_KEY`, `AZURE_SPEECH_REGION`, `AZURE_TTS_VOICE`).
+
+  O navegador pede bloco a bloco e já gera o próximo enquanto o atual toca; o orbe pulsa com o áudio real.
+  Se a voz do servidor falhar, a Iara volta para a voz do sistema. Veja `voz-server/README.md`: o OpenVoice
+  V2 não fala português nativamente, então o servidor usa o Kokoro pt-BR como voz base e o conversor de
+  timbre do OpenVoice para clonar a amostra de referência.
+- **Privacidade:** o áudio vai direto para a transcrição e não é guardado; a conversa fica só na aba; as
+  faturas ficam no navegador (localStorage) e o servidor lê o PDF e o descarta, sem extrair nome, CPF nem
+  endereço.
+
+## Geração distribuída
+
+Tela `/gd`, `POST /api/gd/faturas` (PDF ou texto, até 8 arquivos por envio) e as ferramentas `gd_*` da Iara.
+Motor em `src/lib/gd/`:
+
+- **Leitura** (`parse.ts`, `pdf.ts`): o texto do PDF vira linhas (tabelas preservadas) e as heurísticas leem
+  UC, mês, vencimento, total, consumo (TE e TUSD sem contar duas vezes), crédito compensado, quadro do SCEE
+  (injetada, saldo, a expirar, recebidos), Fio B (explícito ou implícito pela diferença de preço da TUSD),
+  bandeira, tributos (base × alíquota ≈ valor), CIP, grupo A (demanda, ultrapassagem, reativo, postos) e
+  devolve a confiança e a trilha (a linha usada em cada campo). Item faturado só conta quando quantidade ×
+  preço ≈ valor. PDF escaneado ou com senha recebe uma mensagem clara.
+- **Regras** (`rules.ts`):
+  - Lei 14.300/2022 e REN 1.059/2023.
+  - GD I: até 07/01/2023, com regra antiga até 2045.
+  - GD II: Fio B de 15% em 2023 a 90% em 2028 e art. 17 depois. A janela de 08/01 a 07/07/2023 estende a
+    transição até 2030 (conferir).
+  - GD III: mais de 500 kW, remoto ou compartilhada com titular ≥ 25%: 100% Fio B, 40% Fio A e encargos.
+  - Garantia de fiel cumprimento, limites de micro e mini, créditos de 60 meses.
+  - Temas curtos para a Iara citar a norma.
+- **Fatura esperada** (`bill.ts`):
+  - Grupo B com o Fio B do ano.
+  - Mínimo sem cobrança dupla na GD II: paga-se o maior entre o custo de disponibilidade e a fatura com Fio
+    B, e os créditos ficam guardados.
+  - GD I sempre paga o mínimo.
+  - Tributos por dentro, ICMS e PIS/Cofins sobre a compensada configuráveis.
+- **Conferência em lote**: alertas por fatura e por UC (histórico, saldo encadeado, duplicadas), impacto em
+  R$ pelo preço médio da própria fatura e demanda contratada ótima no grupo A (regra dos 105%). É triagem:
+  "indício para revisar com a distribuidora".
+- **Finanças** (`finance.ts`):
+  - Viabilidade com a transição do Fio B, simultaneidade, degradação, troca de inversor, VPL, TIR, payback
+    e LCOE, com as premissas declaradas.
+  - Desconto efetivo do assinante ano a ano, conforme quem paga o Fio B e a base do desconto.
 
 ## Confiança nos dados abertos
 
@@ -637,7 +699,9 @@ radares e as exportações ficam fora do git porque o repositório é público. 
 2. Framework: Next.js (detectado). Root Directory, build e output ficam no padrão.
 3. Variáveis de ambiente (Settings → Environment Variables) — todas opcionais, veja `.env.example`:
    `CRON_SECRET`, `ADMIN_KEY`, `FIREBASE_SERVICE_ACCOUNT`, `EIA_API_KEY`,
-   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara e agente auditor), `ASSISTANT_ACCESS_CODE`. `DATA_MODE=live` garante que
+   `ALERT_WEBHOOK_URL`, `GROQ_API_KEY` (Iara e agente auditor), `ASSISTANT_ACCESS_CODE`, e para a Iara
+   `GEMINI_API_KEY`/`DEEPSEEK_API_KEY`/`OPENROUTER_API_KEY`, `IARA_PROVIDERS`, `IARA_DAILY_TOKENS`, `TTS_BASE_URL` +
+   `TTS_API_KEY` (voz OpenVoice), `NEXT_PUBLIC_IARA_SENHA`, `ASSISTANT_SIMPLE_CODE`. `DATA_MODE=live` garante que
    nenhuma tela mostra dado simulado (fonte fora do ar aparece como erro).
    Dá para adicionar depois e fazer redeploy.
 4. Deploy. A região das funções é `gru1` (São Paulo), perto da CCEE e do ONS.

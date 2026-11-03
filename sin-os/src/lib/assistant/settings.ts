@@ -12,12 +12,14 @@ export interface IaraSettings {
   speak: boolean;
   /** Voltar a ouvir depois de responder (conversa contínua, como a Siri). */
   continuous: boolean;
-  /** Código de acesso (quando o servidor exige ASSISTANT_ACCESS_CODE). */
+  /** Senha simples do front ou o código da Vercel (ASSISTANT_ACCESS_CODE). */
   code: string;
   voiceURI: string | null;
+  /** Usar a voz natural do servidor (OpenVoice/ElevenLabs/Azure) quando houver. */
+  natural: boolean;
 }
 
-export const DEFAULT_IARA: IaraSettings = { enabled: false, speak: true, continuous: false, code: "", voiceURI: null };
+export const DEFAULT_IARA: IaraSettings = { enabled: false, speak: true, continuous: false, code: "", voiceURI: null, natural: true };
 const KEY = "sinos.iara.v1";
 let listeners: (() => void)[] = [];
 
@@ -38,6 +40,7 @@ export function parseIara(raw: string): IaraSettings {
       continuous: o.continuous === true,
       code: typeof o.code === "string" ? o.code.slice(0, 200) : "",
       voiceURI: typeof o.voiceURI === "string" ? o.voiceURI : null,
+      natural: o.natural !== false,
     };
   } catch {
     return DEFAULT_IARA;

@@ -163,6 +163,120 @@ export function speak(text: string, voice: SpeechSynthesisVoice | null, ctl: Spe
   });
 }
 
+/* ------------------------------------------------------------ voz natural */
+
+let actx: AudioContext | null = null;
+let current: AudioBufferSourceNode | null = null;
+const audioCache = new Map<string, ArrayBuffer>();
+
+function audioContext(): AudioContext | null {
+  if (typeof window === "undefined") return null;
+  const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+  if (!AC) return null;
+  actx ??= new AC();
+  return actx;
+}
+
+/** Desbloqueia o áudio no iOS/Safari: chamar dentro do toque do usuário. */
+export function primeAudio() {
+  try {
+    void audioContext()?.resume();
+  } catch {
+    /* sem Web Audio */
+  }
+}
+
+/** Blocos de fala: o primeiro curto (a voz começa logo), os seguintes juntam frases até ~280 caracteres. */
+export function speechChunks(text: string, max = 280): string[] {
+  const sents = splitSentences(speakable(text), 220);
+  if (!sents.length) return [];
+  const out = [sents[0]];
+  for (const s of sents.slice(1)) {
+    const last = out[out.length - 1];
+    const fits = (last + " " + s).length <= max;
+    if (fits && (out.length > 1 || last.length < 25)) out[out.length - 1] = `${last} ${s}`;
+    else out.push(s);
+  }
+  return out;
+}
+
+/**
+ * Fala com a voz do servidor (OpenVoice, ElevenLabs ou Azure), bloco a bloco: enquanto um
+ * toca, o próximo já está sendo gerado. O orbe pulsa com a energia real do áudio. Se o
+ * primeiro bloco falhar, devolve "fallback" e quem chamou usa a voz do sistema.
+ */
+export async function speakNatural(text: string, headers: Record<string, string>, ctl: SpeakControl, onLevel: (v: number) => void): Promise<"ok" | "fallback"> {
+  const ctx = audioContext();
+  const parts = speechChunks(text);
+  if (!ctx || !parts.length) return ctx ? "ok" : "fallback";
+  await ctx.resume().catch(() => undefined);
+  const analyser = ctx.createAnalyser();
+  analyser.fftSize = 512;
+  analyser.connect(ctx.destination);
+  const buf = new Float32Array(analyser.fftSize);
+  let raf = 0;
+  const meter = () => {
+    analyser.getFloatTimeDomainData(buf);
+    let sum = 0;
+    for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+    onLevel(Math.min(1, Math.sqrt(sum / buf.length) / 0.12));
+    raf = requestAnimationFrame(meter);
+  };
+  const fetchPart = async (s: string): Promise<AudioBuffer> => {
+    let bytes = audioCache.get(s);
+    if (!bytes) {
+      const res = await fetch("/api/assistente/fala", { method: "POST", headers: { "Content-Type": "application/json", ...headers }, body: JSON.stringify({ texto: s }) });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      bytes = await res.arrayBuffer();
+      if (audioCache.size > 40) audioCache.clear();
+      audioCache.set(s, bytes);
+    }
+    // decodeAudioData consome o buffer: decodifica uma cópia para o cache continuar válido
+    return ctx.decodeAudioData(bytes.slice(0));
+  };
+  raf = requestAnimationFrame(meter);
+  try {
+    let pending = fetchPart(parts[0]);
+    for (let i = 0; i < parts.length; i++) {
+      if (ctl.stopped) break;
+      let audio: AudioBuffer;
+      try {
+        audio = await pending;
+      } catch {
+        if (i === 0) return "fallback";
+        break;
+      }
+      if (i + 1 < parts.length) {
+        pending = fetchPart(parts[i + 1]);
+        pending.catch(() => undefined);
+      }
+      if (ctl.stopped) break;
+      await new Promise<void>((resolve) => {
+        const src = ctx.createBufferSource();
+        src.buffer = audio;
+        src.connect(analyser);
+        current = src;
+        src.onended = () => {
+          if (current === src) current = null;
+          resolve();
+        };
+        src.start();
+      });
+    }
+    return "ok";
+  } finally {
+    cancelAnimationFrame(raf);
+    onLevel(0);
+    analyser.disconnect();
+  }
+}
+
 export function stopSpeaking() {
   if (supportsSpeech()) window.speechSynthesis.cancel();
+  try {
+    current?.stop();
+  } catch {
+    /* já parou */
+  }
+  current = null;
 }
