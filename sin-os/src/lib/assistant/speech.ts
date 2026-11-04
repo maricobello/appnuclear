@@ -46,7 +46,17 @@ export function splitSentences(text: string, max = 220): string[] {
   });
 }
 
-const PREFERRED = /Luciana|Francisca|Thalita|Google português do Brasil|Maria|Felipe|Daniel/i;
+/** Nota da voz do sistema: neurais "Natural/Online" (Edge) > Google (Chrome) > aprimoradas da Apple > o resto. */
+export function voiceScore(v: { name: string; localService?: boolean }): number {
+  const n = v.name;
+  let s = 0;
+  if (/natural|online|neural/i.test(n)) s += 100;
+  if (/google/i.test(n)) s += 60;
+  if (/premium|enhanced|aprimorad|siri/i.test(n)) s += 50;
+  if (/Francisca|Thalita|Antonio|Luciana|Felipe|Daniel|Maria/i.test(n)) s += 10;
+  if (/compact|espeak|eloquence|novelty/i.test(n)) s -= 80;
+  return s;
+}
 
 /** Melhor voz pt-BR disponível (a escolhida pelo usuário, se ainda existir). */
 export function pickVoice<V extends { lang: string; name: string; voiceURI: string; localService?: boolean }>(voices: V[], preferredURI?: string | null): V | null {
@@ -55,5 +65,6 @@ export function pickVoice<V extends { lang: string; name: string; voiceURI: stri
     const chosen = pt.find((v) => v.voiceURI === preferredURI);
     if (chosen) return chosen;
   }
-  return pt.find((v) => PREFERRED.test(v.name)) ?? pt[0] ?? voices.find((v) => /^pt/i.test(v.lang)) ?? null;
+  const best = [...pt].sort((a, b) => voiceScore(b) - voiceScore(a))[0];
+  return best ?? voices.find((v) => /^pt/i.test(v.lang)) ?? null;
 }

@@ -146,10 +146,10 @@ def to_mp3(a: Audio) -> bytes | None:
     except ImportError:
         return None
     enc = lameenc.Encoder()
-    enc.set_bit_rate(64)
+    enc.set_bit_rate(128)
     enc.set_in_sample_rate(a.sr)
     enc.set_channels(1)
-    enc.set_quality(5)
+    enc.set_quality(2)
     pcm16 = (np.clip(a.pcm, -1, 1) * 32767).astype("<i2")
     return bytes(enc.encode(pcm16.tobytes()) + enc.flush())
 

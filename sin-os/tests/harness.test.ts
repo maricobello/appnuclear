@@ -8,7 +8,8 @@ import type { ChatFn, ChatRequest } from "../src/lib/assistant/groq";
 import { cacheClear, compact, compactHistory, DOMAIN_LIST, routeDomains, toolsFor } from "../src/lib/assistant/harness";
 import { classify, makeChat, providerChain, requestBody, resetCooling } from "../src/lib/assistant/llm";
 import type { AssetCtx, AssistantDeps } from "../src/lib/assistant/tools";
-import { ttsProvider, ttsRequest } from "../src/lib/assistant/tts";
+import { pcmToWav, ttsProvider, ttsRequest } from "../src/lib/assistant/tts";
+import { pickVoice } from "../src/lib/assistant/speech";
 import { speechChunks } from "../src/lib/assistant/voice";
 import { IARA_SENHA } from "../src/lib/assistant/access";
 import type { CarteiraGD } from "../src/lib/gd/types";
@@ -243,5 +244,33 @@ describe("senha simples e voz natural", () => {
     expect(c[0]).toBe("O PLD do Sudeste está em 312 reais.");
     expect(c.length).toBeLessThan(4);
     expect(c.join(" ")).toContain("Quer que eu abra a tela?");
+  });
+});
+
+describe("qualidade da voz", () => {
+  it("escolhe a voz neural do sistema antes das compactas", () => {
+    const v = (name: string) => ({ name, lang: "pt-BR", voiceURI: name });
+    const voices = [v("Luciana"), v("Microsoft Daniel - Portuguese (Brazil)"), v("Google português do Brasil"), v("Microsoft Francisca Online (Natural) - Portuguese (Brazil)")];
+    expect(pickVoice(voices)?.name).toContain("Natural");
+    expect(pickVoice(voices.slice(0, 3))?.name).toBe("Google português do Brasil");
+  });
+
+  it("Gemini TTS: pedido com voz e estilo, resposta PCM vira WAV; ElevenLabs no modelo multilíngue", () => {
+    process.env.GEMINI_API_KEY = "g";
+    expect(ttsProvider()).toBe("gemini");
+    const g = ttsRequest("gemini", "Olá");
+    expect(g.url).toContain(":generateContent");
+    const b = JSON.parse(String(g.init.body));
+    expect(b.generationConfig.responseModalities).toEqual(["AUDIO"]);
+    expect(b.contents[0].parts[0].text).toContain("Olá");
+    const wav = new Uint8Array(pcmToWav(new Uint8Array(480), 24000));
+    expect(String.fromCharCode(...wav.slice(0, 4))).toBe("RIFF");
+    expect(wav.length).toBe(524);
+    process.env.TTS_PROVIDER = "off";
+    expect(ttsProvider()).toBeNull();
+    delete process.env.TTS_PROVIDER;
+    process.env.ELEVENLABS_API_KEY = "e";
+    process.env.ELEVENLABS_VOICE_ID = "v";
+    expect(JSON.parse(String(ttsRequest("elevenlabs", "a").init.body)).model_id).toBe("eleven_multilingual_v2");
   });
 });

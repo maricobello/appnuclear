@@ -414,7 +414,8 @@ export function IaraPanel({ open, onClose, onToggle }: { open: boolean; onClose:
     }
     setNotice(null);
     primeSpeech();
-    primeAudio();
+    // contexto de áudio só com voz natural: no iOS um AudioContext aberto junto do microfone deixa a voz do sistema com som de telefone
+    if (statusRef.current?.tts && cfgRef.current.natural) primeAudio();
     const ctl: RecordControl = { stop: false, cancel: false };
     recRef.current = ctl;
     setPhase("listening");
