@@ -1,4 +1,5 @@
 import { conferirLote, enqDe, faturaEsperadaB, otimizarDemanda } from "../gd/bill";
+import { resultadosCarteira } from "../gd/gestao";
 import { analisarAssinatura, viabilidade } from "../gd/finance";
 import { cronogramaFioB, enquadrar, garantiaFielCumprimento, GD_TEMA_LIST, GD_TEMAS, type GdTema, type Ligacao, type Modalidade } from "../gd/rules";
 import type { CarteiraGD, FaturaGD, UcGD } from "../gd/types";
@@ -90,6 +91,11 @@ export const GD_TOOL_DEFS: ToolDef[] = [
       anos: { type: "integer", minimum: 1, maximum: 15 },
     },
     ["tarifa_rs_kwh", "desconto_pct", "creditos_kwh_mes"],
+  ),
+  fn(
+    "gd_resultados",
+    "Resultados financeiros mês a mês por UC ou usina: despesa com a GD (fatura da distribuidora + custos da usina rateados), cativo simulado, economia percebida (R$ e %) e o que passou do teto da economia assegurada, com alertas (custo sem rateio, rateio que não fecha 100%, garantia não cumprida).",
+    { uc: S("UC (opcional)"), usina: S("nome ou id da usina (opcional)") },
   ),
   fn("gd_regras", "Regra de GD por tema, com a norma (texto curto). Use em vez de responder de memória.", { tema: { type: "string", enum: GD_TEMA_LIST } }, ["tema"]),
   fn(
@@ -257,6 +263,27 @@ function assinatura(args: Record<string, unknown>): GdOutcome {
   };
 }
 
+function resultados(args: Record<string, unknown>, c: CarteiraGD): GdOutcome {
+  if (!c.faturas.length) return { result: { erro: VAZIA } };
+  const { ucs, usinas } = resultadosCarteira(c);
+  const k = ucKey(str(args.uc));
+  const us = str(args.usina)?.toLowerCase();
+  const alvoUc = k ? ucs.find((u) => u.uc === k || u.uc.endsWith(k)) : undefined;
+  const alvoUs = us ? usinas.find((u) => u.id.toLowerCase() === us || u.nome.toLowerCase().includes(us)) : undefined;
+  const resumoUc = (u: (typeof ucs)[number]) => ({ uc: u.uc, usina: u.usinaNome, ...u.total, alertas: u.alertas.map((a) => a.msg) });
+  if (alvoUc)
+    return { result: { ...resumoUc(alvoUc), meses: alvoUc.linhas.map((l) => ({ ref: l.ref, desp: l.despesaRs, cativo: l.cativoRs, econ: l.economiaRs, econPct: l.economiaPct, custosGd: l.custosGdRs, acimaTeto: l.faltaAssegRs !== null && l.faltaAssegRs > 0 ? l.faltaAssegRs : 0 })) } };
+  if (alvoUs) return { result: { usina: alvoUs.nome, rateioSomaPct: alvoUs.rateioSomaPct, ucs: alvoUs.ucs, ...alvoUs.total, meses: alvoUs.linhas, alertas: alvoUs.alertas.map((a) => a.msg) } };
+  return {
+    result: {
+      ucs: ucs.slice(0, 15).map(resumoUc),
+      ...(ucs.length > 15 ? { maisUcs: ucs.length - 15 } : {}),
+      usinas: usinas.map((u) => ({ usina: u.nome, rateioSomaPct: u.rateioSomaPct, despesaRs: u.total.despesaRs, cativoRs: u.total.cativoRs, economiaRs: u.total.economiaRs, economiaPct: u.total.economiaPct, alertas: u.alertas.map((a) => a.msg) })),
+      ...(c.usinas.length ? {} : { aviso: "nenhuma usina cadastrada: os custos de locação, terreno e O&M ainda não entram (cadastre na tela /gd)" }),
+    },
+  };
+}
+
 function regras(args: Record<string, unknown>): GdOutcome {
   const t = str(args.tema) as GdTema | undefined;
   if (!t || !(t in GD_TEMAS)) return { result: { erro: `tema desconhecido; use: ${GD_TEMA_LIST.join(", ")}` } };
@@ -314,6 +341,8 @@ export function executeGdTool(name: string, args: Record<string, unknown>, c: Ca
       return assinatura(args);
     case "gd_regras":
       return regras(args);
+    case "gd_resultados":
+      return resultados(args, c);
     case "gd_otimizar_demanda":
       return demanda(args, c);
     case "gd_registrar_uc":
@@ -329,5 +358,5 @@ export function carteiraLinha(c: CarteiraGD | undefined): string | null {
   const refs = c.faturas.map((f) => f.ref).filter((r): r is string => !!r).sort();
   const ucs = new Set(c.faturas.map((f) => f.uc ?? "?"));
   const inc = c.faturas.filter((f) => f.confianca < 0.5).length;
-  return `Carteira GD do usuário: ${c.faturas.length} fatura(s) de ${ucs.size} UC(s)${refs.length ? ` (${refs[0]} a ${refs.at(-1)})` : ""}${inc ? `, ${inc} com leitura incompleta` : ""}; ${c.ucs.length} UC(s) cadastrada(s). Use gd_carteira / gd_conferir_faturas.`;
+  return `Carteira GD do usuário: ${c.faturas.length} fatura(s) de ${ucs.size} UC(s)${refs.length ? ` (${refs[0]} a ${refs.at(-1)})` : ""}${inc ? `, ${inc} com leitura incompleta` : ""}; ${c.ucs.length} UC(s) cadastrada(s); ${c.usinas?.length ?? 0} usina(s). Use gd_carteira, gd_conferir_faturas e gd_resultados.`;
 }

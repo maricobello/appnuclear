@@ -18,6 +18,7 @@ const ASSET: AssetCtx = { name: "BESS", sub: "SE", pow: 100, cap: 400, rte: 88, 
 const NOW = Date.UTC(2026, 10, 3, 15, 0);
 const deps = { dataMode: () => "live" } as unknown as AssistantDeps;
 const CARTEIRA: CarteiraGD = {
+  usinas: [],
   ucs: [],
   faturas: [
     { id: "a", uc: "77", ref: "2026-08", enquadramento: "GD II", ligacao: "bi", consumoKwh: 420, compensadaKwh: 300, injetadaKwh: 380, saldoKwh: 150, energiaRs: 370, totalRs: 160, confianca: 1, faltando: [] },
@@ -51,6 +52,7 @@ describe("roteamento de ferramentas (economia de tokens)", () => {
     expect(routeDomains(["oi"], "/gd")).toContain("gd");
     expect(routeDomains(["te explico o PLD de hoje"])).not.toContain("gd"); // "te" é pronome, não tarifa
     expect(routeDomains(["a fonte solar paga fio b?"])).toEqual(["gd"]);
+    expect(routeDomains(["qual a economia assegurada da UC 77?"])).toEqual(["gd"]);
     expect(routeDomains(["bom dia"])).toEqual(["mercado", "hidro", "dados", "regulatorio"]);
     const gd = toolsFor(["gd"]).map((t) => t.function.name);
     expect(gd).toEqual(expect.arrayContaining(["gd_conferir_faturas", "navegar", "carregar_ferramentas"]));

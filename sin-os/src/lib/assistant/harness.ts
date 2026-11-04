@@ -35,7 +35,7 @@ export const DOMAINS: Record<Domain, DomainSpec> = {
   gd: {
     label: "geração distribuída: faturas, conferência, enquadramento, viabilidade, contratos e encargos",
     tools: GD_TOOL_DEFS.map((t) => t.function.name),
-    re: /(\bgd\b|gd ?i|geracao distribuida|fatura|conta de (luz|energia)|compens|credito|fio ?b|injet|\buc\b|\bucs\b|unidade consumidora|assinatura|consorcio|cooperativa|aluguel|locacao|usina solar|fotovolt|placa|kwp|micro ?gera|mini ?gera|encargo|tusd|icms|pis|cofins|disponibilidade|rateio|14\.?300|1\.?059|demanda contratada|ultrapassagem|reativ|grupo [ab]\b|tarifa|bandeira|distribuidora|payback|viabil)/,
+    re: /(\bgd\b|gd ?i|geracao distribuida|fatura|conta de (luz|energia)|compens|credito|fio ?b|injet|\buc\b|\bucs\b|unidade consumidora|assinatura|consorcio|cooperativa|aluguel|locacao|usina solar|fotovolt|placa|kwp|micro ?gera|mini ?gera|encargo|tusd|icms|pis|cofins|disponibilidade|rateio|14\.?300|1\.?059|demanda contratada|ultrapassagem|reativ|grupo [ab]\b|tarifa|bandeira|distribuidora|payback|viabil|cativo|economia (assegurada|percebida|garantida)|resultado(s)? financeiro|custos? da usina|usina geradora)/,
     pages: ["/gd"],
   },
 };

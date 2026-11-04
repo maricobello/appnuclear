@@ -7,6 +7,7 @@ import { useIara } from "@/lib/assistant/settings";
 import { conferirLote, enqDe, type Severidade } from "@/lib/gd/bill";
 import { GD_TEMAS, type GdTema } from "@/lib/gd/rules";
 import { clearCarteira, lerFaturas, lerTexto, removeFatura, useCarteira, type LeituraResultado } from "@/lib/gd/workspace";
+import { Gestao } from "./Gestao";
 import { Simulador } from "./Simulador";
 
 const rs = (v: number | undefined) => (v === undefined ? "—" : `R$ ${v.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
@@ -192,6 +193,8 @@ export default function GdPage() {
           <Empty label="A conferência aparece quando houver faturas." />
         )}
       </Panel>
+
+      <Gestao />
 
       <Simulador />
 

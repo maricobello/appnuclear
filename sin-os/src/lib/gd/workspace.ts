@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useSyncExternalStore } from "react";
-import { CARTEIRA_GD, EMPTY_CARTEIRA, type CarteiraGD, type FaturaGD, type UcGD } from "./types";
+import { CARTEIRA_GD, EMPTY_CARTEIRA, type CarteiraGD, type FaturaGD, type UcGD, type UsinaGD } from "./types";
 
 /**
  * Carteira de GD neste navegador (localStorage): faturas já lidas e UCs cadastradas.
@@ -69,6 +69,21 @@ export function upsertUc(patch: Partial<UcGD> & { uc: string }) {
   else ucs.push(patch);
   const r = CARTEIRA_GD.safeParse({ ...cur, ucs });
   if (r.success) write(r.data);
+}
+
+export function upsertUsina(patch: Partial<UsinaGD> & { id: string }) {
+  const cur = getCarteira();
+  const i = cur.usinas.findIndex((u) => u.id === patch.id);
+  const usinas = [...cur.usinas];
+  if (i >= 0) usinas[i] = { ...usinas[i], ...patch, meses: patch.meses ? { ...usinas[i].meses, ...patch.meses } : usinas[i].meses };
+  else usinas.push(patch);
+  const r = CARTEIRA_GD.safeParse({ ...cur, usinas });
+  if (r.success) write(r.data);
+}
+
+export function removeUsina(id: string) {
+  const cur = getCarteira();
+  write({ ...cur, usinas: cur.usinas.filter((u) => u.id !== id), ucs: cur.ucs.map((u) => (u.usinaId === id ? { ...u, usinaId: undefined } : u)) });
 }
 
 export function clearCarteira() {

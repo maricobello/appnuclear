@@ -101,13 +101,46 @@ export const UC_GD = z.object({
   cofins: z.number().min(0).max(0.2).optional(),
   tarifaDemandaRsKw: num,
   contrato: CONTRATO_GD.optional(),
+  /** Usina que manda créditos para esta UC (custos rateados pelo rateioPct). */
+  usinaId: str(40),
 });
 export type UcGD = z.infer<typeof UC_GD>;
+
+const MES_USINA = z.object({
+  faturaGeracaoRs: num,
+  locacaoRsMes: num,
+  terrenoRsMes: num,
+  omRsMes: num,
+  variavelRsMes: num,
+});
+
+/**
+ * Usina (ou contrato de geração) que atende várias UCs. Custos mensais da usina INTEIRA:
+ * cada UC paga a sua parte pelo percentual de rateio dos créditos.
+ */
+export const USINA_GD = z.object({
+  id: z.string().min(1).max(40),
+  nome: str(60),
+  ucGeradora: str(40),
+  potenciaKw: z.number().min(0).max(1e5).optional(),
+  locacaoRsMes: num,
+  terrenoRsMes: num,
+  omRsMes: num,
+  variavelRsMes: num,
+  /** Remuneração variável por kWh compensado na UC (não é rateada). */
+  variavelRsKwh: num,
+  /** Economia mínima garantida em contrato, em % do cativo. */
+  economiaAssegPct: z.number().min(0).max(100).optional(),
+  /** Lançamentos por mês (AAAA-MM): sobrescrevem os valores-padrão acima. */
+  meses: z.record(z.string().regex(/^\d{4}-\d{2}$/), MES_USINA).optional(),
+});
+export type UsinaGD = z.infer<typeof USINA_GD>;
 
 export const CARTEIRA_GD = z.object({
   ucs: z.array(UC_GD).max(300).default([]),
   faturas: z.array(FATURA_GD).max(800).default([]),
+  usinas: z.array(USINA_GD).max(50).default([]),
 });
 export type CarteiraGD = z.infer<typeof CARTEIRA_GD>;
 
-export const EMPTY_CARTEIRA: CarteiraGD = { ucs: [], faturas: [] };
+export const EMPTY_CARTEIRA: CarteiraGD = { ucs: [], faturas: [], usinas: [] };

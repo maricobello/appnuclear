@@ -78,6 +78,7 @@ const TOOL_LABEL: Record<string, string> = {
   gd_regras: "Regras GD",
   gd_otimizar_demanda: "Demanda",
   gd_registrar_uc: "Cadastro UC",
+  gd_resultados: "Resultados GD",
 };
 const kTok = (n: number) => (n >= 1000 ? `${(n / 1000).toLocaleString("pt-BR", { maximumFractionDigits: 1 })} mil` : String(n));
 

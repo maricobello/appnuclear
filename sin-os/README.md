@@ -25,7 +25,7 @@ arbitragem no **SIN (Sistema Interligado Nacional)** e comparação com mercados
 | **Agente auditor** | Auditoria determinística de todas as APIs, SLO por fonte (disponibilidade, conformidade, latência p50/p95), **auditoria dos modelos no PLD real** (nota 0–100 com cada critério e alvo), alertas push + relatório do agente (Groq) com causa provável e ação |
 | **Modelos & APIs** | Equações, referências acadêmicas e implementações de referência no GitHub |
 | **Metodologia** | Dicionário de dados de cada fonte (arquivo, colunas, unidade, fuso, versão), política de dados faltantes e de invalidação de séries e todas as regras do auditor, lidos das constantes do código; também em JSON (`/api/metodologia`) |
-| **Geração distribuída** | Leitura de faturas em PDF sem IA (CPFL, Enel, Cemig e outros layouts), conferência em lote (créditos parados, Fio B indevido, custo de disponibilidade em dobro, PIS/Cofins/ICMS sobre a compensada, saldo, ultrapassagem, reativo, queda de injeção), enquadramento GD I/II/III com o Fio B ano a ano, viabilidade (VPL, TIR, payback, LCOE), desconto efetivo de contratos de assinatura e demanda contratada ótima |
+| **Geração distribuída** | Leitura de faturas em PDF sem IA (CPFL, Enel, Cemig e outros layouts), resultados financeiros por UC e usina (custos rateados × cativo simulado × economia assegurada), conferência em lote (créditos parados, Fio B indevido, custo de disponibilidade em dobro, PIS/Cofins/ICMS sobre a compensada, saldo, ultrapassagem, reativo, queda de injeção), enquadramento GD I/II/III com o Fio B ano a ano, viabilidade (VPL, TIR, payback, LCOE), desconto efetivo de contratos de assinatura e demanda contratada ótima |
 | **Iara** (botão no topo, ⌘J) | Assistente de voz e texto opcional (harness com economia de tokens e vários provedores gratuitos): consulta PLD, previsão, SDDP, BESS, força da rede, oportunidades, reservatórios, saúde das fontes e a carteira de GD pelas mesmas funções das telas; responde falando (voz natural opcional, OpenVoice), abre telas, configura o ativo e cadastra UCs com confirmação |
 
 "Tempo real": as telas atualizam sozinhas (polling de 30 s a 10 min conforme a fonte) e cada painel
@@ -313,6 +313,15 @@ Motor em `src/lib/gd/`:
 - **Conferência em lote**: alertas por fatura e por UC (histórico, saldo encadeado, duplicadas), impacto em
   R$ pelo preço médio da própria fatura e demanda contratada ótima no grupo A (regra dos 105%). É triagem:
   "indício para revisar com a distribuidora".
+- **Resultados financeiros** (`gestao.ts`, painel na tela `/gd`, ferramenta `gd_resultados`):
+  - Mês a mês, por UC e por usina: despesa com a GD (fatura da distribuidora + a parte da UC nos custos da
+    usina pelo percentual de rateio: locação, terreno, O&M, remuneração variável, fatura da geradora) ou o
+    pagamento da assinatura.
+  - Comparada com o cativo simulado (quanto a UC pagaria sem GD, pela tarifa da própria fatura) e com o teto
+    da economia assegurada em contrato.
+  - Alertas: custo da usina inteira lançado numa UC (o erro que gera economia de −2.000%), UC sem rateio,
+    rateio da usina que não fecha 100%, garantia não cumprida (com o valor a cobrar) e meses sem cativo.
+  - Gráficos de energia, economia e realizado × assegurado, e exportação em CSV.
 - **Finanças** (`finance.ts`):
   - Viabilidade com a transição do Fio B, simultaneidade, degradação, troca de inversor, VPL, TIR, payback
     e LCOE, com as premissas declaradas.

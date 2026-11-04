@@ -665,7 +665,7 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
       case "configurar_ativo":
         return configurarAtivo(args, ctx);
       default: {
-        const gd = name.startsWith("gd_") ? executeGdTool(name, args, ctx.gd ?? { ucs: [], faturas: [] }) : null;
+        const gd = name.startsWith("gd_") ? executeGdTool(name, args, ctx.gd ?? { ucs: [], faturas: [], usinas: [] }) : null;
         return gd ?? { result: { erro: `ferramenta desconhecida: ${name}` } };
       }
     }
