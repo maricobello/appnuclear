@@ -23,7 +23,7 @@ const UF_IBGE: Record<string, string> = { "11": "RO", "12": "AC", "13": "AM", "1
 const RES_COMP_FALLBACK: Record<number, string> = { 2025: "a4060165-3a0c-404f-926c-83901088b67c", 2026: "e8717aa8-2521-453f-bf16-fbb9a16eea39" };
 
 async function ckan<T>(action: string, params: Record<string, string>): Promise<T> {
-  const { json: j } = await fetchJson<{ success?: boolean; result?: T; error?: unknown }>(`${BASE}/${action}?${new URLSearchParams(params)}`, { timeoutMs: 25_000, retries: 1 });
+  const { json: j } = await fetchJson<{ success?: boolean; result?: T; error?: unknown }>(`${BASE}/${action}?${new URLSearchParams(params)}`, { timeoutMs: 25_000, retries: 2 });
   if (!j.success || !j.result) throw new Error(`ANEEL ${action}: ${JSON.stringify(j.error ?? "sem resultado").slice(0, 160)}`);
   return j.result;
 }
