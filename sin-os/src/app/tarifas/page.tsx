@@ -8,10 +8,12 @@ import { baseOption, C, categoryAxis, valueAxis } from "@/lib/chart";
 import { useApi } from "@/lib/useApi";
 import { useBusyFlag } from "@/lib/busy";
 import { PanelVeil } from "@/components/LoadingVeil";
+import { Usina } from "./Usina";
 import { efetiva, ICMS_UF, PREMISSAS_PADRAO, simularReforma, type Decomposicao, type PremissasReforma } from "@/lib/tarifa/calc";
 import type { Bandeira, Linha, TarifaVigente } from "@/lib/sources/aneel";
 
 const SUBGRUPOS = ["B1", "B2", "B3", "A4", "A3a", "A3", "A2", "AS"] as const;
+const NAO_CONSUMIDOR = new Set(["Geração", "Distribuição", "Energia suprimento"]);
 type Sub = (typeof SUBGRUPOS)[number];
 const brl = (v: number, d = 2) => v.toLocaleString("pt-BR", { minimumFractionDigits: d, maximumFractionDigits: d });
 const kwh = (v: number) => `R$ ${brl(v, 4)}`;
@@ -199,11 +201,13 @@ export default function TarifasPage() {
   // null = automático (ICMS pela UF da distribuidora; PIS/Cofins de referência); número = preenchido à mão
   const [manual, setManual] = useState<{ icms: number | null; pis: number | null; cofins: number | null }>({ icms: null, pis: null, cofins: null });
   const [band, setBand] = useState("atual");
+  const [aba, setAba] = useState<"consumidor" | "usina">("consumidor");
   const [prem, setPrem] = useState<PremissasReforma>(PREMISSAS_PADRAO);
   const [fat, setFat] = useState({ preco: 0, consumo: 300 });
 
   const base = useApi<Resp>(`/api/tarifas?agente=${encodeURIComponent(agente)}&subgrupo=${sub}`, 1800_000);
-  const linhas = useMemo(() => base.data?.tarifa.linhas ?? [], [base.data]);
+  // tarifas de consumidor: sem TUSDg (Geração), sem tarifas entre distribuidoras e sem linhas por acessante
+  const linhas = useMemo(() => (base.data?.tarifa.linhas ?? []).filter((l) => !NAO_CONSUMIDOR.has(l.modalidade) && (!l.acessante || l.acessante === "Não se aplica")), [base.data]);
   const modalidades = useMemo(() => [...new Set(linhas.map((l) => l.modalidade))], [linhas]);
   const modalidade = modalidades.includes(modal) ? modal : (modalidades.find((m) => m === "Convencional") ?? modalidades[0] ?? "");
   // a linha "cheia" (subclasse = classe, sem detalhe SCEE/APE) primeiro; depois as sociais e as de GD
@@ -316,14 +320,26 @@ export default function TarifasPage() {
         right={
           <div className="flex flex-wrap items-center gap-2">
             {t ? <Badge level="good" title={`Conjunto regenerado pela ANEEL em ${dataBr(t.geracaoAneel ?? "")}`}>ANEEL · {dataBr(t.geracaoAneel ?? "")}</Badge> : null}
-            <Button variant="secondary" onClick={exportar} disabled={!t || !linha || exportando || base.trocando || comp.trocando}>
-              <FileDown size={14} aria-hidden /> {exportando ? "Gerando…" : "Exportar laudo (PDF)"}
-            </Button>
+            {aba === "consumidor" ? (
+              <Button variant="secondary" onClick={exportar} disabled={!t || !linha || exportando || base.trocando || comp.trocando}>
+                <FileDown size={14} aria-hidden /> {exportando ? "Gerando…" : "Exportar laudo (PDF)"}
+              </Button>
+            ) : null}
           </div>
         }
       />
 
-      <Panel title="Distribuidora e subgrupo" subtitle="A vigente é a resolução homologatória que cobre o dia de hoje.">
+      <Segmented
+        label="Tipo de unidade"
+        value={aba}
+        options={[
+          { value: "consumidor", label: "Consumidor" },
+          { value: "usina", label: "Usina (gerador)" },
+        ]}
+        onChange={setAba}
+      />
+
+      <Panel title={aba === "usina" ? "Distribuidora" : "Distribuidora e subgrupo"} subtitle="A vigente é a resolução homologatória que cobre o dia de hoje.">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-1 text-[12px] text-muted">
           <span>Distribuidora ({lista.data?.agentes.length ?? "…"})</span>
@@ -349,6 +365,8 @@ export default function TarifasPage() {
             <span className="text-[12px] text-muted">{manual.icms !== null ? `Referência ${uf ?? "—"}: ${pct(auto.icms / 100)} · vale o valor digitado` : uf ? "Alíquota de referência da UF da distribuidora" : lista.data ? "Padrão de 18%: toque no lápis para informar" : "…"}</span>
           </div>
         </div>
+        {aba === "consumidor" ? (
+        <>
         <div className="mt-3 flex flex-wrap gap-3">
           <Segmented
             label="Subgrupo"
@@ -368,9 +386,16 @@ export default function TarifasPage() {
             {t.proxima ? ` · próxima: ${dataBr(t.proxima.inicio)} (${t.proxima.reh})` : ""}
           </p>
         ) : null}
+        </>
+        ) : null}
       </Panel>
 
       {err ? <ErrorBox error={err} onRetry={() => { void base.mutate(); void lista.mutate(); }} /> : null}
+
+      {aba === "usina" ? (
+        <Usina agente={agente} uf={uf} icmsPct={trib.icms} icmsOrigem={manual.icms !== null ? "informado manualmente" : uf ? `referência ${uf}` : "padrão"} />
+      ) : (
+      <>
 
       <Panel title="Tarifa vigente (sem tributos)" subtitle="Tarifa de aplicação em R$/MWh (energia) e R$/kW (demanda). Toque numa linha para abrir os componentes.">
         {base.isLoading && !t ? (
@@ -516,6 +541,8 @@ export default function TarifasPage() {
           </>
         )}
       </Panel>
+      </>
+      )}
     </div>
   );
 }

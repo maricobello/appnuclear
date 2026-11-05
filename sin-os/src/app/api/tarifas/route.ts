@@ -1,4 +1,5 @@
-import { bandeiraVigente, componentes, distribuidoras, tarifaVigente, ufDistribuidoras } from "@/lib/sources/aneel";
+import { bandeiraVigente, componentes, componentesEnergia, distribuidoras, tarifaVigente, ufDistribuidoras } from "@/lib/sources/aneel";
+import { fioDe } from "@/lib/tarifa/usina";
 import { decompor } from "@/lib/tarifa/calc";
 import { errorResponse, jsonResponse } from "@/lib/services";
 
@@ -12,7 +13,8 @@ const txt = (v: string | null, max = 120) => (v ?? "").trim().slice(0, max);
  * Tarifas da ANEEL (dados abertos, em cache no servidor):
  *  - sem parâmetros: lista de distribuidoras, UF de cada uma (para o ICMS) e a bandeira do mês;
  *  - ?agente=&subgrupo=: tarifa vigente (todas as linhas TE/TUSD) e bandeira;
- *  - + modalidade, subclasse, detalhe, posto, unidade: componentes abertos daquela linha.
+ *  - + modalidade, subclasse, detalhe, posto, unidade: componentes abertos daquela linha;
+ *  - + usina=Verde|Azul: Fio B, Fio A, P&D e TFSEE da energia por posto (fatura da usina).
  */
 export async function GET(req: Request) {
   try {
@@ -27,6 +29,12 @@ export async function GET(req: Request) {
     if (!(await distribuidoras()).includes(agente)) return errorResponse(new Error("distribuidora não encontrada na ANEEL"), 404);
     const [tarifa, bandeira] = await Promise.all([tarifaVigente(agente, subgrupo), bandeiraVigente()]);
     if (!tarifa) return errorResponse(new Error(`sem tarifa vigente para ${agente} ${subgrupo}`), 404);
+    const usina = txt(q.get("usina"), 8);
+    if (usina === "Verde" || usina === "Azul") {
+      const c = await componentesEnergia({ agente, subgrupo, inicio: tarifa.inicio, modalidade: usina });
+      const fio = c.ponta.length && c.fora.length ? { ponta: fioDe(c.ponta), fora: fioDe(c.fora) } : null;
+      return jsonResponse({ tarifa, bandeira, fio }, 1800);
+    }
     const modalidade = txt(q.get("modalidade"));
     let decomposicao = null;
     if (modalidade) {

@@ -1,5 +1,6 @@
 import type { jsPDF as JsPDF } from "jspdf";
 import type { AnoReforma, Decomposicao, Efetiva } from "./calc";
+import type { EntradaUsina, FaturaUsina, TarifaUsina, conferirUsina } from "./usina";
 
 /**
  * Laudo de auditoria tarifária em PDF, preto e branco, no estilo de prontuário: cabeçalho com
@@ -50,10 +51,19 @@ export function nomeArquivo(d: DadosLaudo): string {
 const M = 14; // margem (mm)
 const W = 210 - 2 * M;
 
-export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
+export interface MetaDoc {
+  titulo: string;
+  subtitulo: string;
+  codigo: string;
+  quando: string;
+  baseAneel: string | null;
+  rodape: string;
+}
+
+/** Folha de prontuário: cabeçalho, seções numeradas, caixas, tabelas, assinatura e rodapé. */
+export function documento(JsPDFCtor: typeof JsPDF, meta: MetaDoc) {
   const doc = new JsPDFCtor({ unit: "mm", format: "a4" });
-  const codigo = codigoVerificacao(d);
-  const quando = `${d.geradoEm.toLocaleDateString("pt-BR")} ${d.geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  const { codigo, quando } = meta;
   let y = M;
   let secao = 0;
 
@@ -67,11 +77,11 @@ export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
     doc.setLineWidth(0.25);
     doc.setFont("helvetica", "bold");
     doc.setFontSize(13);
-    doc.text(t("LAUDO DE AUDITORIA TARIFÁRIA"), M + 3, M + 7);
+    doc.text(t(meta.titulo), M + 3, M + 7);
     doc.setFont("helvetica", "normal");
     doc.setFontSize(8);
-    doc.text(t("SIN OS · tarifa de energia elétrica, componentes, tributos e reforma tributária"), M + 3, M + 12);
-    doc.text(t("Fonte: ANEEL - Dados Abertos (tarifas homologadas, componentes tarifários e bandeiras)"), M + 3, M + 16.5);
+    doc.text((doc.splitTextToSize(t(meta.subtitulo), W - 58) as string[])[0], M + 3, M + 12);
+    doc.text((doc.splitTextToSize(t("Fonte: ANEEL - Dados Abertos (tarifas homologadas, componentes tarifários e bandeiras)"), W - 58) as string[])[0], M + 3, M + 16.5);
     doc.line(M + W - 52, M, M + W - 52, M + 20);
     doc.setFont("courier", "bold");
     doc.setFontSize(9);
@@ -79,7 +89,7 @@ export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
     doc.setFont("courier", "normal");
     doc.setFontSize(8);
     doc.text(t(`Emitido: ${quando}`), M + W - 49, M + 12);
-    doc.text(t(`Base ANEEL: ${dataBr(d.geracaoAneel)}`), M + W - 49, M + 16.5);
+    doc.text(t(`Base ANEEL: ${dataBr(meta.baseAneel)}`), M + W - 49, M + 16.5);
     y = M + 25;
   };
 
@@ -110,19 +120,24 @@ export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
     const linhas = Math.ceil(pares.length / cols);
     for (let r = 0; r < linhas; r++) {
       const fatia = pares.slice(r * cols, r * cols + cols);
+      const larg = fatia.length === 1 ? W : cw;
+      // rótulo e valor quebram dentro da caixa; a linha inteira cresce com a maior caixa
+      doc.setFontSize(6.5);
+      const rots = fatia.map(([k]) => doc.splitTextToSize(t(k.toUpperCase()), larg - 4) as string[]);
       doc.setFontSize(9);
-      const alturas = fatia.map(([, v]) => doc.splitTextToSize(t(v), cw - 4).length);
-      const h = 6 + Math.max(1, ...alturas) * 3.8;
+      const vals = fatia.map(([, v]) => doc.splitTextToSize(t(v), larg - 4) as string[]);
+      const hRot = Math.max(1, ...rots.map((r) => r.length)) * 2.6;
+      const h = 3.4 + hRot + Math.max(1, ...vals.map((v) => v.length)) * 3.8;
       espaco(h);
-      fatia.forEach(([k, v], i) => {
+      fatia.forEach((_, i) => {
         const x = M + i * cw;
-        doc.rect(x, y, fatia.length === 1 ? W : cw, h);
+        doc.rect(x, y, larg, h);
         doc.setFont("helvetica", "normal");
         doc.setFontSize(6.5);
-        doc.text(t(k.toUpperCase()), x + 2, y + 3.2);
+        doc.text(rots[i], x + 2, y + 3.2);
         doc.setFont("helvetica", "bold");
         doc.setFontSize(9);
-        doc.text(doc.splitTextToSize(t(v), (fatia.length === 1 ? W : cw) - 4), x + 2, y + 7.2);
+        doc.text(vals[i], x + 2, y + 3.2 + hRot + 1.4);
       });
       y += h;
     }
@@ -171,7 +186,50 @@ export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
     y += ls.length * 3.4 + 3;
   };
 
+  const assinaturaEFinal = () => {
+    espaco(28);
+    y += 4;
+    const ass = (x: number, w: number, rot: string) => {
+      doc.line(x, y + 14, x + w, y + 14);
+      doc.setFont("helvetica", "normal");
+      doc.setFontSize(7);
+      doc.text(t(rot), x, y + 18);
+    };
+    doc.rect(M, y, W, 22);
+    doc.setFontSize(6.5);
+    doc.text(t("RESPONSÁVEL PELA CONFERÊNCIA"), M + 2, y + 3.2);
+    ass(M + 4, 70, "Nome / registro profissional");
+    ass(M + 82, 40, "Data");
+    ass(M + 130, 50, "Assinatura");
+    y += 26;
+
+    const n = doc.getNumberOfPages();
+    for (let i = 1; i <= n; i++) {
+      doc.setPage(i);
+      doc.setLineWidth(0.25);
+      doc.line(M, 297 - M - 4, M + W, 297 - M - 4);
+      doc.setFont("courier", "normal");
+      doc.setFontSize(7);
+      doc.text(t(`Laudo ${codigo} · ${meta.rodape} · emitido ${quando}`), M, 297 - M);
+      doc.text(`Página ${i}/${n}`, M + W, 297 - M, { align: "right" });
+    }
+    return doc;
+  };
   cabecalho();
+  return { doc, titulo, campos, tabela, paragrafo, fechar: assinaturaEFinal };
+}
+
+export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
+  const codigo = codigoVerificacao(d);
+  const quando = `${d.geradoEm.toLocaleDateString("pt-BR")} ${d.geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  const { titulo, campos, tabela, paragrafo, fechar } = documento(JsPDFCtor, {
+    titulo: "LAUDO DE AUDITORIA TARIFÁRIA",
+    subtitulo: "SIN OS · tarifa de energia elétrica, componentes, tributos e reforma tributária",
+    codigo,
+    quando,
+    baseAneel: d.geracaoAneel,
+    rodape: `${d.distribuidora} ${d.subgrupo}`,
+  });
 
   titulo("Identificação");
   campos([
@@ -285,31 +343,145 @@ export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
     "Este laudo é uma conferência técnica automatizada e não substitui parecer jurídico ou contábil.",
   ].forEach((s) => paragrafo(`• ${s}`));
 
-  espaco(28);
-  y += 4;
-  const ass = (x: number, w: number, rot: string) => {
-    doc.line(x, y + 14, x + w, y + 14);
-    doc.setFont("helvetica", "normal");
-    doc.setFontSize(7);
-    doc.text(t(rot), x, y + 18);
-  };
-  doc.rect(M, y, W, 22);
-  doc.setFontSize(6.5);
-  doc.text(t("RESPONSÁVEL PELA CONFERÊNCIA"), M + 2, y + 3.2);
-  ass(M + 4, 70, "Nome / registro profissional");
-  ass(M + 82, 40, "Data");
-  ass(M + 130, 50, "Assinatura");
-  y += 26;
+  return fechar();
+}
 
-  const n = doc.getNumberOfPages();
-  for (let i = 1; i <= n; i++) {
-    doc.setPage(i);
-    doc.setLineWidth(0.25);
-    doc.line(M, 297 - M - 4, M + W, 297 - M - 4);
-    doc.setFont("courier", "normal");
-    doc.setFontSize(7);
-    doc.text(t(`Laudo ${codigo} · ${d.distribuidora} ${d.subgrupo} · emitido ${quando}`), M, 297 - M);
-    doc.text(`Página ${i}/${n}`, M + W, 297 - M, { align: "right" });
+/* --------------------------------------------------------- laudo da fatura da usina */
+
+export interface DadosLaudoUsina {
+  geradoEm: Date;
+  distribuidora: string;
+  uf: string | null;
+  subgrupo: string;
+  reh: string;
+  vigencia: { inicio: string; fim: string };
+  geracaoAneel: string | null;
+  bandeira: string;
+  tarifa: TarifaUsina;
+  entrada: EntradaUsina;
+  fatura: FaturaUsina;
+  conferencia: ReturnType<typeof conferirUsina> | null;
+  origemTributos: string;
+}
+
+const kwh = (v: number) => `${brl(v, 0)} kWh`;
+const kw = (v: number | undefined) => (v ? `${brl(v, 1)} kW` : "-");
+
+export function codigoVerificacaoUsina(d: DadosLaudoUsina): string {
+  return codigoVerificacao({ ...(d as unknown as DadosLaudo), geradoEm: d.geradoEm });
+}
+
+export function nomeArquivoUsina(d: DadosLaudoUsina): string {
+  const slug = d.distribuidora.normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "-").replace(/^-|-$/g, "");
+  return `laudo-usina-${slug}-${d.subgrupo}-${d.geradoEm.toISOString().slice(0, 10)}.pdf`;
+}
+
+export function montarLaudoUsina(JsPDFCtor: typeof JsPDF, d: DadosLaudoUsina): JsPDF {
+  const codigo = codigoVerificacaoUsina(d);
+  const quando = `${d.geradoEm.toLocaleDateString("pt-BR")} ${d.geradoEm.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" })}`;
+  const { titulo, campos, tabela, paragrafo, fechar } = documento(JsPDFCtor, {
+    titulo: "LAUDO DE AUDITORIA - FATURA DA USINA",
+    subtitulo: "SIN OS · unidade geradora: compensação, Fio B, demanda de consumo e de geração (TUSDg), tributos",
+    codigo,
+    quando,
+    baseAneel: d.geracaoAneel,
+    rodape: `${d.distribuidora} ${d.subgrupo} usina`,
+  });
+  const e = d.entrada;
+  const tf = d.tarifa;
+  const f = d.fatura;
+  const c = f.compensacao;
+
+  titulo("Identificação");
+  campos([
+    ["Distribuidora", d.distribuidora],
+    ["UF", d.uf ?? "não identificada"],
+    ["Subgrupo / modalidade", `${d.subgrupo} · ${tf.modalidade}`],
+    ["Regime", e.regime === "SCEE" ? "SCEE (mini/microgeração distribuída)" : "Central geradora fora do SCEE"],
+    ["Enquadramento / ano", e.regime === "SCEE" ? `${e.enquadramento} · ${e.ano}` : "-"],
+    ["Resolução vigente", `${d.reh} (${dataBr(d.vigencia.inicio)} a ${dataBr(d.vigencia.fim)})`],
+  ]);
+
+  titulo("Tarifas aplicadas (ANEEL, sem tributos)");
+  tabela(
+    ["Item", "Ponta", "Fora ponta", "Unidade"],
+    [
+      ["TE (energia)", brl(tf.energia.ponta.te), brl(tf.energia.fora.te), "R$/MWh"],
+      ["TUSD (energia)", brl(tf.energia.ponta.tusd), brl(tf.energia.fora.tusd), "R$/MWh"],
+      ["Fio B na energia (componente)", tf.fio ? brl(tf.fio.ponta.fioB) : "-", tf.fio ? brl(tf.fio.fora.fioB) : "-", "R$/MWh"],
+      ["Fio A na energia (RB+CCT+FR+CUSD)", tf.fio ? brl(tf.fio.ponta.fioA) : "-", tf.fio ? brl(tf.fio.fora.fioA) : "-", "R$/MWh"],
+      ["TUSD demanda de consumo", tf.demanda.unica !== undefined ? brl(tf.demanda.unica) : brl(tf.demanda.ponta ?? 0), tf.demanda.unica !== undefined ? "(única)" : brl(tf.demanda.fora ?? 0), "R$/kW"],
+      ["TUSDg (demanda de geração)", tf.tusdg === null ? "não publicada" : brl(tf.tusdg), "-", "R$/kW"],
+    ],
+    [5, 2, 2, 1.5],
+    ["l", "r", "r", "l"],
+  );
+
+  titulo("Medição e contrato informados");
+  campos([
+    ["Consumo ponta / fora ponta", `${kwh(e.consumo.ponta)} / ${kwh(e.consumo.fora)}`],
+    ["Injeção ponta / fora ponta", `${kwh(e.injecao.ponta)} / ${kwh(e.injecao.fora)}`],
+    ["Crédito anterior usado / alocado a outras UCs", `${kwh(c.creditoUsadoKwh)} / ${kwh(e.alocadoOutrasKwh)}`],
+    ["Demanda contratada / medida (consumo)", tf.modalidade === "Verde" ? `${kw(e.demandaContratada.unica)} / ${kw(e.demandaMedida.unica)}` : `P ${kw(e.demandaContratada.ponta)} · FP ${kw(e.demandaContratada.fora)} / P ${kw(e.demandaMedida.ponta)} · FP ${kw(e.demandaMedida.fora)}`],
+    ["Demanda de geração contratada / injeção medida", `${kw(e.demandaGerContratada)} / ${kw(e.demandaInjMedida)}`],
+    ["Base da TUSDg", e.regime === "fora" ? "MUSD contratado" : e.modoDemandaGeracao === "excedente" ? "excedente da injeção sobre a demanda de consumo" : "toda a demanda de injeção"],
+    ["Tributos", d.origemTributos],
+    ["ICMS na energia compensada", e.icmsIsentaCompensada ? "isento (Convênio ICMS 16/2015)" : "tributado"],
+    ["Bandeira", d.bandeira],
+  ]);
+
+  if (e.regime === "SCEE") {
+    titulo("Compensação de energia (SCEE)");
+    campos([
+      ["Compensado ponta / fora ponta", `${kwh(c.compensado.ponta)} / ${kwh(c.compensado.fora)}`],
+      ["Faturado ponta / fora ponta", `${kwh(c.faturado.ponta)} / ${kwh(c.faturado.fora)}`],
+      ["Fator entre postos (TE fp / TE p)", brl(c.fatorPontaFora, 4)],
+      ["Fora ponta usado na ponta / ponta usada no fora ponta", `${kwh(c.transferencias.foraParaPonta)} / ${kwh(c.transferencias.pontaParaFora)}`],
+      ["Excedente (equiv. fora ponta)", kwh(c.excedenteKwh)],
+      ["Saldo após o rateio", kwh(c.novoSaldoKwh)],
+    ]);
   }
-  return doc;
+
+  titulo("Fatura esperada");
+  tabela(
+    ["Item", "Qtd.", "Tarifa", "Sem trib.", "ICMS", "PIS/Cof.", "Total"],
+    [
+      ...f.linhas.map((l) => [l.descricao, `${brl(l.quantidade, l.unidade === "kW" ? 1 : 0)} ${l.unidade}`, l.tarifa === null ? "-" : brl(l.tarifa, 4), brl(l.liquido), brl(l.icms), brl(l.pisCofins), brl(l.total)]),
+      ["TOTAL", "", "", brl(f.totalLiquido), "", brl(f.totalTributos), brl(f.total)],
+    ],
+    [5.2, 1.8, 1.3, 1.5, 1.2, 1.2, 1.5],
+    ["l", "r", "r", "r", "r", "r", "r"],
+  );
+
+  titulo("Conferência com a fatura real");
+  const conf = d.conferencia;
+  const com = conf?.itens.filter((i) => i.real !== null) ?? [];
+  if (conf && (com.length || conf.total)) {
+    tabela(
+      ["Item", "Esperado", "Fatura", "Diferença", "Resultado"],
+      [
+        ...com.map((i) => [i.descricao, brl(i.esperado), brl(i.real ?? 0), `${(i.dif ?? 0) >= 0 ? "+" : ""}${brl(i.dif ?? 0)}${i.pct === null ? "" : ` (${i.pct >= 0 ? "+" : ""}${brl(i.pct, 1)}%)`}`, i.status.toUpperCase()]),
+        ...(conf.total ? [["TOTAL DA FATURA", brl(f.total), brl(conf.total.real), `${conf.total.dif >= 0 ? "+" : ""}${brl(conf.total.dif)}${conf.total.pct === null ? "" : ` (${conf.total.pct >= 0 ? "+" : ""}${brl(conf.total.pct, 1)}%)`}`, conf.total.status.toUpperCase()]] : []),
+      ],
+      [5, 1.6, 1.6, 2.2, 1.6],
+      ["l", "r", "r", "r", "l"],
+    );
+  } else paragrafo("Nenhum valor da fatura real informado para conferência.");
+
+  if (f.alertas.length) {
+    titulo("Alertas");
+    f.alertas.forEach((a) => paragrafo(`• [${a.nivel === "alta" ? "ALTA" : a.nivel === "media" ? "MÉDIA" : "INFO"}] ${a.texto}`));
+  }
+
+  titulo("Premissas, pontos a conferir e responsabilidade");
+  [
+    "Tarifas, TUSDg e componentes: dados abertos da ANEEL (resolução vigente na emissão). Fio B e Fio A da energia vêm dos componentes publicados; no grupo A o Fio B fica quase todo na demanda.",
+    "Compensação: primeiro no mesmo posto; o excedente de um posto cobre o outro pela razão das TE (FAQ ANEEL; conferir se a REN 1.059 usa TE+TUSD). Créditos valem 60 meses.",
+    "Parcela não compensada: GD II = % do Fio B do ano (2026 = 60%); GD III = 100% Fio B + 40% Fio A + P&D/TFSEE até 2028; a partir de 2029 vale o art. 17 da Lei 14.300 (valoração da ANEEL a confirmar).",
+    "Demanda de geração: TUSDg sobre a injeção que excede a demanda de consumo ou sobre toda a injeção, conforme a opção escolhida (conferir o §7º do art. 655-J da REN 1.000). Ultrapassagem: 2x acima de 105% da contratada.",
+    "Tributos por dentro, item a item. ICMS: Convênio ICMS 16/2015 isenta a energia compensada (não isenta demanda, TUSDg, reativo, custo de disponibilidade); confira o RICMS do estado, inclusive sobre o Fio B. PIS/Cofins zero na energia compensada (Lei 13.169/2015, art. 8º).",
+    "Reativo, CIP e outros itens foram lançados como constam na fatura. Este laudo é uma conferência técnica automatizada e não substitui parecer jurídico ou contábil.",
+  ].forEach((s) => paragrafo(`• ${s}`));
+
+  return fechar();
 }

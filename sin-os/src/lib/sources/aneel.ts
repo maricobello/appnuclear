@@ -49,6 +49,8 @@ export interface TarifaRow {
   VlrTUSD: string;
   VlrTE: string;
   DatGeracaoConjuntoDados?: string;
+  /** Na TUSDg da A2, uma linha por usina; nas tarifas de consumidor, "Não se aplica". */
+  SigAgenteAcessante?: string;
 }
 
 export interface Linha {
@@ -60,6 +62,7 @@ export interface Linha {
   unidade: string;
   tusd: number;
   te: number;
+  acessante?: string;
 }
 
 export interface TarifaVigente {
@@ -140,7 +143,7 @@ export async function tarifaVigente(agente: string, subgrupo: string, dia = hoje
       const seen = new Set<string>();
       const linhas: Linha[] = [];
       for (const x of rows) {
-        const l = { modalidade: x.DscModalidadeTarifaria, classe: x.DscClasse, subclasse: x.DscSubClasse, detalhe: x.DscDetalhe, posto: x.NomPostoTarifario, unidade: x.DscUnidadeTerciaria, tusd: num(x.VlrTUSD), te: num(x.VlrTE) };
+        const l = { modalidade: x.DscModalidadeTarifaria, classe: x.DscClasse, subclasse: x.DscSubClasse, detalhe: x.DscDetalhe, posto: x.NomPostoTarifario, unidade: x.DscUnidadeTerciaria, tusd: num(x.VlrTUSD), te: num(x.VlrTE), acessante: x.SigAgenteAcessante || "Não se aplica" };
         const k = JSON.stringify(l);
         if (!seen.has(k)) {
           seen.add(k);
@@ -195,6 +198,30 @@ export async function componentes(q: { agente: string; subgrupo: string; inicio:
         filters: JSON.stringify({ SigNomeAgente: q.agente, DscSubGrupoTarifario: q.subgrupo, DscBaseTarifaria: "Tarifa de Aplicação", DscModalidadeTarifaria: q.modalidade, DscSubClasseConsumidor: q.subclasse, DscDetalheConsumidor: q.detalhe, DscPostoTarifario: q.posto, DscUnidade: q.unidade.startsWith("R$") ? q.unidade : `R$/${q.unidade}` }),
       });
       return r.records.filter((x) => x.DatInicioVigencia === q.inicio && (x.SigNomeAgenteAcessante === "Não se aplica" || !x.SigNomeAgenteAcessante));
+    },
+    { staleIfErrorMs: 7 * 24 * 3600_000 },
+  );
+  return value;
+}
+
+/**
+ * Componentes da ENERGIA (R$/MWh, detalhe "Não se aplica") de uma modalidade, nos dois postos,
+ * numa consulta só: base da parcela não compensada da GD (Fio B, Fio A, P&D, TFSEE).
+ */
+export async function componentesEnergia(q: { agente: string; subgrupo: string; inicio: string; modalidade: string }): Promise<Record<"ponta" | "fora", ComponenteRow[]>> {
+  const ano = Number(q.inicio.slice(0, 4));
+  const res = await recursoComponentes(ano);
+  if (!res) return { ponta: [], fora: [] };
+  const { value } = await cached(
+    `aneel:comp-energia:${JSON.stringify(q)}`,
+    SIX_H,
+    async () => {
+      const r = await search<ComponenteRow>(res, {
+        limit: "2000",
+        filters: JSON.stringify({ SigNomeAgente: q.agente, DscSubGrupoTarifario: q.subgrupo, DscBaseTarifaria: "Tarifa de Aplicação", DscModalidadeTarifaria: q.modalidade, DscDetalheConsumidor: "Não se aplica", DscUnidade: "R$/MWh" }),
+      });
+      const ok = r.records.filter((x) => x.DatInicioVigencia === q.inicio && (x.SigNomeAgenteAcessante === "Não se aplica" || !x.SigNomeAgenteAcessante));
+      return { ponta: ok.filter((x) => x.DscPostoTarifario === "Ponta"), fora: ok.filter((x) => x.DscPostoTarifario === "Fora ponta") };
     },
     { staleIfErrorMs: 7 * 24 * 3600_000 },
   );

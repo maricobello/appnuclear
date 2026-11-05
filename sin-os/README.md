@@ -351,6 +351,29 @@ Tela `/tarifas`, `GET /api/tarifas` e as ferramentas `tarifa_vigente` e `reforma
   Para empresa no regime regular, IBS/CBS dão crédito integral.
 - Conferir antes de usar em parecer: alíquotas definitivas, IBS por estado e município, cashback de
   baixa renda, tratamento da energia compensada na GD e como a ANEEL vai repassar os tributos.
+- **Laudo em PDF** (`src/lib/tarifa/laudo.ts`, jsPDF no navegador): preto e branco, seções numeradas,
+  código de verificação, ressalvas e campo de assinatura.
+
+### Usina (gerador)
+
+Aba **Usina (gerador)** na mesma tela (`src/lib/tarifa/usina.ts`, `src/app/tarifas/Usina.tsx`), para
+conferir a fatura da unidade onde fica a usina no grupo A (A4, A3a, A3, A2, AS; Verde ou Azul):
+
+- **Dados da ANEEL:** TE/TUSD por posto, TUSD de demanda e a **TUSDg** (modalidade "Geração", R$/kW; na
+  A2 há uma por usina e o app usa a genérica). Fio B e Fio A da energia saem dos componentes
+  (`TUSD_FioB`; `TUSD_RB+CCT+FR+CUSD`). No grupo A o Fio B fica quase todo na demanda: só a ponta da
+  Verde carrega Fio B na energia.
+- **Cálculo:** compensação no mesmo posto e entre postos pela razão das TE, créditos anteriores e rateio;
+  parcela não compensada por enquadramento (GD II = % do Fio B do ano; GD III = 100% Fio B + 40% Fio A +
+  P&D/TFSEE); demanda de consumo pelo maior entre medida e contratada; TUSDg sobre a injeção excedente
+  (ou toda a injeção, opção); ultrapassagens 2x acima de 105%; bandeira só sobre o consumo faturado;
+  tributos por dentro item a item, com Convênio ICMS 16/2015 na energia compensada. Regime "fora do
+  SCEE" para central geradora que paga TUSDg sobre o MUSD.
+- **Conferência:** valor de cada item da fatura real contra o esperado (até 1% conforme, até 3%
+  atenção), alertas, checklist de armadilhas do auditor e laudo da usina em PDF.
+- **Em aberto (viram opção, nunca regra escondida):** §7º do art. 655-J da REN 1.000, razão entre postos
+  (TE ou TE+TUSD), valoração do art. 17 a partir de 2029, ICMS estadual sobre o Fio B, IBS/CBS na energia
+  compensada. Microgeração no grupo B segue na tela de Geração distribuída.
 
 ## Confiança nos dados abertos
 
