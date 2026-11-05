@@ -266,12 +266,15 @@ microfone só abre num toque. Fluxo: fala → gravação com detecção de fim d
   429 de um passa para o próximo, e o modelo limitado fica de molho até o `Retry-After`.
 - **Chaves:** só no servidor (Vercel, **Sensitive**). Nunca no código nem no chat. `GET /api/assistente`
   mostra o provedor no ar, a voz e os tokens do dia.
-- **Senha (temporária, modo de teste):** as senhas simples (`senha1234` e `iara2026`) ficam no front
+- **Senha (temporária, modo de teste):** a senha simples `senha1234` (a mesma do agente auditor) fica no front
   (`src/lib/assistant/access.ts`, ou `NEXT_PUBLIC_IARA_SENHA` com uma ou várias separadas por vírgula), e
   qualquer um pode lê-las no código do site. A estrutura antiga continua
   valendo: `ASSISTANT_ACCESS_CODE` na Vercel segue aceito, e `ASSISTANT_SIMPLE_CODE=off` volta a exigir só
   ele. Limite por IP e cota diária (`ASSISTANT_DAILY_LIMIT`, `ASSISTANT_STT_DAILY_LIMIT`,
   `ASSISTANT_TTS_DAILY_LIMIT`, `GD_DAILY_LIMIT`) seguem ativos.
+- **Agente auditor:** "Rodar auditoria" (com o agente de IA) e o teste de alerta também aceitam
+  `senha1234`, além da `ADMIN_KEY`; `AUDITOR_SENHA_SIMPLES=off` desliga. A ingestão da rede e do
+  planejamento e o envio de alertas continuam exigindo a `ADMIN_KEY` real.
 - **Voz natural:** `POST /api/assistente/fala` com um destes provedores:
   - servidor compatível com OpenAI, como o OpenVoice deste repositório em `voz-server/`, que sobe num Space
     gratuito do Hugging Face (`TTS_BASE_URL`, `TTS_API_KEY`, `TTS_VOICE`, `TTS_SPEED`);

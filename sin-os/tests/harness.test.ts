@@ -213,7 +213,7 @@ describe("senha simples e voz natural", () => {
     expect(codeOk(req(IARA_SENHA))).toBe(true);
     expect(IARA_SENHA).toBe("senha1234");
     expect(codeOk(req("senha1234"))).toBe(true);
-    expect(codeOk(req("iara2026"))).toBe(true);
+    expect(codeOk(req("iara2026"))).toBe(false); // padronizada: só senha1234
     expect(codeOk(req("outra"))).toBe(false);
     process.env.ASSISTANT_SIMPLE_CODE = "off";
     expect(codeOk(req(IARA_SENHA))).toBe(false);

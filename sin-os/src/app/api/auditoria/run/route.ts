@@ -1,7 +1,7 @@
 import { runAuditAgent } from "@/lib/audit/agent";
 import { runAudit } from "@/lib/audit/runner";
 import type { AuditRun } from "@/lib/audit/types";
-import { authorize } from "@/lib/auth";
+import { authorizeAuditor } from "@/lib/auth";
 import { listAuditRuns } from "@/lib/store";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +15,7 @@ function triggerOf(req: Request): AuditRun["trigger"] {
 }
 
 async function handle(req: Request) {
-  const auth = authorize(req);
+  const auth = authorizeAuditor(req);
   if (!auth.ok) return Response.json({ error: "não autorizado" }, { status: 401 });
   const url = new URL(req.url);
 

@@ -108,8 +108,8 @@ export default function AuditoriaPage() {
                 type="password"
                 value={key}
                 onChange={(e) => setKey(e.target.value)}
-                placeholder="ADMIN_KEY (fica na sessão)"
-                aria-label="Chave de administrador"
+                placeholder="Senha (senha1234 ou ADMIN_KEY)"
+                aria-label="Senha do auditor"
                 className="h-11 w-52 rounded-[10px] bg-surface-2 sm:h-9 px-3 text-[14px] text-ink outline-none focus:ring-2 focus:ring-accent/50"
               />
             ) : null}
