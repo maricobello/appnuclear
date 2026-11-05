@@ -9,6 +9,8 @@ export interface TarifaDeps {
   vigente: (agente: string, subgrupo: string) => Promise<TarifaVigente | null>;
   componentes: (q: { agente: string; subgrupo: string; inicio: string } & Omit<Linha, "te" | "tusd" | "classe">) => Promise<ComponenteRow[]>;
   bandeira: () => Promise<Bandeira>;
+  /** UF de cada distribuidora (para o ICMS de referência sem perguntar a UF). */
+  uf?: () => Promise<Record<string, string>>;
 }
 
 const SUBGRUPOS = ["B1", "B2", "B3", "A4", "A3a", "A3", "A2", "A1", "AS"];
@@ -82,7 +84,7 @@ async function tarifaVigenteTool(args: Record<string, unknown>, deps: TarifaDeps
   const linhas = t.linhas.filter((l) => l.modalidade === modalidade && l.detalhe === "Não se aplica");
   const energia = linhas.filter((l) => l.unidade === "MWh");
   const principal = energia.find((l) => l.subclasse === "Residencial") ?? energia.find((l) => /fora/i.test(l.posto)) ?? energia[0];
-  const uf = String(args.uf ?? "").toUpperCase();
+  const uf = String(args.uf ?? "").toUpperCase() || ((await deps.uf?.().catch(() => ({}) as Record<string, string>)) ?? {})[agente] || "";
   const tributos = { icms: frac(args.icms, ICMS_UF[uf] ?? PREMISSAS_PADRAO.icms), pis: frac(args.pis, PREMISSAS_PADRAO.pis), cofins: frac(args.cofins, PREMISSAS_PADRAO.cofins) };
   let componentes = null;
   let ef = null;
@@ -121,7 +123,7 @@ async function reformaTool(args: Record<string, unknown>, deps?: TarifaDeps) {
     }
   }
   if (!base) return { erro: "informe tarifa_mwh (TE+TUSD sem tributos, R$/MWh) ou uma distribuidora" };
-  const uf = String(args.uf ?? "").toUpperCase();
+  const uf = String(args.uf ?? "").toUpperCase() || (args.distribuidora && deps?.uf ? ((await deps.uf().catch(() => ({}) as Record<string, string>))[(await resolverAgente(String(args.distribuidora), await deps.agentes())) ?? ""] ?? "") : "");
   const p = { ...PREMISSAS_PADRAO, icms: frac(args.icms, ICMS_UF[uf] ?? PREMISSAS_PADRAO.icms), cbsRef: frac(args.cbs_ref, PREMISSAS_PADRAO.cbsRef), ibsRef: frac(args.ibs_ref, PREMISSAS_PADRAO.ibsRef) };
   const anos = simularReforma(base, p);
   return {

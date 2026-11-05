@@ -15,6 +15,10 @@ const BASE = "https://dadosabertos.aneel.gov.br/api/3/action";
 const RES_TARIFAS = "fcf2906c-7c32-4b9b-a637-054e7a5234f4";
 const RES_BAND_ADIC = "5879ca80-b3bd-45b1-a135-d9b77c1d5b36";
 const RES_BAND_ACION = "0591b8f6-fe54-437b-b72b-1aa2efd46e42";
+/** INDGER dados comerciais: CNPJ da distribuidora × município IBGE atendido. */
+const RES_INDGER_COM = "fd10c9d4-cb76-4020-a322-e79afb13eaf7";
+/** Prefixo do código IBGE do município → UF. */
+const UF_IBGE: Record<string, string> = { "11": "RO", "12": "AC", "13": "AM", "14": "RR", "15": "PA", "16": "AP", "17": "TO", "21": "MA", "22": "PI", "23": "CE", "24": "RN", "25": "PB", "26": "PE", "27": "AL", "28": "SE", "29": "BA", "31": "MG", "32": "ES", "33": "RJ", "35": "SP", "41": "PR", "42": "SC", "43": "RS", "50": "MS", "51": "MT", "52": "GO", "53": "DF" };
 /** Componentes por ano de início de vigência (a ANEEL publica um arquivo por ano). */
 const RES_COMP_FALLBACK: Record<number, string> = { 2025: "a4060165-3a0c-404f-926c-83901088b67c", 2026: "e8717aa8-2521-453f-bf16-fbb9a16eea39" };
 
@@ -83,6 +87,42 @@ export async function distribuidoras(): Promise<string[]> {
       return [...new Set(r.records.map((x) => x.SigAgente).filter((x) => x && x !== "Não Informado"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     },
     { staleIfErrorMs: 7 * 24 * 3600_000 },
+  );
+  return value;
+}
+
+/**
+ * UF de cada distribuidora, pelos dados da própria ANEEL: o CNPJ da tarifa homologada casa com
+ * os municípios atendidos no INDGER; vale a UF com mais municípios (quem atende dois estados
+ * fica com o principal). Sem casamento (agente antigo/incorporado), a distribuidora fica sem UF.
+ */
+export async function ufDistribuidoras(): Promise<Record<string, string>> {
+  const { value } = await cached(
+    "aneel:uf-agentes",
+    7 * 24 * 3600_000,
+    async () => {
+      const [cnpjs, munis] = await Promise.all([
+        search<{ SigAgente: string; NumCNPJDistribuidora: string }>(RES_TARIFAS, { fields: "SigAgente,NumCNPJDistribuidora", distinct: "true", limit: "2000", filters: JSON.stringify({ DscBaseTarifaria: "Tarifa de Aplicação" }) }),
+        search<{ NumCNPJ: string; CodMunicipioIBGE: string }>(RES_INDGER_COM, { fields: "NumCNPJ,CodMunicipioIBGE", distinct: "true", limit: "32000" }),
+      ]);
+      const porCnpj = new Map<string, Map<string, number>>();
+      for (const m of munis.records) {
+        const uf = UF_IBGE[String(m.CodMunicipioIBGE ?? "").slice(0, 2)];
+        if (!uf) continue;
+        const c = porCnpj.get(m.NumCNPJ) ?? new Map<string, number>();
+        c.set(uf, (c.get(uf) ?? 0) + 1);
+        porCnpj.set(m.NumCNPJ, c);
+      }
+      // agentes antigos/incorporados que não constam mais do INDGER (área de concessão conhecida)
+      const out: Record<string, string> = { CERR: "RR", CFLO: "PR", CNEE: "SP", "CPFL LESTE PAULI": "SP", "CPFL MOCOCA": "SP", "CPFL SANTA CRUZ": "SP", "CPFL SUL PAULIST": "SP", EBO: "PB", EDEVP: "SP", EEB: "SP", ENF: "RJ" };
+      for (const r of cnpjs.records) {
+        const c = porCnpj.get(r.NumCNPJDistribuidora);
+        if (!c) continue;
+        out[r.SigAgente] = [...c.entries()].sort((a, b) => b[1] - a[1])[0][0];
+      }
+      return out;
+    },
+    { staleIfErrorMs: 30 * 24 * 3600_000 },
   );
   return value;
 }

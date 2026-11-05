@@ -19,7 +19,7 @@ import { loadPlanReport } from "@/lib/planning/store";
 import { snapshotAgeDays } from "@/lib/grid/snapshot";
 import { loadGridSnapshot } from "@/lib/grid/store";
 import { brtDate } from "@/lib/sources/time";
-import { bandeiraVigente, componentes, distribuidoras, tarifaVigente } from "@/lib/sources/aneel";
+import { bandeiraVigente, componentes, distribuidoras, tarifaVigente, ufDistribuidoras } from "@/lib/sources/aneel";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -48,7 +48,7 @@ const deps: AssistantDeps = {
     return { snapshot, ageDays: snapshot ? snapshotAgeDays(snapshot.date, brtDate(Date.now())) : null };
   },
   dataMode,
-  tarifas: { agentes: distribuidoras, vigente: (a, s) => tarifaVigente(a, s), componentes, bandeira: bandeiraVigente },
+  tarifas: { agentes: distribuidoras, vigente: (a, s) => tarifaVigente(a, s), componentes, bandeira: bandeiraVigente, uf: ufDistribuidoras },
 };
 
 const Asset = z.object({

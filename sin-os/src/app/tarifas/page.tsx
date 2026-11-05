@@ -1,6 +1,7 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { ChevronDown, Pencil, RotateCcw } from "lucide-react";
+import { useMemo, useRef, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
 import { Badge, Disclosure, Empty, ErrorBox, Loading, PageHeader, Panel, Segmented, Stat, Table } from "@/components/ui";
 import { baseOption, C, categoryAxis, valueAxis } from "@/lib/chart";
@@ -16,15 +17,147 @@ const pct = (v: number) => `${brl(v * 100, 2)}%`;
 const dataBr = (s: string) => (s ? s.split("-").reverse().join("/") : "—");
 const chave = (l: Linha) => [l.modalidade, l.subclasse, l.detalhe, l.posto, l.unidade].join("|");
 
-function Campo({ label, value, onChange, suffix = "%", step = "0.01" }: { label: string; value: number; onChange: (v: number) => void; suffix?: string; step?: string }) {
+function Campo({ label, value, onChange, suffix = "%", step = "0.01", readOnly = false, action }: { label: string; value: number; onChange: (v: number) => void; suffix?: string; step?: string; readOnly?: boolean; action?: React.ReactNode }) {
   return (
     <label className="flex min-w-0 flex-col gap-1 text-[12px] text-muted">
       {label}
       <span className="flex items-center gap-1">
-        <input type="number" inputMode="decimal" step={step} value={Number.isFinite(value) ? value : ""} onChange={(e) => onChange(Number(e.target.value))} className="h-10 w-full min-w-0 rounded-lg bg-surface-2 px-2.5 text-[14px] text-ink" />
+        <input
+          type="number"
+          inputMode="decimal"
+          step={step}
+          readOnly={readOnly}
+          value={Number.isFinite(value) ? value : ""}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className={`h-10 w-full min-w-0 rounded-lg px-2.5 text-[14px] ${readOnly ? "bg-surface-2/50 text-ink-2" : "bg-surface-2 text-ink"}`}
+        />
         {suffix ? <span className="shrink-0 text-[12px]">{suffix}</span> : null}
+        {action}
       </span>
     </label>
+  );
+}
+
+/** Lápis (preencher à mão) ↔ seta circular (voltar ao automático), discreto ao lado do campo. */
+function BotaoManual({ manual, onToggle, nome }: { manual: boolean; onToggle: () => void; nome: string }) {
+  const Icon = manual ? RotateCcw : Pencil;
+  return (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.preventDefault();
+        onToggle();
+      }}
+      title={manual ? `Voltar ${nome} automático` : `Preencher ${nome} à mão`}
+      aria-label={manual ? `Voltar ${nome} automático` : `Preencher ${nome} à mão`}
+      className="grid size-7 shrink-0 place-items-center rounded-md text-muted hover:bg-surface-2 hover:text-ink"
+    >
+      <Icon size={13} aria-hidden />
+    </button>
+  );
+}
+
+const semAcento = (s: string) => s.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+
+/** Seleção de distribuidora: a seta abre a lista inteira; digitar filtra. */
+function BuscaDistribuidora({ value, options, onChange, ufs }: { value: string; options: string[]; onChange: (v: string) => void; ufs: Record<string, string> }) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState<string | null>(null);
+  const [ativo, setAtivo] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const filtradas = useMemo(() => {
+    if (!busca) return options;
+    const q = semAcento(busca).replace(/[^a-z0-9]/g, "");
+    return options.filter((o) => semAcento(o).replace(/[^a-z0-9]/g, "").includes(q) || semAcento(ufs[o] ?? "") === q);
+  }, [busca, options, ufs]);
+  const escolher = (v: string) => {
+    onChange(v);
+    setBusca(null);
+    setAberto(false);
+    inputRef.current?.blur();
+  };
+  return (
+    <div className="relative min-w-0">
+      <div className="flex h-10 items-center rounded-lg bg-surface-2">
+        <input
+          ref={inputRef}
+          role="combobox"
+          aria-expanded={aberto}
+          aria-controls="tarifas-lista-agentes"
+          aria-label="Distribuidora"
+          value={busca ?? value}
+          onFocus={(e) => {
+            e.currentTarget.select();
+            setAberto(true);
+          }}
+          onChange={(e) => {
+            setBusca(e.target.value);
+            setAtivo(0);
+            setAberto(true);
+          }}
+          onBlur={() => setTimeout(() => (setAberto(false), setBusca(null)), 120)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setAberto(true);
+              setAtivo((i) => Math.min(filtradas.length - 1, i + 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setAtivo((i) => Math.max(0, i - 1));
+            } else if (e.key === "Enter" && filtradas[ativo]) {
+              e.preventDefault();
+              escolher(filtradas[ativo]);
+            } else if (e.key === "Escape") {
+              setAberto(false);
+              setBusca(null);
+            }
+          }}
+          className="h-10 w-full min-w-0 bg-transparent px-2.5 text-[14px] text-ink outline-none"
+        />
+        <button
+          type="button"
+          tabIndex={-1}
+          aria-label="Abrir lista de distribuidoras"
+          onMouseDown={(e) => {
+            e.preventDefault();
+            setBusca(null);
+            setAtivo(Math.max(0, options.indexOf(value)));
+            setAberto((a) => !a);
+            if (!aberto) inputRef.current?.focus();
+          }}
+          className="grid h-10 w-9 shrink-0 place-items-center text-muted hover:text-ink"
+        >
+          <ChevronDown size={16} aria-hidden className={aberto ? "rotate-180 transition-transform" : "transition-transform"} />
+        </button>
+      </div>
+      {aberto ? (
+        <ul id="tarifas-lista-agentes" role="listbox" className="absolute left-0 right-0 top-11 z-30 max-h-72 overflow-auto rounded-lg border border-line bg-surface py-1 shadow-lg">
+          {filtradas.length ? (
+            filtradas.map((o, i) => (
+              <li
+                key={o}
+                role="option"
+                aria-selected={o === value}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  escolher(o);
+                }}
+                onMouseEnter={() => setAtivo(i)}
+                ref={(el) => {
+                  if (el && i === ativo && aberto) el.scrollIntoView({ block: "nearest" });
+                }}
+                className={`flex cursor-pointer items-center justify-between gap-2 px-3 py-2 text-[14px] ${i === ativo ? "bg-surface-2" : ""} ${o === value ? "font-semibold text-ink" : "text-ink-2"}`}
+              >
+                <span className="truncate">{o}</span>
+                {ufs[o] ? <span className="shrink-0 text-[12px] text-muted">{ufs[o]}</span> : null}
+              </li>
+            ))
+          ) : (
+            <li className="px-3 py-2 text-[13px] text-muted">Nenhuma distribuidora com esse nome.</li>
+          )}
+        </ul>
+      ) : null}
+    </div>
   );
 }
 
@@ -46,6 +179,8 @@ function Escolha({ label, value, options, onChange }: { label: string; value: st
 interface Lista {
   agentes: string[];
   bandeira: Bandeira;
+  /** UF de cada distribuidora (ANEEL: CNPJ × municípios atendidos). */
+  uf?: Record<string, string>;
 }
 interface Resp {
   tarifa: TarifaVigente;
@@ -59,8 +194,8 @@ export default function TarifasPage() {
   const [sub, setSub] = useState<Sub>("B1");
   const [modal, setModal] = useState("");
   const [sel, setSel] = useState("");
-  const [uf, setUf] = useState("SP");
-  const [trib, setTrib] = useState({ icms: 18, pis: 1.05, cofins: 4.84 });
+  // null = automático (ICMS pela UF da distribuidora; PIS/Cofins de referência); número = preenchido à mão
+  const [manual, setManual] = useState<{ icms: number | null; pis: number | null; cofins: number | null }>({ icms: null, pis: null, cofins: null });
   const [band, setBand] = useState("atual");
   const [prem, setPrem] = useState<PremissasReforma>(PREMISSAS_PADRAO);
   const [fat, setFat] = useState({ preco: 0, consumo: 300 });
@@ -81,11 +216,11 @@ export default function TarifasPage() {
   const comp = useApi<Resp>(compUrl, 1800_000);
   const dec = comp.data?.decomposicao ?? null;
 
-  const mudarUf = (u: string) => {
-    setUf(u);
-    const icms = ICMS_UF[u];
-    if (icms !== undefined) setTrib((t) => ({ ...t, icms: Math.round(icms * 10000) / 100 }));
-  };
+  const uf = lista.data?.uf?.[agente] ?? null;
+  const auto = { icms: Math.round((uf && ICMS_UF[uf] !== undefined ? ICMS_UF[uf] : PREMISSAS_PADRAO.icms) * 10000) / 100, pis: Math.round(PREMISSAS_PADRAO.pis * 10000) / 100, cofins: Math.round(PREMISSAS_PADRAO.cofins * 10000) / 100 };
+  const trib = { icms: manual.icms ?? auto.icms, pis: manual.pis ?? auto.pis, cofins: manual.cofins ?? auto.cofins };
+  const alternar = (k: keyof typeof manual) => setManual((m) => ({ ...m, [k]: m[k] === null ? trib[k] : null }));
+  const definir = (k: keyof typeof manual, v: number) => setManual((m) => ({ ...m, [k]: v }));
 
   const bandeira = base.data?.bandeira ?? lista.data?.bandeira;
   const bandOpts = [{ value: "atual", label: bandeira ? `Vigente (${bandeira.competencia}): ${bandeira.nome}` : "Vigente" }, { value: "Verde", label: "Verde" }, ...(bandeira?.tabela ?? []).map((t) => ({ value: t.nome, label: `${t.nome} (+R$ ${brl(t.adicionalMwh)}/MWh)` }))];
@@ -93,7 +228,7 @@ export default function TarifasPage() {
   const isEnergia = linha?.unidade === "MWh";
   const ef = linha && isEnergia ? efetiva(linha.te, linha.tusd, bandMwh, { icms: trib.icms / 100, pis: trib.pis / 100, cofins: trib.cofins / 100 }) : null;
   const baseMwh = linha && isEnergia ? linha.te + linha.tusd + bandMwh : null;
-  const reforma = useMemo(() => (baseMwh === null ? [] : simularReforma(baseMwh, { ...prem, icms: trib.icms / 100, pis: trib.pis / 100, cofins: trib.cofins / 100 })), [baseMwh, prem, trib]);
+  const reforma = useMemo(() => (baseMwh === null ? [] : simularReforma(baseMwh, { ...prem, icms: trib.icms / 100, pis: trib.pis / 100, cofins: trib.cofins / 100 })), [baseMwh, prem, trib.icms, trib.pis, trib.cofins]);
 
   const decOpt = useMemo<ChartOption | null>(() => {
     if (!dec?.grupos.length) return null;
@@ -147,28 +282,19 @@ export default function TarifasPage() {
       />
 
       <Panel title="Distribuidora e subgrupo" subtitle="A vigente é a resolução homologatória que cobre o dia de hoje.">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <label className="flex min-w-0 flex-col gap-1 text-[12px] text-muted">
-            Distribuidora ({lista.data?.agentes.length ?? "…"})
-            <input
-              list="tarifas-agentes"
-              defaultValue={agente}
-              onChange={(e) => {
-                const v = e.target.value.trim();
-                if (lista.data?.agentes.includes(v)) {
-                  setAgente(v);
-                  setSel("");
-                }
-              }}
-              className="h-10 w-full min-w-0 rounded-lg bg-surface-2 px-2.5 text-[14px] text-ink"
-            />
-            <datalist id="tarifas-agentes">
-              {(lista.data?.agentes ?? []).map((a) => (
-                <option key={a} value={a} />
-              ))}
-            </datalist>
-          </label>
-          <Escolha label="UF (ICMS de referência)" value={uf} options={Object.keys(ICMS_UF).map((u) => ({ value: u, label: `${u} · ${pct(ICMS_UF[u])}` }))} onChange={mudarUf} />
+        <div className="flex min-w-0 flex-col gap-1 text-[12px] text-muted">
+          <span>Distribuidora ({lista.data?.agentes.length ?? "…"})</span>
+          <BuscaDistribuidora
+            value={agente}
+            options={lista.data?.agentes ?? [agente]}
+            ufs={lista.data?.uf ?? {}}
+            onChange={(v) => {
+              setAgente(v);
+              setSel("");
+              setModal("");
+            }}
+          />
+          <span>{uf ? `UF ${uf} · ICMS de referência ${pct(ICMS_UF[uf] ?? PREMISSAS_PADRAO.icms)} aplicado automaticamente` : lista.data ? "UF não identificada nos dados da ANEEL: ICMS padrão de 18% (preencha à mão no campo ICMS)" : "…"}</span>
         </div>
         <div className="mt-3 flex flex-wrap gap-3">
           <Segmented
@@ -252,10 +378,12 @@ export default function TarifasPage() {
             <Empty label="Linha de demanda (R$/kW): escolha uma linha em R$/MWh para a tarifa por kWh." />
           ) : (
             <>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-                <Campo label="ICMS" value={trib.icms} onChange={(v) => setTrib({ ...trib, icms: v })} />
-                <Campo label="PIS" value={trib.pis} onChange={(v) => setTrib({ ...trib, pis: v })} />
-                <Campo label="Cofins" value={trib.cofins} onChange={(v) => setTrib({ ...trib, cofins: v })} />
+              <div className="grid grid-cols-1 gap-3 min-[420px]:grid-cols-3">
+                <Campo label={manual.icms === null ? `ICMS${uf ? ` (${uf})` : ""}` : "ICMS (manual)"} value={trib.icms} readOnly={manual.icms === null} onChange={(v) => definir("icms", v)} action={<BotaoManual nome="o ICMS" manual={manual.icms !== null} onToggle={() => alternar("icms")} />} />
+                <Campo label={manual.pis === null ? "PIS (ref.)" : "PIS (manual)"} value={trib.pis} readOnly={manual.pis === null} onChange={(v) => definir("pis", v)} action={<BotaoManual nome="o PIS" manual={manual.pis !== null} onToggle={() => alternar("pis")} />} />
+                <Campo label={manual.cofins === null ? "Cofins (ref.)" : "Cofins (manual)"} value={trib.cofins} readOnly={manual.cofins === null} onChange={(v) => definir("cofins", v)} action={<BotaoManual nome="a Cofins" manual={manual.cofins !== null} onToggle={() => alternar("cofins")} />} />
+              </div>
+              <div className="mt-3">
                 <Escolha label="Bandeira" value={band} options={bandOpts} onChange={setBand} />
               </div>
               {ef ? (
@@ -267,7 +395,7 @@ export default function TarifasPage() {
                   <Stat label="Bandeira" value={brl(bandMwh / 1000, 4)} unit="R$/kWh" />
                 </div>
               ) : null}
-              <p className="mt-3 text-[12px] text-muted">PIS/Cofins variam todo mês por distribuidora (regime não cumulativo); use as alíquotas da sua fatura. O ICMS por UF é referência: confira a lei estadual, faixas de isenção e a classe.</p>
+              <p className="mt-3 text-[12px] text-muted">O ICMS sai automático pela UF da distribuidora (referência estadual: confira faixas de isenção e a classe). PIS/Cofins mudam todo mês por distribuidora: para auditar, toque no lápis e use as alíquotas da fatura.</p>
 
               <div className="mt-5 border-t border-line pt-4">
                 <h3 className="text-[14px] font-semibold text-ink">Auditoria rápida da fatura</h3>

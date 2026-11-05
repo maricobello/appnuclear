@@ -1,4 +1,4 @@
-import { bandeiraVigente, componentes, distribuidoras, tarifaVigente } from "@/lib/sources/aneel";
+import { bandeiraVigente, componentes, distribuidoras, tarifaVigente, ufDistribuidoras } from "@/lib/sources/aneel";
 import { decompor } from "@/lib/tarifa/calc";
 import { errorResponse, jsonResponse } from "@/lib/services";
 
@@ -10,7 +10,7 @@ const txt = (v: string | null, max = 120) => (v ?? "").trim().slice(0, max);
 
 /**
  * Tarifas da ANEEL (dados abertos, em cache no servidor):
- *  - sem parâmetros: lista de distribuidoras e a bandeira do mês;
+ *  - sem parâmetros: lista de distribuidoras, UF de cada uma (para o ICMS) e a bandeira do mês;
  *  - ?agente=&subgrupo=: tarifa vigente (todas as linhas TE/TUSD) e bandeira;
  *  - + modalidade, subclasse, detalhe, posto, unidade: componentes abertos daquela linha.
  */
@@ -19,8 +19,8 @@ export async function GET(req: Request) {
     const q = new URL(req.url).searchParams;
     const agente = txt(q.get("agente"));
     if (!agente) {
-      const [agentes, bandeira] = await Promise.all([distribuidoras(), bandeiraVigente()]);
-      return jsonResponse({ agentes, bandeira }, 3600);
+      const [agentes, bandeira, uf] = await Promise.all([distribuidoras(), bandeiraVigente(), ufDistribuidoras().catch(() => ({}) as Record<string, string>)]);
+      return jsonResponse({ agentes, bandeira, uf }, 3600);
     }
     const subgrupo = txt(q.get("subgrupo"), 4) || "B1";
     if (!SUBGRUPOS.has(subgrupo)) return errorResponse(new Error("subgrupo inválido"), 400);

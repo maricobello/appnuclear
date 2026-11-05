@@ -81,6 +81,7 @@ const deps: TarifaDeps = {
   }),
   componentes: async () => fixture as never,
   bandeira: async () => ({ competencia: "2026-10", nome: "Verde", adicionalMwh: 0, tabela: [] }),
+  uf: async () => ({ "COPEL-DIS": "PR", "CEMIG-D": "MG" }),
 };
 
 describe("ferramentas da Iara", () => {
@@ -90,10 +91,11 @@ describe("ferramentas da Iara", () => {
     expect(await resolverAgente("cpfl paulista", await deps.agentes())).toBe("CPFL-PAULISTA");
   });
   it("tarifa_vigente devolve REH, componentes e tarifa efetiva", async () => {
-    const r = (await executeTarifaTool("tarifa_vigente", { distribuidora: "copel", uf: "PR" }, deps)) as Obj;
+    const r = (await executeTarifaTool("tarifa_vigente", { distribuidora: "copel" }, deps)) as Obj;
     expect(r.distribuidora).toBe("COPEL-DIS");
     expect(r.componentes.fecha_com_tarifa).toBe(true);
-    expect(r.tarifa_efetiva.premissas.icms_pct).toBeCloseTo(19.5, 2);
+    expect(r.tarifa_efetiva.premissas.icms_pct).toBeCloseTo(19.5, 2); // UF da distribuidora, sem informar
+    expect(r.tarifa_efetiva.premissas.icms_fonte).toContain("PR");
     expect(r.tarifa_efetiva.com_tributos_kwh).toBeGreaterThan(r.tarifa_efetiva.sem_tributos_kwh);
   });
   it("reforma_tributaria funciona sem rede quando recebe a tarifa", async () => {
