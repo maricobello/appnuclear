@@ -208,10 +208,10 @@ export async function componentes(q: { agente: string; subgrupo: string; inicio:
  * Componentes da ENERGIA (R$/MWh, detalhe "Não se aplica") de uma modalidade, nos dois postos,
  * numa consulta só: base da parcela não compensada da GD (Fio B, Fio A, P&D, TFSEE).
  */
-export async function componentesEnergia(q: { agente: string; subgrupo: string; inicio: string; modalidade: string }): Promise<Record<"ponta" | "fora", ComponenteRow[]>> {
+export async function componentesEnergia(q: { agente: string; subgrupo: string; inicio: string; modalidade: string }): Promise<Record<"ponta" | "fora", ComponenteRow[]> & { diag?: string }> {
   const ano = Number(q.inicio.slice(0, 4));
   const res = await recursoComponentes(ano);
-  if (!res) return { ponta: [], fora: [] };
+  if (!res) return { ponta: [], fora: [], diag: `sem recurso de componentes para ${ano}` };
   const { value } = await cached(
     `aneel:comp-energia:${JSON.stringify(q)}`,
     SIX_H,
@@ -221,7 +221,8 @@ export async function componentesEnergia(q: { agente: string; subgrupo: string; 
         filters: JSON.stringify({ SigNomeAgente: q.agente, DscSubGrupoTarifario: q.subgrupo, DscBaseTarifaria: "Tarifa de Aplicação", DscModalidadeTarifaria: q.modalidade, DscDetalheConsumidor: "Não se aplica", DscUnidade: "R$/MWh" }),
       });
       const ok = r.records.filter((x) => x.DatInicioVigencia === q.inicio && (x.SigNomeAgenteAcessante === "Não se aplica" || !x.SigNomeAgenteAcessante));
-      return { ponta: ok.filter((x) => x.DscPostoTarifario === "Ponta"), fora: ok.filter((x) => x.DscPostoTarifario === "Fora ponta") };
+      const inicios = [...new Set(r.records.map((x) => x.DatInicioVigencia))].slice(0, 4).join(",");
+      return { ponta: ok.filter((x) => x.DscPostoTarifario === "Ponta"), fora: ok.filter((x) => x.DscPostoTarifario === "Fora ponta"), diag: `${res}: ${r.records.length} registros (vigências ${inicios || "nenhuma"}), ${ok.length} da vigência ${q.inicio}` };
     },
     { staleIfErrorMs: 7 * 24 * 3600_000 },
   );

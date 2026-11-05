@@ -33,7 +33,8 @@ export async function GET(req: Request) {
     if (usina === "Verde" || usina === "Azul") {
       const c = await componentesEnergia({ agente, subgrupo, inicio: tarifa.inicio, modalidade: usina });
       const fio = c.ponta.length && c.fora.length ? { ponta: fioDe(c.ponta), fora: fioDe(c.fora) } : null;
-      return jsonResponse({ tarifa, bandeira, fio }, 1800);
+      // sem componentes, não guarda na CDN e devolve o diagnóstico (recurso, registros, vigências)
+      return fio ? jsonResponse({ tarifa, bandeira, fio }, 1800) : jsonResponse({ tarifa, bandeira, fio, fioDiag: c.diag ?? null }, 0);
     }
     const modalidade = txt(q.get("modalidade"));
     let decomposicao = null;
