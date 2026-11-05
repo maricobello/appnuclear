@@ -357,3 +357,30 @@ html:root[data-ui="terminal"] {
   border-right: 1px solid var(--border);
   background: var(--surface);
 }
+
+/* ---------------------------------------------------------------- véu de carregamento */
+.loading-veil {
+  background: color-mix(in srgb, var(--page) 58%, transparent);
+  -webkit-backdrop-filter: blur(1.5px) saturate(0.92);
+  backdrop-filter: blur(1.5px) saturate(0.92);
+}
+.loading-ring {
+  position: relative;
+  width: 18px;
+  height: 18px;
+  border-radius: 9999px;
+  background: conic-gradient(from 0deg, transparent 0 25%, var(--accent) 100%);
+  -webkit-mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  mask: radial-gradient(farthest-side, transparent calc(100% - 2.5px), #000 calc(100% - 2px));
+  animation: loading-spin 0.75s linear infinite;
+}
+@keyframes loading-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .loading-ring {
+    animation-duration: 2.4s;
+  }
+}

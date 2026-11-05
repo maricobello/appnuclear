@@ -1,6 +1,7 @@
 "use client";
 
 import { Fragment, useMemo, useState } from "react";
+import { useBusyFlag } from "@/lib/busy";
 import { Bell, Bot, Database, ExternalLink, Play, RefreshCw } from "lucide-react";
 import { EChart, type ChartOption } from "@/components/EChart";
 import { ModelAuditPanel } from "@/components/ModelAudit";
@@ -16,6 +17,7 @@ export default function AuditoriaPage() {
   const { data, error, mutate, isValidating } = useApi<AuditoriaResp>("/api/auditoria", 60_000);
   const trust = useApi<ConfiancaResp>("/api/confianca", 300_000).data;
   const [running, setRunning] = useState(false);
+  useBusyFlag(running, "Auditando as fontes…");
   const [runMsg, setRunMsg] = useState<string | null>(null);
   const [key, setKey] = useState("");
   const [open, setOpen] = useState<string | null>(null);

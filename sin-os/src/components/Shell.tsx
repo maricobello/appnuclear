@@ -1,5 +1,6 @@
 "use client";
 
+import { LoadingVeil } from "./LoadingVeil";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { AnimatePresence, motion } from "motion/react";
@@ -405,6 +406,7 @@ export function Shell({ children }: { children: ReactNode }) {
           </header>
           <TerminalBar />
           <main className="mx-auto flex w-full max-w-[1440px] min-w-0 flex-1 flex-col px-4 pb-10 pt-5 sm:px-6 lg:px-10 lg:pt-9">{children}</main>
+          <LoadingVeil />
         </div>
       </div>
       <IaraPanel open={iara} onClose={() => setIara(false)} onToggle={toggleIara} />

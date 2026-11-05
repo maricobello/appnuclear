@@ -1,6 +1,7 @@
 "use client";
 
 import { FileUp, Trash2 } from "lucide-react";
+import { useBusyFlag } from "@/lib/busy";
 import { useMemo, useRef, useState } from "react";
 import { Badge, Button, Disclosure, Empty, PageHeader, Panel, Table, type Level } from "@/components/ui";
 import { useIara } from "@/lib/assistant/settings";
@@ -34,6 +35,7 @@ export default function GdPage() {
   const cfg = useIara();
   const fileRef = useRef<HTMLInputElement>(null);
   const [lendo, setLendo] = useState<{ done: number; total: number } | null>(null);
+  useBusyFlag(!!lendo, lendo && lendo.total > 1 ? `Lendo faturas (${lendo.done}/${lendo.total})…` : "Lendo fatura…");
   const [ultimas, setUltimas] = useState<LeituraResultado[]>([]);
   const [texto, setTexto] = useState("");
   const lote = useMemo(() => conferirLote(carteira.faturas, carteira.ucs), [carteira]);

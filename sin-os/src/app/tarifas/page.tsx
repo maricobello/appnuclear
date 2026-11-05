@@ -6,6 +6,8 @@ import { EChart, type ChartOption } from "@/components/EChart";
 import { Badge, Button, Disclosure, Empty, ErrorBox, Loading, PageHeader, Panel, Segmented, Stat, Table } from "@/components/ui";
 import { baseOption, C, categoryAxis, valueAxis } from "@/lib/chart";
 import { useApi } from "@/lib/useApi";
+import { useBusyFlag } from "@/lib/busy";
+import { PanelVeil } from "@/components/LoadingVeil";
 import { efetiva, ICMS_UF, PREMISSAS_PADRAO, simularReforma, type Decomposicao, type PremissasReforma } from "@/lib/tarifa/calc";
 import type { Bandeira, Linha, TarifaVigente } from "@/lib/sources/aneel";
 
@@ -213,7 +215,7 @@ export default function TarifasPage() {
   const compUrl = linha
     ? `/api/tarifas?${new URLSearchParams({ agente, subgrupo: sub, modalidade: linha.modalidade, subclasse: linha.subclasse, detalhe: linha.detalhe, posto: linha.posto, unidade: linha.unidade })}`
     : null;
-  const comp = useApi<Resp>(compUrl, 1800_000);
+  const comp = useApi<Resp>(compUrl, 1800_000, { veil: false });
   const dec = comp.data?.decomposicao ?? null;
 
   const uf = lista.data?.uf?.[agente] ?? null;
@@ -272,6 +274,7 @@ export default function TarifasPage() {
   const err = base.error ?? lista.error;
   const t = base.data?.tarifa;
   const [exportando, setExportando] = useState(false);
+  useBusyFlag(exportando, "Gerando laudo…");
   const exportar = async () => {
     if (!t || !linha) return;
     setExportando(true);
@@ -313,7 +316,7 @@ export default function TarifasPage() {
         right={
           <div className="flex flex-wrap items-center gap-2">
             {t ? <Badge level="good" title={`Conjunto regenerado pela ANEEL em ${dataBr(t.geracaoAneel ?? "")}`}>ANEEL · {dataBr(t.geracaoAneel ?? "")}</Badge> : null}
-            <Button variant="secondary" onClick={exportar} disabled={!t || !linha || exportando}>
+            <Button variant="secondary" onClick={exportar} disabled={!t || !linha || exportando || base.trocando || comp.trocando}>
               <FileDown size={14} aria-hidden /> {exportando ? "Gerando…" : "Exportar laudo (PDF)"}
             </Button>
           </div>
@@ -399,8 +402,10 @@ export default function TarifasPage() {
         <Panel
           title="Componentes da tarifa"
           subtitle={linha ? `${linha.modalidade} · ${linha.subclasse} · ${linha.posto} (R$/${linha.unidade})` : "Escolha uma linha"}
-          right={dec?.residuo != null ? <Badge level={Math.abs(dec.residuo) <= 1 ? "good" : "warning"} title="Soma dos componentes menos TE+TUSD publicadas">{Math.abs(dec.residuo) <= 1 ? "fecha com a tarifa" : `resíduo R$ ${brl(dec.residuo)}`}</Badge> : null}
+          right={dec?.residuo != null && !comp.trocando ? <Badge level={Math.abs(dec.residuo) <= 1 ? "good" : "warning"} title="Soma dos componentes menos TE+TUSD publicadas">{Math.abs(dec.residuo) <= 1 ? "fecha com a tarifa" : `resíduo R$ ${brl(dec.residuo)}`}</Badge> : null}
         >
+          <div className="relative min-h-[120px]">
+          <PanelVeil show={comp.trocando} label="Carregando componentes da ANEEL…" />
           {comp.isLoading && !dec ? (
             <Loading />
           ) : dec?.grupos.length ? (
@@ -419,6 +424,7 @@ export default function TarifasPage() {
           ) : (
             <Empty label="A ANEEL não publicou componentes para esta linha (ou ainda não para esta vigência)." />
           )}
+          </div>
         </Panel>
 
         <Panel title="Tarifa efetiva (com tributos)" subtitle="Como sai na fatura: ICMS e PIS/Cofins calculados por dentro, bandeira somada à energia.">
