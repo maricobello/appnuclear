@@ -164,7 +164,7 @@ describe("cliente multi-provedor", () => {
     const fake = (async (url: string, init: RequestInit) => {
       const b = JSON.parse(String(init.body));
       calls.push(`${url.includes("groq") ? "groq" : "gemini"}:${b.model}`);
-      if (b.model === "moonshotai/kimi-k2-instruct-0905") return new Response(JSON.stringify({ error: { message: "Rate limit reached", code: "rate_limit_exceeded" } }), { status: 429, headers: { "retry-after": "30" } });
+      if (b.model === "openai/gpt-oss-120b") return new Response(JSON.stringify({ error: { message: "Rate limit reached", code: "rate_limit_exceeded" } }), { status: 429, headers: { "retry-after": "30" } });
       if (url.includes("groq")) return new Response(JSON.stringify({ error: { message: "Invalid API Key", code: "invalid_api_key" } }), { status: 401 });
       return okBody(b.model, { usage: { prompt_tokens: 10, completion_tokens: 2, prompt_tokens_details: { cached_tokens: 6 } } });
     }) as unknown as typeof fetch;
@@ -173,10 +173,10 @@ describe("cliente multi-provedor", () => {
     const r = await chat({ messages: [{ role: "user", content: "oi" }] });
     expect(r.provider).toBe("gemini");
     expect(r.usage?.cached_tokens).toBe(6);
-    expect(calls).toEqual(["groq:moonshotai/kimi-k2-instruct-0905", "groq:openai/gpt-oss-120b", "gemini:gemini-flash-latest"]);
+    expect(calls).toEqual(["groq:openai/gpt-oss-120b", "groq:llama-3.3-70b-versatile", "gemini:gemini-flash-latest"]);
     calls.length = 0;
     await chat({ messages: [{ role: "user", content: "oi" }] });
-    expect(calls[0]).toBe("groq:openai/gpt-oss-120b"); // Kimi ainda no molho
+    expect(calls[0]).toBe("groq:llama-3.3-70b-versatile"); // gpt-oss-120b ainda no molho
   });
 
   it("Gemini: sem additionalProperties, max_tokens e raciocínio curto; Groq: max_completion_tokens", () => {

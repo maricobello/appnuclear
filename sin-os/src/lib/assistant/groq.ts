@@ -13,7 +13,8 @@ export const groqConfigured = () => !!process.env.GROQ_API_KEY;
 
 // Kimi K2 primeiro (melhor em uso de ferramentas); na Groq cada modelo tem cota própria,
 // então cair para o próximo no 429 também multiplica a capacidade diária gratuita
-const CHAT_DEFAULTS = ["moonshotai/kimi-k2-instruct-0905", "openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
+// Kimi K2 0905 saiu da Groq em 15/04/2026 (substituto indicado: gpt-oss-120b)
+const CHAT_DEFAULTS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
 const STT_DEFAULTS = ["whisper-large-v3-turbo", "whisper-large-v3"];
 const uniq = (xs: (string | undefined)[]) => [...new Set(xs.filter((x): x is string => !!x))];
 export const chatModels = () => uniq([process.env.GROQ_MODEL, ...CHAT_DEFAULTS]);

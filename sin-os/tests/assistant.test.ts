@@ -286,7 +286,7 @@ describe("cliente Groq", () => {
     }) as unknown as typeof fetch;
     const out = await makeGroqChat(fake)({ messages: [{ role: "user", content: "oi" }] });
     expect(out.message.content).toBe("ok");
-    expect(models).toEqual(["velho", "moonshotai/kimi-k2-instruct-0905"]);
+    expect(models).toEqual(["velho", "openai/gpt-oss-120b"]);
     delete process.env.GROQ_MODEL;
   });
 
