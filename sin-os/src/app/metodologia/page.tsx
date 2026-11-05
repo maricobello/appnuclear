@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { ChevronDown, ExternalLink } from "lucide-react";
 import type { ReactNode } from "react";
-import { PageHeader, Panel, ScrollX, StackedRows } from "@/components/ui";
+import { PageHeader, Panel, Quebravel, ScrollX, StackedRows } from "@/components/ui";
 import { methodology } from "@/lib/methodology";
 
 export const dynamic = "force-static";
@@ -25,13 +25,14 @@ const SECTIONS = [
 const num = (v: number) => v.toLocaleString("pt-BR", { maximumFractionDigits: 2 });
 
 /** Tabela com quebra de linha (a Table do painel não quebra, aqui o texto é longo). Com `stack`, vira lista no celular. */
-function TextTable({ head, rows, mono = [], nowrap = [], stack = false }: { head: string[]; rows: ReactNode[][]; mono?: number[]; nowrap?: number[]; stack?: boolean }) {
-  if (stack) {
+function TextTable({ head, rows, mono = [], nowrap = [], stack }: { head: string[]; rows: ReactNode[][]; mono?: number[]; nowrap?: number[]; stack?: boolean }) {
+  // 4 colunas ou mais viram lista no celular (colunas estreitas quebravam palavra por letra)
+  if (stack ?? head.length >= 4) {
     return (
       <>
         <StackedRows head={head} rows={rows} className="sm:hidden" />
         <div className="hidden sm:block">
-          <TextTable head={head} rows={rows} mono={mono} nowrap={nowrap} />
+          <TextTable head={head} rows={rows} mono={mono} nowrap={nowrap} stack={false} />
         </div>
       </>
     );
@@ -83,7 +84,9 @@ function List({ items }: { items: ReactNode[] }) {
       {items.map((x, i) => (
         <li key={i} className="flex gap-2">
           <span className="text-muted">•</span>
-          <span className="min-w-0">{x}</span>
+          <span className="min-w-0">
+            <Quebravel>{x}</Quebravel>
+          </span>
         </li>
       ))}
     </ul>

@@ -94,7 +94,7 @@ export default function ClimaPage() {
                 <div className="flex items-baseline justify-between px-1 text-[13px]">
                   <span className="font-medium text-ink">{b.hub.name}</span>
                   <span className="tnum text-muted">
-                    P50 {num(b.p50, 0)} mm · [{num(b.p10, 0)}–{num(b.p90, 0)}]
+                    <span className="whitespace-nowrap">P50 {num(b.p50, 0)} mm</span> · <span className="whitespace-nowrap">[{num(b.p10, 0)}–{num(b.p90, 0)}]</span>
                   </span>
                 </div>
                 <EChart option={opt} height={170} label={`Chuva acumulada ${b.hub.name}`} />

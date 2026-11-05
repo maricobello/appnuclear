@@ -11,6 +11,33 @@ import { AnimatedNumber, EASE } from "./motion";
 /* ------------------------------------------------------------------ cartão */
 
 /** Cartão: título curto, subtítulo opcional, ações à direita e corpo com respiro. */
+/**
+ * Texto com caminhos, URLs e identificadores longos (ex.: arquivos do ONS): oferece pontos de
+ * quebra depois de / _ . | - para a linha quebrar num lugar legível em vez de estourar a tela.
+ */
+export function Quebravel({ children }: { children: ReactNode }) {
+  if (typeof children !== "string") return <>{children}</>;
+  const parts = children.split(/(\S{24,})/);
+  return (
+    <>
+      {parts.map((p, i) =>
+        i % 2 ? (
+          <span key={i} className="[overflow-wrap:anywhere]">
+            {p.split(/(?<=[/_.|\-])/).map((seg, j) => (
+              <span key={j}>
+                {j ? <wbr /> : null}
+                {seg}
+              </span>
+            ))}
+          </span>
+        ) : (
+          p
+        ),
+      )}
+    </>
+  );
+}
+
 export function Panel({
   title,
   subtitle,

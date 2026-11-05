@@ -1,9 +1,9 @@
 "use client";
 
-import { ChevronDown, Pencil, RotateCcw } from "lucide-react";
+import { ChevronDown, FileDown, Pencil, RotateCcw } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { EChart, type ChartOption } from "@/components/EChart";
-import { Badge, Disclosure, Empty, ErrorBox, Loading, PageHeader, Panel, Segmented, Stat, Table } from "@/components/ui";
+import { Badge, Button, Disclosure, Empty, ErrorBox, Loading, PageHeader, Panel, Segmented, Stat, Table } from "@/components/ui";
 import { baseOption, C, categoryAxis, valueAxis } from "@/lib/chart";
 import { useApi } from "@/lib/useApi";
 import { efetiva, ICMS_UF, PREMISSAS_PADRAO, simularReforma, type Decomposicao, type PremissasReforma } from "@/lib/tarifa/calc";
@@ -271,6 +271,38 @@ export default function TarifasPage() {
 
   const err = base.error ?? lista.error;
   const t = base.data?.tarifa;
+  const [exportando, setExportando] = useState(false);
+  const exportar = async () => {
+    if (!t || !linha) return;
+    setExportando(true);
+    try {
+      const [{ jsPDF }, { montarLaudo, nomeArquivo }] = await Promise.all([import("jspdf"), import("@/lib/tarifa/laudo")]);
+      const origem = (k: keyof typeof manual, ref: string) => (manual[k] === null ? ref : "informado manualmente");
+      const bandNome = band === "atual" ? (bandeira ? `${bandeira.nome} (vigente ${bandeira.competencia})` : "Vigente") : band;
+      const dados = {
+        geradoEm: new Date(),
+        distribuidora: agente,
+        uf,
+        subgrupo: sub,
+        modalidade,
+        linha: { subclasse: linha.subclasse, detalhe: linha.detalhe, posto: linha.posto, unidade: linha.unidade, te: linha.te, tusd: linha.tusd },
+        reh: t.reh,
+        vigencia: { inicio: t.inicio, fim: t.fim },
+        proxima: t.proxima,
+        geracaoAneel: t.geracaoAneel,
+        decomposicao: dec,
+        bandeira: { nome: bandNome, adicionalMwh: bandMwh },
+        tributos: { ...trib, origem: { icms: origem("icms", uf ? `referência ${uf}` : "padrão"), pis: origem("pis", "referência"), cofins: origem("cofins", "referência") } },
+        efetiva: ef,
+        fatura: fat.preco > 0 ? { precoKwh: fat.preco, consumoKwh: fat.consumo } : null,
+        reforma,
+        premissasReforma: { cbsRef: prem.cbsRef, ibsRef: prem.ibsRef, icmsNaBase: prem.icmsNaBase },
+      };
+      montarLaudo(jsPDF, dados).save(nomeArquivo(dados));
+    } finally {
+      setExportando(false);
+    }
+  };
   const auditoria = ef && fat.preco > 0 ? { dif: fat.preco - ef.comTributosKwh, pct: (fat.preco / ef.comTributosKwh - 1) * 100 } : null;
 
   return (
@@ -278,10 +310,18 @@ export default function TarifasPage() {
       <PageHeader
         title="Tarifas & tributos"
         subtitle="Tarifa homologada de todas as distribuidoras (ANEEL, atualizada todo dia), componentes abertos, tarifa efetiva com tributos e simulação da reforma tributária (CBS/IBS) até 2033."
-        right={t ? <Badge level="good" title={`Conjunto regenerado pela ANEEL em ${dataBr(t.geracaoAneel ?? "")}`}>ANEEL · {dataBr(t.geracaoAneel ?? "")}</Badge> : null}
+        right={
+          <div className="flex flex-wrap items-center gap-2">
+            {t ? <Badge level="good" title={`Conjunto regenerado pela ANEEL em ${dataBr(t.geracaoAneel ?? "")}`}>ANEEL · {dataBr(t.geracaoAneel ?? "")}</Badge> : null}
+            <Button variant="secondary" onClick={exportar} disabled={!t || !linha || exportando}>
+              <FileDown size={14} aria-hidden /> {exportando ? "Gerando…" : "Exportar laudo (PDF)"}
+            </Button>
+          </div>
+        }
       />
 
       <Panel title="Distribuidora e subgrupo" subtitle="A vigente é a resolução homologatória que cobre o dia de hoje.">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-1 text-[12px] text-muted">
           <span>Distribuidora ({lista.data?.agentes.length ?? "…"})</span>
           <BuscaDistribuidora
@@ -294,7 +334,17 @@ export default function TarifasPage() {
               setModal("");
             }}
           />
-          <span>{uf ? `UF ${uf} · ICMS de referência ${pct(ICMS_UF[uf] ?? PREMISSAS_PADRAO.icms)} aplicado automaticamente` : lista.data ? "UF não identificada nos dados da ANEEL: ICMS padrão de 18% (preencha à mão no campo ICMS)" : "…"}</span>
+        </div>
+          <div className="flex min-w-0 flex-col gap-1">
+            <Campo
+              label={manual.icms === null ? `ICMS ${uf ? `(${uf}, automático)` : "(UF não identificada)"}` : "ICMS (manual)"}
+              value={trib.icms}
+              readOnly={manual.icms === null}
+              onChange={(v) => definir("icms", v)}
+              action={<BotaoManual nome="o ICMS" manual={manual.icms !== null} onToggle={() => alternar("icms")} />}
+            />
+            <span className="text-[12px] text-muted">{manual.icms !== null ? `Referência ${uf ?? "—"}: ${pct(auto.icms / 100)} · vale o valor digitado` : uf ? "Alíquota de referência da UF da distribuidora" : lista.data ? "Padrão de 18%: toque no lápis para informar" : "…"}</span>
+          </div>
         </div>
         <div className="mt-3 flex flex-wrap gap-3">
           <Segmented

@@ -138,6 +138,8 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
+  /* palavra longa sem espaço (URL, caminho de arquivo) quebra em vez de estourar a tela */
+  overflow-wrap: break-word;
 }
 
 ::selection {
