@@ -1,6 +1,7 @@
 import { fold } from "../gd/parse";
 import type { CarteiraGD } from "../gd/types";
 import { GD_TOOL_DEFS } from "./gd-tools";
+import { TARIFA_TOOL_DEFS } from "./tarifa-tools";
 import type { ChatMessage, ToolDef } from "./groq";
 import { TOOL_DEFS } from "./tools";
 
@@ -14,7 +15,7 @@ import { TOOL_DEFS } from "./tools";
  *  3. histórico enxuto — turnos antigos resumidos, nunca resultados de ferramenta;
  *  4. cache curto de respostas idênticas (sugestões clicadas duas vezes custam zero).
  */
-export type Domain = "mercado" | "bess" | "hidro" | "dados" | "renovaveis" | "regulatorio" | "planejamento" | "rede" | "gd";
+export type Domain = "mercado" | "bess" | "hidro" | "dados" | "renovaveis" | "regulatorio" | "planejamento" | "rede" | "gd" | "tarifas";
 
 interface DomainSpec {
   label: string;
@@ -38,6 +39,12 @@ export const DOMAINS: Record<Domain, DomainSpec> = {
     re: /(\bgd\b|gd ?i|geracao distribuida|fatura|conta de (luz|energia)|compens|credito|fio ?b|injet|\buc\b|\bucs\b|unidade consumidora|assinatura|consorcio|cooperativa|aluguel|locacao|usina solar|fotovolt|placa|kwp|micro ?gera|mini ?gera|encargo|tusd|icms|pis|cofins|disponibilidade|rateio|14\.?300|1\.?059|demanda contratada|ultrapassagem|reativ|grupo [ab]\b|tarifa|bandeira|distribuidora|payback|viabil|cativo|economia (assegurada|percebida|garantida)|resultado(s)? financeiro|custos? da usina|usina geradora)/,
     pages: ["/gd"],
   },
+  tarifas: {
+    label: "tarifa vigente da ANEEL, componentes, tarifa efetiva e reforma tributária (CBS/IBS)",
+    tools: TARIFA_TOOL_DEFS.map((t) => t.function.name),
+    re: /(tarifa|\btusd\b|\bte e (a )?tusd|bandeira|componente|\breh\b|reajuste|revisao tarifaria|homologad|distribuidora|preco do kwh|kwh (custa|vale)|\bcbs\b|\bibs\b|reforma tribut|\biva\b|imposto|tribut|icms|pis|cofins|cashback)/,
+    pages: ["/tarifas"],
+  },
 };
 export const DOMAIN_LIST = Object.keys(DOMAINS) as Domain[];
 
@@ -53,7 +60,7 @@ export const META_TOOL: ToolDef = {
   },
 };
 
-const ALL: Map<string, ToolDef> = new Map([...TOOL_DEFS, ...GD_TOOL_DEFS].map((t) => [t.function.name, t]));
+const ALL: Map<string, ToolDef> = new Map([...TOOL_DEFS, ...GD_TOOL_DEFS, ...TARIFA_TOOL_DEFS].map((t) => [t.function.name, t]));
 export const ALL_TOOL_NAMES = [...ALL.keys()];
 
 export function routeDomains(texts: string[], page?: string, gd?: CarteiraGD): Domain[] {

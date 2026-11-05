@@ -25,5 +25,6 @@ export const VALID_RANGES: Record<SourceId, { range: [number, number]; unit: str
   open_meteo: { range: [-20, 55] as [number, number], unit: "°C", why: "temperatura nos hubs do SIN" },
   open_meteo_ens: { range: [0, 1500] as [number, number], unit: "mm/15 dias", why: "chuva acumulada nas bacias" },
   bcb_fx: { range: [0.5, 20] as [number, number], unit: "R$ por moeda", why: "câmbio USD, EUR e GBP" },
+  aneel_tarifas: { range: [0, 6000] as [number, number], unit: "R$/MWh", why: "TE + TUSD por posto; ponta da A4 verde passa de R$ 2.000/MWh, acima de R$ 6.000 indica erro" },
   eia: { range: [0, 300] as [number, number], unit: "US$", why: "Henry Hub e Brent" },
 };

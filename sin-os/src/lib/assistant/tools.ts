@@ -1,4 +1,5 @@
 import type { AuditRun } from "../audit/types";
+import { executeTarifaTool, type TarifaDeps } from "./tarifa-tools";
 import { BESS_QUERY, toBessParams } from "../market/bess-params";
 import type { BessParams, BessStudy } from "../market/bess-study";
 import type { RenewablesReport } from "../market/renewables-report";
@@ -32,6 +33,7 @@ export const ROUTES = {
   "/mercado-livre": "Mercado livre & Open Energy",
   "/rede": "Rede elétrica (fluxo, N-1 e força da rede)",
   "/gd": "Geração distribuída (faturas, contratos e encargos)",
+  "/tarifas": "Tarifas & tributos (TE/TUSD, componentes, tarifa efetiva, CBS/IBS)",
   "/arbitragem": "Arbitragem",
   "/bess": "BESS",
   "/carteira": "Carteira",
@@ -87,6 +89,8 @@ export interface AssistantDeps {
   /** Último retrato do modelo da rede (fluxo, N-1 e curto-circuito) e a idade em dias. */
   grid: () => Promise<{ snapshot: GridSnapshot | null; ageDays: number | null }>;
   dataMode: () => string;
+  /** Tarifas da ANEEL (opcional: sem isso, tarifa_vigente responde indisponível). */
+  tarifas?: TarifaDeps;
 }
 
 export interface ToolOutcome {
@@ -664,6 +668,9 @@ export async function executeTool(name: string, args: Record<string, unknown>, c
         return navegar(args);
       case "configurar_ativo":
         return configurarAtivo(args, ctx);
+      case "tarifa_vigente":
+      case "reforma_tributaria":
+        return { result: await executeTarifaTool(name, args, deps.tarifas) };
       default: {
         const gd = name.startsWith("gd_") ? executeGdTool(name, args, ctx.gd ?? { ucs: [], faturas: [], usinas: [] }) : null;
         return gd ?? { result: { erro: `ferramenta desconhecida: ${name}` } };

@@ -27,6 +27,7 @@ import {
   X,
   Zap,
   SolarPanel,
+  Receipt,
 } from "lucide-react";
 import type { BrasilResp } from "@/lib/apiTypes";
 import { useAsset } from "@/lib/asset";
@@ -58,6 +59,7 @@ const NAV: { group: string; items: { href: string; label: string; Icon: typeof G
       { href: "/bess", label: "BESS", Icon: BatteryCharging },
       { href: "/carteira", label: "Carteira", Icon: Wallet },
       { href: "/gd", label: "Geração distribuída", Icon: SolarPanel },
+      { href: "/tarifas", label: "Tarifas & tributos", Icon: Receipt },
     ],
   },
   {

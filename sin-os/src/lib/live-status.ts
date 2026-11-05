@@ -6,6 +6,7 @@ import { ccePiConfigured, fetchPldPI } from "./sources/ccee-pi";
 import { fetchBalance, fetchCurtailment, fetchInterchange } from "./sources/ons-renewables";
 import { fetchThermal } from "./sources/ons-thermal";
 import { SOURCE_LIST } from "./sources/registry";
+import { fetchAneelTarifas } from "./sources/aneel";
 import type { SourceId, SourceResult } from "./sources/types";
 import { listAuditRuns } from "./store";
 
@@ -29,7 +30,7 @@ const piOff = (): SourceResult<unknown> => ({
  * consultar esta rota não dispara downloads além dos que as telas já fariam.
  */
 export async function getLiveStatus(budgetMs = 20_000): Promise<LiveStatus> {
-  const [br, gl, wx, curt, bal, ic, th, pi, runs] = await Promise.all([
+  const [br, gl, wx, curt, bal, ic, th, pi, runs, tar] = await Promise.all([
     within(getBrazilBundle(), budgetMs),
     within(getGlobalBundle(), budgetMs),
     within(getWeatherBundle(), budgetMs),
@@ -39,6 +40,7 @@ export async function getLiveStatus(budgetMs = 20_000): Promise<LiveStatus> {
     within(fetchThermal(7), budgetMs),
     ccePiConfigured() ? within(cached("pld:pi", 10 * 60_000, () => fetchPldPI(14)).then((r) => r.value), budgetMs) : Promise.resolve(piOff()),
     listAuditRuns(1).catch(() => []),
+    within(fetchAneelTarifas(), budgetMs),
   ]);
   const results: Partial<Record<SourceId, SourceResult<unknown> | null>> = {
     ccee_pld: br?.pld,
@@ -59,6 +61,7 @@ export async function getLiveStatus(budgetMs = 20_000): Promise<LiveStatus> {
     open_meteo_ens: wx?.ensemble,
     bcb_fx: gl?.fx,
     eia: gl?.eia,
+    aneel_tarifas: tar,
   };
   const last = runs[0];
   return liveStatus(SOURCE_LIST, results, last ? { score: last.overallScore, at: last.startedAt } : null);

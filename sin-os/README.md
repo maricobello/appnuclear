@@ -49,6 +49,7 @@ Todas gratuitas e sem cadastro, exceto a EIA (chave gratuita, opcional).
 | **Open-Meteo** | previsão horária e ensemble ECMWF IFS 0,25° | vento, sol, temperatura, chuva nas bacias |
 | **Banco Central (SGS)** | USD, EUR, GBP | conversão para R$/MWh |
 | **U.S. EIA** (opcional) | Henry Hub, Brent | custo marginal térmico |
+| **ANEEL — Dados Abertos** (CKAN datastore) | tarifas homologadas (TE/TUSD) das 115 distribuidoras, componentes tarifários abertos, bandeira acionada e adicionais | tela Tarifas & tributos, tarifa efetiva, CBS/IBS, Iara |
 
 Resiliência do PLD: **CCEE → CMO do ONS pela regra da ANEEL** (piso, teto horário e teto estrutural
 na média diária) **→ histórico no Firestore → simulação sinalizada**. Qualquer dado simulado aparece com
@@ -326,6 +327,27 @@ Motor em `src/lib/gd/`:
   - Viabilidade com a transição do Fio B, simultaneidade, degradação, troca de inversor, VPL, TIR, payback
     e LCOE, com as premissas declaradas.
   - Desconto efetivo do assinante ano a ano, conforme quem paga o Fio B e a base do desconto.
+
+## Tarifas & tributos (CBS/IBS)
+
+Tela `/tarifas`, `GET /api/tarifas` e as ferramentas `tarifa_vigente` e `reforma_tributaria` da Iara.
+
+- **Tarifa vigente** (`src/lib/sources/aneel.ts`): consulta filtrada no datastore da ANEEL (nada de baixar
+  o CSV completo), escolhe a resolução homologatória que cobre o dia de hoje e avisa a próxima. Cache de
+  6 h no servidor, com o último dado bom se a ANEEL cair.
+- **Componentes** (`src/lib/tarifa/calc.ts`): TE e TUSD abertas em energia, Fio B, Fio A, perdas,
+  encargos (CDE, Proinfa, P&D…), Itaipu/Angra e subsídios. A soma tem de bater com a tarifa publicada;
+  o auditor reprova a fonte se não bater (tolerância de R$ 1/MWh).
+- **Tarifa efetiva**: ICMS e PIS/Cofins por dentro, como na fatura, e a bandeira do mês. ICMS por UF é só
+  referência (confira a lei estadual); PIS/Cofins mudam todo mês por distribuidora.
+- **Auditoria rápida**: preço cobrado na fatura × tarifa calculada, em % e em R$ no mês.
+- **Reforma tributária**: CBS e IBS incidem sobre a energia. 2026 é teste (0,9% + 0,1% destacados e
+  compensados); em 2027 PIS/Cofins acabam e entra a CBS; de 2029 a 2032 o ICMS cai a 90/80/70/60% e o IBS
+  sobe na mesma proporção; em 2033 só IBS e CBS. IBS/CBS por fora, sem ICMS na base (LC 214/2025),
+  com cenário conservador opcional. Alíquotas de referência (8,8% e 17,7%) são estimativas editáveis.
+  Para empresa no regime regular, IBS/CBS dão crédito integral.
+- Conferir antes de usar em parecer: alíquotas definitivas, IBS por estado e município, cashback de
+  baixa renda, tratamento da energia compensada na GD e como a ANEEL vai repassar os tributos.
 
 ## Confiança nos dados abertos
 

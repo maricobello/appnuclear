@@ -243,6 +243,20 @@ export const SOURCES: Record<SourceId, SourceMeta> = {
     requiresKey: "EIA_API_KEY",
     description: "Gás natural e petróleo — custo marginal térmico (opcional, chave gratuita).",
   },
+  aneel_tarifas: {
+    id: "aneel_tarifas",
+    name: "Tarifas homologadas, componentes e bandeiras",
+    provider: "ANEEL — Dados Abertos",
+    region: "BR",
+    category: "tarifa",
+    endpoint: "https://dadosabertos.aneel.gov.br/api/3/action/datastore_search",
+    docs: "https://dadosabertos.aneel.gov.br/dataset/tarifas-distribuidoras-energia-eletrica",
+    license: "Dados abertos ANEEL (CC-BY)",
+    cadence: "conjunto regenerado todo dia; tarifas mudam no reajuste/revisão de cada distribuidora",
+    freshnessSlaHours: 72,
+    support: "STD/ANEEL — std.dados@aneel.gov.br",
+    description: "TE e TUSD de aplicação de todas as distribuidoras (REH vigente), componentes tarifários abertos (Fio B, Fio A, encargos, perdas, energia) e bandeira acionada no mês. A sonda confere se os componentes somam a tarifa publicada.",
+  },
 };
 
 export const SOURCE_LIST = Object.values(SOURCES);

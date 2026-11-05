@@ -3,6 +3,7 @@ import { invalidate } from "../cache";
 import { fetchPldHourly } from "../sources/ccee";
 import { fetchPldPI } from "../sources/ccee-pi";
 import { fetchEia } from "../sources/eia";
+import { fetchAneelTarifas } from "../sources/aneel";
 import { fetchEuPrices } from "../sources/europe";
 import { fetchFx, type FxData } from "../sources/fx";
 import { fetchCmoHourly, fetchEarDaily, fetchEnaDaily, fetchLoadHourly } from "../sources/ons";
@@ -48,6 +49,7 @@ export async function probeAll(): Promise<Record<SourceId, SourceResult<unknown>
     fetchBasinEnsemble(),
     fetchFx(),
     fetchEia(),
+    fetchAneelTarifas(),
   ] as Promise<SourceResult<unknown>>[]);
   return Object.fromEntries(entries.map((r) => [r.id, r])) as Record<SourceId, SourceResult<unknown>>;
 }
@@ -73,6 +75,7 @@ export async function probeOne(id: SourceId): Promise<SourceResult<unknown>> {
     open_meteo_ens: () => fetchBasinEnsemble(),
     bcb_fx: () => fetchFx(),
     eia: () => fetchEia(),
+    aneel_tarifas: () => fetchAneelTarifas(),
   };
   return map[id]();
 }

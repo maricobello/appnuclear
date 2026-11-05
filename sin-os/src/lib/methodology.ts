@@ -265,6 +265,25 @@ export const DATA_DICTIONARY: Record<SourceId, DictEntry> = {
     steps: ["só roda com EIA_API_KEY"],
     version: ETAG,
   },
+  aneel_tarifas: {
+    files: ["CKAN tarifas-distribuidoras-energia-eletrica (Tarifa de Aplicação)", "CKAN componentes-tarifarias (um recurso por ano de vigência)", "CKAN bandeiras tarifárias (acionamento e adicional)"],
+    grain: "distribuidora × subgrupo × modalidade × classe/subclasse × posto",
+    time: "DatInicioVigencia / DatFimVigencia (a vigente é a que cobre o dia de hoje em Brasília); DatCompetencia para a bandeira",
+    fields: [
+      { col: "SigAgente", as: "distribuidora", unit: "sigla ANEEL" },
+      { col: "VlrTE · VlrTUSD", as: "te · tusd", unit: "R$/MWh ou R$/kW (vírgula decimal)" },
+      { col: "DscComponenteTarifario", as: "componente", unit: "TUSD_FioB, TUSD_CDE, TE_ENERGIA…" },
+      { col: "VlrComponenteTarifario", as: "valor", unit: "R$/MWh ou R$/kW" },
+      { col: "NomBandeiraAcionada · VlrAdicionalBandeira", as: "bandeira", unit: "R$/MWh" },
+    ],
+    steps: [
+      "consulta filtrada no datastore (sem baixar o CSV completo); linhas idênticas repetidas na fonte são deduplicadas",
+      "só entram componentes sem agente acessante (tarifa do consumidor final)",
+      "auditoria: a soma dos componentes tem de bater com a TE e a TUSD publicadas (tolerância R$ 1/MWh)",
+      "tributos (ICMS, PIS/Cofins, CBS/IBS) não vêm da ANEEL: são premissas editáveis na tela de tarifas",
+    ],
+    version: "DatGeracaoConjuntoDados (data de regeneração da ANEEL) + número da REH vigente",
+  },
 };
 
 const T = AUDIT_THRESHOLDS;

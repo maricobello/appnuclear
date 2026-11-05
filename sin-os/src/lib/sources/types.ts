@@ -16,7 +16,8 @@ export type SourceId =
   | "open_meteo"
   | "open_meteo_ens"
   | "bcb_fx"
-  | "eia";
+  | "eia"
+  | "aneel_tarifas";
 
 export type Region = "BR" | "EU" | "UK" | "US" | "GLOBAL";
 
@@ -25,7 +26,7 @@ export interface SourceMeta {
   name: string;
   provider: string;
   region: Region;
-  category: "preço" | "operação" | "hidrologia" | "clima" | "câmbio" | "carbono" | "combustíveis";
+  category: "preço" | "operação" | "hidrologia" | "clima" | "câmbio" | "carbono" | "combustíveis" | "tarifa";
   endpoint: string;
   docs: string;
   license: string;
