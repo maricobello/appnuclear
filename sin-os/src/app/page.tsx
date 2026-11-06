@@ -85,7 +85,7 @@ export default function Home() {
     if (!d?.pld || !now) return [];
     const day = pickDay(d.pld.ts, d.pld.values, brtDate(now), brtDate, brtHour);
     const eu = arb.data?.eu[0];
-    const lensEu = arb.data?.lens.find((l) => l.unit.includes("€") && l.localAvg > 0);
+    const lensEu = arb.data?.lens.find((l) => l.region === "EU" && l.localAvg > 0);
     const fx = lensEu ? lensEu.brlAvg / lensEu.localAvg : null;
     return buildOpportunities({
       day,

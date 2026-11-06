@@ -329,7 +329,7 @@ export const CHECK_RULES: CheckRule[] = [
     id: "outliers",
     label: "Outliers (Hampel)",
     weight: CHECK_WEIGHTS.outliers,
-    pass: `≤ ${pct(T.outliers.passShare)} dos pontos a mais de ${T.outliers.k} MADs da mediana móvel de ${T.outliers.window} pontos`,
+    pass: `≤ ${pct(T.outliers.passShare)} dos pontos a mais de ${T.outliers.k} desvios robustos (1,4826 × MAD) da mediana móvel de ${2 * T.outliers.window + 1} pontos (±${T.outliers.window})`,
     warn: "acima disso (nota 0,5): só alerta, pico real de preço existe",
     fail: `não reprova; precisa de ${T.outliers.minSample} pontos`,
   },
@@ -368,7 +368,7 @@ export function dataPolicy() {
     ],
     fallbacks: [
       "PLD: CCEE (dados abertos) → PLD oficial gravado pelo coletor ou pela Plataforma de Integração → CMO do ONS limitado ao piso e ao teto da ANEEL, sempre marcado como estimado. Os dois nunca se misturam sem aviso na tela.",
-      "Coleta que falha reaproveita o último valor bom em memória por até 6 horas; a idade do dado continua visível em cada painel.",
+      "Coleta que falha reaproveita o último valor bom em memória por até 6 horas (tarifas e bandeiras da ANEEL, que mudam pouco: até 7 a 31 dias); a idade do dado continua visível em cada painel.",
       "Dado simulado só existe no modo de demonstração ou como último recurso sinalizado; o smoke test diário reprova se qualquer rota da produção responder com dado simulado.",
     ],
   };

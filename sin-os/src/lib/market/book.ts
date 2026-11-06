@@ -110,7 +110,10 @@ export interface MonthResult {
   covered: boolean;
   /** Mês com PLD só de parte das horas: estimativa pela média até agora, fora do liquidado. */
   partial: boolean;
+  /** Mês parcial: estimativa só das horas já realizadas (o restante vai para a curva a termo). */
   estimateRS: number | null;
+  /** Fração do mês com PLD realizado (1 = mês inteiro). */
+  realizedFrac: number;
 }
 
 export interface ContractResult {
@@ -135,6 +138,8 @@ export function settleContract(c: Contract, pld: MonthlyPld): ContractResult {
     const has = p !== undefined && Number.isFinite(p);
     const complete = has && isMonthComplete(pld, month, c.submarket);
     const value = has ? dirSign(c.side) * (p! - c.priceRS) * energyMWh : null;
+    const n = pld.hours?.[month]?.[c.submarket];
+    const realizedFrac = !has ? 0 : complete || n === undefined ? 1 : Math.min(1, n / hoursInMonth(month));
     return {
       month,
       pld: has ? p! : null,
@@ -142,7 +147,8 @@ export function settleContract(c: Contract, pld: MonthlyPld): ContractResult {
       settlementRS: complete ? value : null,
       covered: complete,
       partial: has && !complete,
-      estimateRS: has && !complete ? value : null,
+      estimateRS: has && !complete ? value! * realizedFrac : null,
+      realizedFrac,
     };
   });
   const covered = months.filter((m) => m.covered);
@@ -237,7 +243,8 @@ export function markToForward(results: ContractResult[], fwd: Partial<Record<Sub
     for (const m of r.months) {
       if (m.covered) continue;
       if (F === undefined || !Number.isFinite(F)) { unpricedMonths++; continue; }
-      mtmRS += dirSign(r.contract.side) * (F - r.contract.priceRS) * m.energyMWh;
+      // mês parcial: só as horas que faltam vão à curva (as realizadas estão em partialRS)
+      mtmRS += dirSign(r.contract.side) * (F - r.contract.priceRS) * m.energyMWh * (1 - (m.realizedFrac ?? 0));
       pricedMonths++;
     }
   }

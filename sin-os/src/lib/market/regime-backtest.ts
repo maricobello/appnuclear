@@ -1,7 +1,7 @@
 import { learBacktest } from "../quant/lear";
 import { dieboldMariano, mae } from "../quant/metrics";
 import type { DailySubPanel, Sub, SubPanel } from "../sources/types";
-import { capDailyMean, PLD_LIMITS, toDayMatrix } from "./brazil";
+import { capDailyMean, limitsFor, PLD_LIMITS, toDayMatrix } from "./brazil";
 import { FLOOR_SNAP, floorOn, LEAR_WEIGHT, snapToFloor } from "./forecast";
 
 /**
@@ -39,7 +39,8 @@ export interface RegimeBreakdownInput {
   naive: number[][];
   /** EAR do submercado (% da capacidade) por data. */
   ear: Map<string, number>;
-  floor: number;
+  /** Piso do PLD: um valor só ou o piso do ano de cada data (a janela pode cruzar a virada do ano). */
+  floor: number | ((date: string) => number);
   /** Por dia e hora: a hora ficou no piso em pelo menos FLOOR_SNAP.minDays dos 7 dias anteriores (ex ante). */
   floorRecent?: boolean[][];
 }
@@ -87,7 +88,7 @@ export function regimeBreakdown(inp: RegimeBreakdownInput): { buckets: RegimeBuc
       add(`estacao:${s}`, em, en);
       if (e) add(`reservatorio:${e}`, em, en);
       if (inp.floorRecent) add(`piso_recente:${inp.floorRecent[i][h] ? "piso_sim" : "piso_nao"}`, em, en);
-      add(`faixa_pld:${pldBand(a, inp.floor)}`, em, en);
+      add(`faixa_pld:${pldBand(a, typeof inp.floor === "function" ? inp.floor(d) : inp.floor)}`, em, en);
       add("total", em, en);
     }
   });
@@ -123,7 +124,9 @@ export function regimeBacktest(panel: SubPanel, sub: Sub, ear: DailySubPanel | n
   const dm = toDayMatrix(panel, sub);
   const nTest = Math.min(days, dm.rows.length - 100);
   if (nTest < 14) throw new Error(`histórico insuficiente para o backtest por regime de ${sub}: ${dm.rows.length} dias`);
-  const clip: [number, number] = [PLD_LIMITS.min, PLD_LIMITS.maxHourly];
+  // a janela de 365 dias cruza o ano: o clip usa o menor piso e o maior teto horário dos anos cobertos
+  const anoAnt = limitsFor(PLD_LIMITS.year - 1);
+  const clip: [number, number] = [Math.min(PLD_LIMITS.min, anoAnt.min), Math.max(PLD_LIMITS.maxHourly, anoAnt.maxHourly)];
   const bt = learBacktest(dm.rows, dm.dows, nTest, { calibrationDays: 90, clip, post: capDailyMean, scaling: "hourly" });
   const imputed = new Set(dm.imputed);
   const idx = bt.dayIndex.map((d, i) => ({ d, i })).filter(({ d }) => !imputed.has(dm.dates[d]));
@@ -139,7 +142,7 @@ export function regimeBacktest(panel: SubPanel, sub: Sub, ear: DailySubPanel | n
     const prev = prevOf(d);
     return Array.from({ length: 24 }, (_, h) => prev.filter((p) => p.row[h] <= p.floor * 1.001).length >= FLOOR_SNAP.minDays);
   });
-  const { buckets, overall } = regimeBreakdown({ dates: idx.map(({ d }) => dm.dates[d]), actuals, model, naive, ear: earMap, floor: PLD_LIMITS.min, floorRecent });
+  const { buckets, overall } = regimeBreakdown({ dates: idx.map(({ d }) => dm.dates[d]), actuals, model, naive, ear: earMap, floor: floorOn, floorRecent });
   const dmt = dieboldMariano(actuals.map((a, k) => mae(a, model[k])), actuals.map((a, k) => mae(a, naive[k])));
   return {
     sub,

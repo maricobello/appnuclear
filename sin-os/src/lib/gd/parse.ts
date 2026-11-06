@@ -178,6 +178,10 @@ export function parseFatura(text: string, arquivo?: string): ParseOut {
   let energiaRs = 0;
   let energiaHit = false;
   let compQ = 0;
+  let totalForte = false;
+  // kWh compensados por tipo de componente: TE e TUSD da mesma injeção repetem a quantidade (vale o maior);
+  // linhas de origens diferentes (injeção própria + créditos de outra UC) somam
+  const compPorTipo: Record<"te" | "tusd" | "x", Set<number>> = { te: new Set(), tusd: new Set(), x: new Set() };
   let compRs = 0;
   let compHit = false;
   let fioB = 0;
@@ -203,9 +207,15 @@ export function parseFatura(text: string, arquivo?: string): ParseOut {
       const m = /(\d{2}\/\d{2}\/\d{4})/.exec(line) ?? /(\d{2}\/\d{2}\/\d{4})/.exec(next(i));
       if (m) set("vencimento", m[1], line);
     }
-    if (f.totalRs === undefined && /(total a pagar|valor a pagar|total da (fatura|conta)|valor total|total geral|valor do documento|total consolidado|valor cobrado)/.test(l)) {
+    // "total a pagar"/"valor a pagar" vencem rótulos fracos; linhas de tributos ("valor total dos tributos") nunca são o total
+    const forte = /(total a pagar|valor a pagar)/.test(l);
+    if ((f.totalRs === undefined || (forte && !totalForte)) && !/(tributo|imposto)/.test(l) && /(total a pagar|valor a pagar|total da (fatura|conta)|valor total|total geral|valor do documento|total consolidado|valor cobrado)/.test(l)) {
       const v = firstMoney(line) ?? firstMoney(next(i));
-      if (v !== null && v >= 0) set("totalRs", v, line);
+      if (v !== null && v >= 0) {
+        if (f.totalRs !== undefined) delete f.totalRs;
+        set("totalRs", v, line);
+        if (forte) totalForte = true;
+      }
     }
     if (/^total\b/.test(l) && !/(tributo|imposto|kwh|consumo|itens|geral de)/.test(l)) {
       const v = firstMoney(line);
@@ -304,7 +314,12 @@ export function parseFatura(text: string, arquivo?: string): ParseOut {
       if (it.q === null && it.v === null) return;
       if (isComp) {
         if (!it.ok) return; // linha informativa do quadro de GD, não item faturado
-        if (it.q) compQ = Math.max(compQ, it.q);
+        if (it.q) {
+          const tipo = /\btusd\b|uso do sistema|\bfio\b/.test(l) ? "tusd" : /\bte\b/.test(l) ? "te" : "x";
+          compPorTipo[tipo].add(it.q);
+          const soma = (k: "te" | "tusd" | "x") => [...compPorTipo[k]].reduce((a, b) => a + b, 0);
+          compQ = Math.max(soma("te"), soma("tusd")) + soma("x") || Math.max(compQ, it.q);
+        }
         if (it.v) compRs += -Math.abs(it.v);
         if (it.p && /\btusd\b|uso do sistema/.test(l)) tusdInjP = it.p;
         compHit = true;
@@ -349,7 +364,9 @@ export function parseFatura(text: string, arquivo?: string): ParseOut {
   }
   // quadro de GD sem itens de compensação: créditos usados = (saldo anterior + injetada + recebidos) − saldo
   if (f.compensadaKwh === undefined) {
-    const m = /(credito(s)? (utilizado|consumido|compensado)s?|energia compensada|compensacao)\D{0,30}(\d[\d.]*(?:,\d+)?)/.exec(all);
+    // sem datas (09/2026, 05/11/2026), e o número tem de vir com kWh
+    const semDatas = all.replace(/\b\d{1,2}\/\d{1,2}\/\d{2,4}\b|\b\d{1,2}\/\d{4}\b/g, " ");
+    const m = /(credito(s)? (utilizado|consumido|compensado)s?|energia compensada|compensacao)\D{0,40}?(\d[\d.]*(?:,\d+)?)\s*kwh/.exec(semDatas);
     if (m) {
       const v = parseBR(m[4]);
       if (v !== null) f.compensadaKwh = v;
@@ -371,7 +388,8 @@ export function parseFatura(text: string, arquivo?: string): ParseOut {
   if (/(leitura (estimada|pela media|por media)|faturamento (pela|por) media|media de consumo faturad|consumo estimado)/.test(all)) f.leituraEstimada = true;
   const lig = /(monofasic|bifasic|trifasic)/.exec(all)?.[1];
   if (lig) f.ligacao = lig.startsWith("mono") ? "mono" : lig.startsWith("bi") ? "bi" : "tri";
-  const sub = /\b(b1|b2|b3|b4a|b4b|b4|a4|a3a|a3|a2|a1|as)\b/.exec(all)?.[1];
+  // subgrupo: com rótulo vale qualquer código; sem rótulo, "as" não conta (é o artigo "as")
+  const sub = (/(subgrupo|grupo|classe|tensao)[^\n]{0,40}?\b(b1|b2|b3|b4a|b4b|b4|a4|a3a|a3|a2|a1|as)\b/.exec(all)?.[2] ?? /\b(b1|b2|b3|b4a|b4b|b4|a4|a3a|a3|a2|a1)\b/.exec(all)?.[1]);
   if (sub) {
     f.subgrupo = sub.toUpperCase();
     f.grupo = sub.startsWith("a") ? "A" : "B";

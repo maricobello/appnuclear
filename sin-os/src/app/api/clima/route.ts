@@ -10,7 +10,9 @@ export async function GET() {
   try {
     const w = await getWeatherBundle();
     const hubs = (w.weather.data ?? []).map((h) => {
-      const d1 = (a: number[]) => a.slice(0, 24);
+      // próximas 24 h a partir da hora atual (o Open-Meteo devolve desde 00h de hoje)
+      const i0 = Math.max(0, h.ts.findIndex((t) => t + 3600_000 > Date.now()));
+      const d1 = (a: number[]) => a.slice(i0, i0 + 24);
       const wcf = h.wind100.map(windCf);
       const scf = h.ghi.map(solarCf);
       return {

@@ -130,9 +130,21 @@ export const GD_TOOL_NAMES = GD_TOOL_DEFS.map((t) => t.function.name);
 
 const num = (v: unknown): number | undefined => (typeof v === "number" && Number.isFinite(v) ? v : typeof v === "string" && v.trim() && Number.isFinite(Number(v.replace(",", "."))) ? Number(v.replace(",", ".")) : undefined);
 const str = (v: unknown, n = 60): string | undefined => (typeof v === "string" && v.trim() ? v.trim().slice(0, n) : undefined);
+/** Alíquota informada SEMPRE em % (0,79 = 0,79%); fora de 0–40% é recusada. */
 const pct = (v: unknown) => {
   const x = num(v);
-  return x === undefined ? undefined : x > 1 ? x / 100 : x;
+  if (x === undefined) return undefined;
+  if (x < 0 || x > 40) throw new Error(`alíquota fora da faixa (0–40%): ${x}`);
+  return x / 100;
+};
+const LIGACOES = ["mono", "bi", "tri"] as const;
+const ENQS = ["GD I", "GD II", "GD III", "sem GD"] as const;
+const umDe = <T extends string>(v: string | undefined, ok: readonly T[], nome: string): T | undefined => {
+  if (v === undefined) return undefined;
+  const n = v.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase().replace(/fasic[oa]$/, "").replace(/^gd ?/, "gd ").trim();
+  const achado = ok.find((o) => o.toLowerCase() === n);
+  if (!achado) throw new Error(`${nome} inválido: "${v}" (use ${ok.join(", ")})`);
+  return achado;
 };
 const r2 = (v: number) => Math.round(v * 100) / 100;
 const ucKey = (s: string | undefined) => (s ? s.replace(/\D/g, "") || s : undefined);
@@ -191,10 +203,10 @@ function esperada(args: Record<string, unknown>, c: CarteiraGD): GdOutcome {
   const te = num(args.te) ?? uc?.teRsKwh ?? (f?.teRsKwh && f.tarifasComTributos === false ? f.teRsKwh : undefined);
   const tusd = num(args.tusd) ?? uc?.tusdRsKwh ?? (f?.tusdRsKwh && f.tarifasComTributos === false ? f.tusdRsKwh : undefined);
   const consumo = num(args.consumo_kwh) ?? f?.consumoKwh;
-  const lig = (str(args.ligacao) as Ligacao | undefined) ?? f?.ligacao ?? uc?.ligacao;
+  const lig: Ligacao | undefined = umDe(str(args.ligacao), LIGACOES, "ligacao") ?? f?.ligacao ?? uc?.ligacao;
   const faltam = [te === undefined && "te (sem tributos)", tusd === undefined && "tusd (sem tributos)", consumo === undefined && "consumo_kwh", !lig && "ligacao"].filter(Boolean);
   if (faltam.length) return { result: { erro: `faltam dados: ${faltam.join(", ")} — pergunte ao usuário ou cadastre a UC com gd_registrar_uc` } };
-  const enq = (str(args.enquadramento) as ReturnType<typeof enqDe> | undefined) ?? (f ? enqDe(f, uc) : (uc?.enquadramento ?? "GD II"));
+  const enq = umDe(str(args.enquadramento), ENQS, "enquadramento") ?? (f ? enqDe(f, uc) : (uc?.enquadramento ?? "GD II"));
   const icms = pct(args.icms_pct) ?? uc?.icms ?? f?.icmsPct;
   const out = faturaEsperadaB({
     enquadramento: enq,

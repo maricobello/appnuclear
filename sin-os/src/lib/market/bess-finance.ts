@@ -98,7 +98,12 @@ export function payback(cashflows: number[]): number | null {
   return null;
 }
 
-export function bessFinance(inp: FinanceInputs, revenueYear1: number, dischargedYear1: number): FinanceResult {
+/**
+ * `capexFixo`: CAPEX já calculado no caso base. Em cenários que mudam degradação ou eficiência,
+ * o investimento é o MESMO ativo — sem isso, o CAPEX implícito no LCOS cairia junto e mais
+ * degradação pareceria melhorar o VPL.
+ */
+export function bessFinance(inp: FinanceInputs, revenueYear1: number, dischargedYear1: number, capexFixo?: number): FinanceResult {
   const r = inp.waccPct / 100;
   const d = inp.degPctYear / 100;
   const o = inp.opexPctCapex / 100;
@@ -106,7 +111,7 @@ export function bessFinance(inp: FinanceInputs, revenueYear1: number, discharged
   const fade = (t: number) => (1 - d) ** (t - 1);
   const A = pv(r, L, () => 1);
   const qRef = pv(r, L, (t) => inp.refCyclesPerDay * 365 * inp.capacityMWh * Math.sqrt(inp.rte) * fade(t));
-  const capex = (inp.lcos * qRef) / (1 + o * A);
+  const capex = capexFixo ?? (inp.lcos * qRef) / (1 + o * A);
   const opexYear = o * capex;
   const capYear = Math.max(0, inp.capacityRevenueKWYear ?? 0) * inp.powerMW * 1000;
   const cashflows = [-capex, ...Array.from({ length: L }, (_, k) => revenueYear1 * fade(k + 1) + capYear - opexYear)];

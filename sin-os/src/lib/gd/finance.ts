@@ -88,6 +88,8 @@ export function viabilidade(e: ViabilidadeEntrada) {
   const fioB0 = e.fioBRsKwh ?? 0.3 * e.tarifaRsKwh * (1 - trib);
   if (e.fioBRsKwh === undefined) premissas.push("Fio B estimado em 30% da tarifa sem tributos");
   const enq = enquadrar({ dataProtocolo: e.dataProtocolo, potenciaKw: e.potenciaKwp, fonte: e.fonte ?? "solar", modalidade: e.modalidade ?? "local" }, `${anoInicio}-01-01`);
+  premissas.push("limites da Lei 14.300 (75 kW, 500 kW, 3/5 MW) são em kW CA: o enquadramento usa os kWp como aproximação");
+  if (enq.enquadramento === "GD III") premissas.push("GD III: 40% do Fio A estimado em 8% e P&D/TFSEE em 1% da tarifa sem tributos");
   const capex = e.potenciaKwp * capexKwp;
   const flows = [-capex];
   const anual: { ano: number; geracaoKwh: number; economiaRs: number; fioBPct: number }[] = [];
@@ -98,8 +100,11 @@ export function viabilidade(e: ViabilidadeEntrada) {
     const gen = e.potenciaKwp * g * 12 * (1 - deg) ** (y - 1);
     const tarifa = e.tarifaRsKwh * (1 + reaj) ** (y - 1);
     const fioB = fioB0 * (1 + reaj) ** (y - 1);
-    const p = parcelaNaoCompensada(enq.enquadramento, ano, enq.transicaoAte).fioB;
-    const custoCompensadaKwh = (p * fioB) / (1 - trib);
+    const parc = parcelaNaoCompensada(enq.enquadramento, ano, enq.transicaoAte);
+    const p = parc.fioB;
+    // GD III também paga 40% do Fio A e P&D/TFSEE (art. 27, §1º): sem os valores, estimados como na fatura esperada
+    const extraGd3 = parc.fioA > 0 || parc.encargos ? (parc.fioA * 0.08 * tarifa * (1 - trib) + (parc.encargos ? 0.01 * tarifa * (1 - trib) : 0)) : 0;
+    const custoCompensadaKwh = (p * fioB + extraGd3) / (1 - trib);
     const economia = gen * sim * tarifa + gen * (1 - sim) * (tarifa - custoCompensadaKwh);
     const omY = capex * om * (1 + reaj) ** (y - 1);
     const inv = y === (e.trocaInversorAno ?? 12) ? capex * ((e.trocaInversorPctCapex ?? 10) / 100) : 0;

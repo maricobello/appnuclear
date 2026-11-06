@@ -95,7 +95,7 @@ function List({ items }: { items: ReactNode[] }) {
 
 export default function MetodologiaPage() {
   const m = methodology();
-  const br = m.sources.filter((s) => s.id.startsWith("ccee") || s.id.startsWith("ons"));
+  const br = m.sources.filter((s) => s.id.startsWith("ccee") || s.id.startsWith("ons") || s.id.startsWith("aneel"));
   const rest = m.sources.filter((s) => !br.includes(s));
   const { regimes } = m.forecast;
 

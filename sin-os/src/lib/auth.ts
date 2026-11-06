@@ -28,12 +28,14 @@ export function authorize(req: Request): { ok: boolean; privileged: boolean } {
 /**
  * Auditor (rodar a auditoria com o agente de IA e testar o alerta): além do CRON_SECRET e da
  * ADMIN_KEY, aceita a senha simples de teste (a mesma da Iara, exposta de propósito;
- * AUDITOR_SENHA_SIMPLES=off desliga). As rotas que GRAVAM dados (ingestão da rede e do
- * planejamento, alertas) continuam exigindo a ADMIN_KEY real.
+ * AUDITOR_SENHA_SIMPLES=off desliga). Com a senha simples (`simples: true`) o agente roda, mas
+ * os limites de quem não tem credencial continuam valendo (1 auditoria por minuto, 1 alerta de
+ * teste por hora). A ingestão da rede e do planejamento e o envio de alertas de mercado
+ * exigem a ADMIN_KEY real.
  */
-export function authorizeAuditor(req: Request): { ok: boolean; privileged: boolean } {
+export function authorizeAuditor(req: Request): { ok: boolean; privileged: boolean; simples: boolean } {
   const a = authorize(req);
-  if (a.privileged || process.env.AUDITOR_SENHA_SIMPLES === "off") return a;
+  if (a.privileged || process.env.AUDITOR_SENHA_SIMPLES === "off") return { ...a, simples: false };
   const got = req.headers.get("x-admin-key") ?? req.headers.get("authorization")?.replace(/^Bearer\s+/i, "") ?? "";
-  return senhaConfere(got) ? { ok: true, privileged: true } : a;
+  return senhaConfere(got) ? { ok: true, privileged: true, simples: true } : { ...a, simples: false };
 }

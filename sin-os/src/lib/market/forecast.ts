@@ -163,7 +163,9 @@ export function buildForecast(panel: SubPanel, sub: Sub, horizonDays = 7, nPaths
   const dm = toDayMatrix(panel, sub);
   if (dm.rows.length < 36) throw new Error(`histórico contíguo insuficiente para ${sub}: ${dm.rows.length} dias (mín. 36)`);
 
-  const clip: [number, number] = [PLD_LIMITS.min, PLD_LIMITS.maxHourly];
+  // janela pode cruzar a virada do ano: menor piso e maior teto horário dos dois anos
+  const anoAnt = limitsFor(PLD_LIMITS.year - 1);
+  const clip: [number, number] = [Math.min(PLD_LIMITS.min, anoAnt.min), Math.max(PLD_LIMITS.maxHourly, anoAnt.maxHourly)];
   const calibrationDays = Math.min(90, dm.rows.length - 1);
   const nTest = Math.max(8, Math.min(28, dm.rows.length - 22));
   // piso/teto horário (clip) e teto estrutural na média do dia (post) — a mesma regra do PLD.

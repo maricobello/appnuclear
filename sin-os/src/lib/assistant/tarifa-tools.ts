@@ -15,7 +15,13 @@ export interface TarifaDeps {
 
 const SUBGRUPOS = ["B1", "B2", "B3", "A4", "A3a", "A3", "A2", "A1", "AS"];
 const r4 = (v: number) => Math.round(v * 1e4) / 1e4;
-const frac = (v: unknown, def: number) => (typeof v === "number" && Number.isFinite(v) && v >= 0 ? (v > 1 ? v / 100 : v) : def);
+/** Alíquota informada SEMPRE em % (0,65 = 0,65%); faixa 0–40%. */
+const frac = (v: unknown, def: number) => {
+  if (v === undefined || v === null || v === "") return def;
+  const x = typeof v === "number" ? v : Number(String(v).replace(",", "."));
+  if (!Number.isFinite(x) || x < 0 || x > 40) throw new Error(`alíquota fora da faixa (0–40%): ${String(v)}`);
+  return x / 100;
+};
 
 export const TARIFA_TOOL_DEFS: ToolDef[] = [
   {
@@ -66,15 +72,25 @@ export async function resolverAgente(q: string, agentes: string[]): Promise<stri
   const n = fold(q).replace(/[^a-z0-9]/g, "");
   if (!n) return null;
   const norm = agentes.map((a) => [a, fold(a).replace(/[^a-z0-9]/g, "")] as const);
-  const ALIAS: Record<string, string> = { enelsp: "eletropaulo", enelrj: "ampla", enelce: "coelce", cpfl: "cpflpaulista", copel: "copeldis", cemig: "cemigd", celesc: "celescdis", light: "lightsesa" };
+  // apelidos → sigla da ANEEL (as siglas antigas, como AMPLA e COELCE, não existem mais na base)
+  const ALIAS: Record<string, string> = { enelsp: "eletropaulo", enelrj: "enelrj", enelce: "enelce", cpfl: "cpflpaulista", copel: "copeldis", cemig: "cemigd", celesc: "celesc", light: "lightsesa", energisamt: "emt", energisams: "ems", energisato: "eto", energisase: "ese", energisamg: "emr", energisasulsudeste: "ess" };
   const alvo = ALIAS[n] ?? n;
+  const exato = norm.find(([, f]) => f === alvo)?.[0];
+  if (exato) return exato;
+  // nome genérico com várias distribuidoras (ex.: "Equatorial", "Energisa"): não escolhe uma ao acaso
+  const comeca = norm.filter(([, f]) => f.startsWith(alvo));
+  if (comeca.length > 1) return null;
   return norm.find(([, f]) => f === alvo)?.[0] ?? norm.find(([, f]) => f.startsWith(alvo))?.[0] ?? norm.find(([, f]) => f.includes(alvo))?.[0] ?? null;
 }
 
 async function tarifaVigenteTool(args: Record<string, unknown>, deps: TarifaDeps) {
   const agentes = await deps.agentes();
   const agente = await resolverAgente(String(args.distribuidora ?? ""), agentes);
-  if (!agente) return { erro: `distribuidora não encontrada na ANEEL: ${String(args.distribuidora ?? "")}`.slice(0, 160), exemplos: agentes.slice(0, 12) };
+  if (!agente) {
+    const q = fold(String(args.distribuidora ?? "")).replace(/[^a-z0-9]/g, "");
+    const parecidas = agentes.filter((a) => q && fold(a).replace(/[^a-z0-9]/g, "").includes(q.slice(0, 6)));
+    return { erro: `distribuidora não encontrada ou ambígua na ANEEL: ${String(args.distribuidora ?? "")} — pergunte qual (ou a UF)`.slice(0, 200), opcoes: (parecidas.length ? parecidas : agentes).slice(0, 12) };
+  }
   const subgrupo = SUBGRUPOS.includes(String(args.subgrupo)) ? String(args.subgrupo) : "B1";
   const [t, b] = await Promise.all([deps.vigente(agente, subgrupo), deps.bandeira()]);
   if (!t) return { erro: `sem tarifa vigente para ${agente} ${subgrupo}` };

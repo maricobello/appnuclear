@@ -180,12 +180,12 @@ export function GridStrength({ sc, date }: { sc: ShortCircuit; date: string }) {
                 <MetricRow
                   label={mw ? `SCR de um parque de ${num(mw, mw < 10 ? 1 : 0)} MW` : "SCR do parque"}
                   hint={cls ? `${HINT[cls]}${bus.ibrMw > 0 && alone !== null ? `; sozinho na barra seria ${num(alone, 1)}` : ""}` : undefined}
-                  value={composite !== null && cls ? <Badge level={LEVEL[cls]}>{`${num(composite, 1)} · ${cls}`}</Badge> : mwBad ? "potência inválida" : "informe a potência"}
+                  value={composite !== null && cls ? <Badge level={LEVEL[cls]}>{`${num(Math.floor(composite * 10) / 10, 1)} · ${cls}`}</Badge> : mwBad ? "potência inválida" : "informe a potência"}
                 />
                 <MetricRow
                   label={`Maior parque com SCR ≥ ${SCR_STRONG}`}
                   hint={bus.ibrMw > 0 ? "pelo curto mínimo do dia, descontadas a eólica e a solar já ligadas" : "pelo curto mínimo do dia"}
-                  value={`${num(maxPlantMw(bus.skMin, bus.ibrMw), 0)} MW`}
+                  value={`${num(Math.floor(maxPlantMw(bus.skMin, bus.ibrMw)), 0)} MW`}
                   tone={maxPlantMw(bus.skMin, bus.ibrMw) > 0 ? "good" : "critical"}
                 />
                 {note ? <p className="mt-2 text-[12px] leading-relaxed text-warning">{note}</p> : null}

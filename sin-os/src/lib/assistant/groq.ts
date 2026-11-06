@@ -11,8 +11,8 @@ import { recordProbe } from "../sources/http";
 export const GROQ_BASE = (process.env.GROQ_BASE_URL ?? "https://api.groq.com/openai/v1").replace(/\/+$/, "");
 export const groqConfigured = () => !!process.env.GROQ_API_KEY;
 
-// Kimi K2 primeiro (melhor em uso de ferramentas); na Groq cada modelo tem cota própria,
-// então cair para o próximo no 429 também multiplica a capacidade diária gratuita
+// na Groq cada modelo tem cota própria: cair para o próximo no 429 também multiplica a
+// capacidade diária gratuita
 // Kimi K2 0905 saiu da Groq em 15/04/2026 (substituto indicado: gpt-oss-120b)
 const CHAT_DEFAULTS = ["openai/gpt-oss-120b", "llama-3.3-70b-versatile", "openai/gpt-oss-20b"];
 const STT_DEFAULTS = ["whisper-large-v3-turbo", "whisper-large-v3"];

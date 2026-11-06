@@ -352,6 +352,8 @@ export interface GlobalLens {
   unit: string;
   brlAvg: number;
   vsSE: number;
+  /** Dia de entrega do preço comparado (AAAA-MM-DD); difere de hoje quando o mercado não tem o dia. */
+  date?: string;
 }
 
 export function globalLens(pld: SubPanel, zones: ZonePrices | null, ukMid: TimeSeries | null, fx: FxData | null): GlobalLens[] {
@@ -366,15 +368,18 @@ export function globalLens(pld: SubPanel, zones: ZonePrices | null, ukMid: TimeS
     for (const bzn of ["DE-LU", "FR", "NO2", "ES", "IT-North", "PL"]) {
       const z = zones[bzn];
       if (!z) continue;
-      const day = lastFullDay(z.ts, z.values);
+      // mesmo dia de entrega do PLD de hoje; sem ele, o último dia completo, com a data à vista
+      const hoje = z.ts.map((t, i) => [t, z.values[i]] as const).filter(([t, v]) => v !== null && brtDate(t) === today).map(([, v]) => v as number);
+      const day = hoje.length >= 20 ? { v: hoje, date: today } : (() => { const d = lastFullDay(z.ts, z.values); return d ? { v: d.v, date: brtDate(z.ts[z.ts.length - 1]) } : null; })();
       if (!day) continue;
       const v = mean(day.v);
-      out.push({ market: `${z.name} (${bzn})`, region: "EU", localAvg: v, unit: "EUR/MWh", brlAvg: v * fx.EUR.rate, vsSE: v * fx.EUR.rate - se });
+      out.push({ market: `${z.name} (${bzn})`, region: "EU", localAvg: v, unit: "EUR/MWh", brlAvg: v * fx.EUR.rate, vsSE: v * fx.EUR.rate - se, date: day.date });
     }
   }
   if (fx && ukMid && ukMid.values.length) {
-    const v = mean(ukMid.values.slice(-48));
-    out.push({ market: "Reino Unido (MID)", region: "UK", localAvg: v, unit: "GBP/MWh", brlAvg: v * fx.GBP.rate, vsSE: v * fx.GBP.rate - se });
+    const hoje = ukMid.ts.map((t, i) => [t, ukMid.values[i]] as const).filter(([t, v]) => v !== null && brtDate(t) === today).map(([, v]) => v as number);
+    const v = mean(hoje.length >= 24 ? hoje : ukMid.values.slice(-48).filter((x): x is number => x !== null));
+    out.push({ market: "Reino Unido (MID)", region: "UK", localAvg: v, unit: "GBP/MWh", brlAvg: v * fx.GBP.rate, vsSE: v * fx.GBP.rate - se, date: hoje.length >= 24 ? today : undefined });
   }
   return out.filter((r) => Number.isFinite(r.brlAvg));
 }

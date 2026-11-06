@@ -216,5 +216,5 @@ export function simularReforma(baseMwh: number, p: PremissasReforma = PREMISSAS_
 
 /** ICMS modal sobre energia por UF (fração) — referência para começar; confira a lei do estado e a classe. */
 export const ICMS_UF: Record<string, number> = {
-  AC: 0.19, AL: 0.19, AM: 0.2, AP: 0.18, BA: 0.205, CE: 0.2, DF: 0.2, ES: 0.17, GO: 0.19, MA: 0.23, MG: 0.18, MS: 0.17, MT: 0.17, PA: 0.19, PB: 0.2, PE: 0.205, PI: 0.225, PR: 0.195, RJ: 0.2, RN: 0.2, RO: 0.195, RR: 0.2, RS: 0.17, SC: 0.17, SE: 0.19, SP: 0.18, TO: 0.2,
+  AC: 0.19, AL: 0.205, AM: 0.2, AP: 0.18, BA: 0.205, CE: 0.2, DF: 0.2, ES: 0.17, GO: 0.19, MA: 0.23, MG: 0.18, MS: 0.17, MT: 0.17, PA: 0.19, PB: 0.2, PE: 0.205, PI: 0.225, PR: 0.195, RJ: 0.2, RN: 0.2, RO: 0.195, RR: 0.2, RS: 0.17, SC: 0.17, SE: 0.19, SP: 0.18, TO: 0.2,
 };

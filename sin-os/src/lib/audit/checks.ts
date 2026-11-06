@@ -159,7 +159,7 @@ export function crossPldCmo(pld: SubPanel | null, cmo: SubPanel | null): CrossCh
       const p = pld.values[s][i];
       const c = cmo.values[s][j];
       if (p === null || c === null) continue;
-      const cc = clampPld(c);
+      const cc = clampPld(c, t);
       diffs.push(Math.abs(p - cc));
       a.push(p);
       b.push(cc);

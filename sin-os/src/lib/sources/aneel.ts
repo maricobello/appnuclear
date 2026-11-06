@@ -22,8 +22,12 @@ const UF_IBGE: Record<string, string> = { "11": "RO", "12": "AC", "13": "AM", "1
 /** Componentes por ano de início de vigência (a ANEEL publica um arquivo por ano). */
 const RES_COMP_FALLBACK: Record<number, string> = { 2025: "a4060165-3a0c-404f-926c-83901088b67c", 2026: "e8717aa8-2521-453f-bf16-fbb9a16eea39" };
 
+/** Sondas das chamadas em andamento (a sonda do auditor coleta latência e status reais). */
+let coletor: Probe[] | null = null;
+
 async function ckan<T>(action: string, params: Record<string, string>): Promise<T> {
-  const { json: j } = await fetchJson<{ success?: boolean; result?: T; error?: unknown }>(`${BASE}/${action}?${new URLSearchParams(params)}`, { timeoutMs: 25_000, retries: 2 });
+  const { json: j, probes } = await fetchJson<{ success?: boolean; result?: T; error?: unknown }>(`${BASE}/${action}?${new URLSearchParams(params)}`, { timeoutMs: 25_000, retries: 2 });
+  coletor?.push(...probes);
   if (!j.success || !j.result) throw new Error(`ANEEL ${action}: ${JSON.stringify(j.error ?? "sem resultado").slice(0, 160)}`);
   return j.result;
 }
@@ -86,8 +90,10 @@ export async function distribuidoras(): Promise<string[]> {
     "aneel:agentes",
     24 * 3600_000,
     async () => {
-      const r = await search<{ SigAgente: string }>(RES_TARIFAS, { fields: "SigAgente", distinct: "true", limit: "1000", filters: JSON.stringify({ DscBaseTarifaria: "Tarifa de Aplicação", DscSubGrupo: "B1" }) });
-      return [...new Set(r.records.map((x) => x.SigAgente).filter((x) => x && x !== "Não Informado"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+      // só quem tem tarifa vigente hoje (o histórico traz distribuidoras extintas ou incorporadas)
+      const r = await search<{ SigAgente: string; DatFimVigencia: string }>(RES_TARIFAS, { fields: "SigAgente,DatFimVigencia", distinct: "true", limit: "10000", filters: JSON.stringify({ DscBaseTarifaria: "Tarifa de Aplicação", DscSubGrupo: "B1" }) });
+      const dia = hoje();
+      return [...new Set(r.records.filter((x) => x.DatFimVigencia >= dia).map((x) => x.SigAgente).filter((x) => x && x !== "Não Informado"))].sort((a, b) => a.localeCompare(b, "pt-BR"));
     },
     { staleIfErrorMs: 7 * 24 * 3600_000 },
   );
@@ -150,7 +156,8 @@ export async function tarifaVigente(agente: string, subgrupo: string, dia = hoje
           linhas.push(l);
         }
       }
-      const futura = inicios.find((i) => i > dia);
+      // a próxima é a MAIS PRÓXIMA das futuras (inicios está em ordem decrescente)
+      const futura = [...inicios].reverse().find((i) => i > dia);
       const fr = futura ? r.records.find((x) => x.DatInicioVigencia === futura) : undefined;
       return { agente, subgrupo, reh: rows[0].DscREH, inicio: vig, fim: rows[0].DatFimVigencia, linhas, proxima: fr ? { inicio: futura!, reh: fr.DscREH } : null, geracaoAneel: r.records.map((x) => x.DatGeracaoConjuntoDados ?? "").sort().at(-1) || null, geradoEm: Date.now() } satisfies TarifaVigente;
     },
@@ -234,6 +241,8 @@ export interface Bandeira {
   nome: string;
   adicionalMwh: number;
   tabela: { nome: string; adicionalMwh: number; desde: string; norma: string }[];
+  /** A competência mais recente publicada é anterior ao mês corrente (o mês ainda não foi divulgado). */
+  defasada?: boolean;
 }
 
 export async function bandeiraVigente(): Promise<Bandeira> {
@@ -248,7 +257,10 @@ export async function bandeiraVigente(): Promise<Bandeira> {
       const tabela: Bandeira["tabela"] = [];
       for (const x of ad.records) if (!tabela.some((t) => t.nome === x.NomBandeiraAcionada)) tabela.push({ nome: x.NomBandeiraAcionada, adicionalMwh: num(x.VlrAdicionalBandeiraRSMWh), desde: x.DatVigencia, norma: x.DscResolucao });
       const a = ac.records[0];
-      return { competencia: a.DatCompetencia.slice(0, 7), nome: a.NomBandeiraAcionada, adicionalMwh: num(a.VlrAdicionalBandeira), tabela } satisfies Bandeira;
+      // a ANEEL publica a bandeira do mês seguinte no fim do mês: prefere a competência do mês corrente
+      const mes = hoje().slice(0, 7);
+      const atual = ac.records.find((x) => x.DatCompetencia.slice(0, 7) === mes) ?? a;
+      return { competencia: atual.DatCompetencia.slice(0, 7), nome: atual.NomBandeiraAcionada, adicionalMwh: num(atual.VlrAdicionalBandeira), tabela: tabela.filter((t) => t.desde >= "2022-01-01"), defasada: atual.DatCompetencia.slice(0, 7) < mes } satisfies Bandeira;
     },
     { staleIfErrorMs: 31 * 24 * 3600_000 },
   );
@@ -262,6 +274,7 @@ export async function bandeiraVigente(): Promise<Bandeira> {
 export async function fetchAneelTarifas(agente = "CPFL-PAULISTA"): Promise<SourceResult<{ agente: string; reh: string; inicio: string; residuoMwh: number | null; bandeira: string }>> {
   const quality = emptyQuality();
   const probes: Probe[] = [];
+  coletor = probes;
   try {
     const t = await tarifaVigente(agente, "B1");
     if (!t) throw new Error(`sem tarifa vigente para ${agente}`);
@@ -280,5 +293,7 @@ export async function fetchAneelTarifas(agente = "CPFL-PAULISTA"): Promise<Sourc
   } catch (e) {
     probes.push(...probesOf(e));
     return { id: "aneel_tarifas", ok: false, data: null, error: errMsg(e), probes, quality, simulated: false, fetchedAt: Date.now() };
+  } finally {
+    coletor = null;
   }
 }

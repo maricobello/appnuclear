@@ -90,14 +90,19 @@ const ucKey = (s: string | undefined) => (s ? s.replace(/\D/g, "") || s : "sem U
 
 /** Quanto a UC pagaria no mês sem a GD (energia cheia com tributos + bandeira + CIP). */
 export function cativoSimulado(f: FaturaGD, uc?: UcGD): { rs: number; origem: OrigemCativo } | null {
-  const extras = (f.bandeiraRs ?? 0) + (f.cipRs ?? 0);
   const C = f.consumoKwh;
+  // sem GD a bandeira incidiria sobre o consumo todo, não só sobre a parte faturada
+  const faturadoKwh = C !== undefined && f.compensadaKwh ? C - f.compensadaKwh : C;
+  const bandeiraCheia = f.bandeiraRs && C && faturadoKwh && faturadoKwh > 0 ? (f.bandeiraRs * C) / faturadoKwh : (f.bandeiraRs ?? 0);
+  const extras = bandeiraCheia + (f.cipRs ?? 0);
+  // "fatura + créditos": tira o que só existe por causa da GD (Fio B, custo de disponibilidade) e completa a bandeira
+  const faturaMaisCreditos = () => f.totalRs! + Math.abs(f.compensacaoRs ?? 0) - (f.fioBRs ?? 0) - (f.disponibilidadeRs ?? 0) + (bandeiraCheia - (f.bandeiraRs ?? 0));
   const grupoA = f.grupo === "A" || f.demandaKw !== undefined;
   // grupo A: a demanda não muda com a GD — o pago + o valor dos créditos é o cativo
-  if (grupoA) return f.totalRs !== undefined && f.compensacaoRs ? { rs: f.totalRs + Math.abs(f.compensacaoRs), origem: "fatura + créditos" } : f.totalRs !== undefined && !f.compensadaKwh ? { rs: f.totalRs, origem: "fatura + créditos" } : null;
+  if (grupoA) return f.totalRs !== undefined && f.compensacaoRs ? { rs: faturaMaisCreditos(), origem: "fatura + créditos" } : f.totalRs !== undefined && !f.compensadaKwh ? { rs: f.totalRs, origem: "fatura + créditos" } : null;
   const preco = (f.teRsKwh ?? 0) + (f.tusdRsKwh ?? 0);
   if (C && preco > 0 && f.tarifasComTributos !== false) return { rs: C * preco + extras, origem: "tarifa da fatura" };
-  if (f.totalRs !== undefined && f.compensacaoRs) return { rs: f.totalRs + Math.abs(f.compensacaoRs), origem: "fatura + créditos" };
+  if (f.totalRs !== undefined && f.compensacaoRs) return { rs: faturaMaisCreditos(), origem: "fatura + créditos" };
   if (f.energiaRs && f.energiaRs > 0) return { rs: f.energiaRs + extras, origem: "itens de energia" };
   const lig = f.ligacao ?? uc?.ligacao;
   if (C && uc?.teRsKwh && uc?.tusdRsKwh && lig) {

@@ -229,7 +229,7 @@ export default function TarifasPage() {
   const definir = (k: keyof typeof manual, v: number) => setManual((m) => ({ ...m, [k]: v }));
 
   const bandeira = base.data?.bandeira ?? lista.data?.bandeira;
-  const bandOpts = [{ value: "atual", label: bandeira ? `Vigente (${bandeira.competencia}): ${bandeira.nome}` : "Vigente" }, { value: "Verde", label: "Verde" }, ...(bandeira?.tabela ?? []).map((t) => ({ value: t.nome, label: `${t.nome} (+R$ ${brl(t.adicionalMwh)}/MWh)` }))];
+  const bandOpts = [{ value: "atual", label: bandeira ? `Vigente (${bandeira.competencia}${bandeira.defasada ? ", mês atual ainda não publicado" : ""}): ${bandeira.nome}` : "Vigente" }, { value: "Verde", label: "Verde" }, ...(bandeira?.tabela ?? []).map((t) => ({ value: t.nome, label: `${t.nome} (+R$ ${brl(t.adicionalMwh)}/MWh)` }))];
   const bandMwh = band === "atual" ? (bandeira?.adicionalMwh ?? 0) : band === "Verde" ? 0 : (bandeira?.tabela.find((t) => t.nome === band)?.adicionalMwh ?? 0);
   const isEnergia = linha?.unidade === "MWh";
   const ef = linha && isEnergia ? efetiva(linha.te, linha.tusd, bandMwh, { icms: trib.icms / 100, pis: trib.pis / 100, cofins: trib.cofins / 100 }) : null;
@@ -447,7 +447,7 @@ export default function TarifasPage() {
               </Disclosure>
             </>
           ) : (
-            <Empty label="A ANEEL não publicou componentes para esta linha (ou ainda não para esta vigência)." />
+            <Empty label="Componentes indisponíveis na base aberta da ANEEL para esta linha e vigência (algumas distribuidoras com reajuste em 01/01 ainda não constam)." />
           )}
           </div>
         </Panel>

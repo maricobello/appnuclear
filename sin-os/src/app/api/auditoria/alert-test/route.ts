@@ -16,7 +16,7 @@ export async function POST(req: Request) {
   if (!url) return Response.json({ configured: false, sent: false, error: "defina ALERT_WEBHOOK_URL na Vercel" }, { status: 400 });
   const auth = authorizeAuditor(req);
   if (!auth.ok) return Response.json({ error: "não autorizado" }, { status: 401 });
-  if (!(await claimSlot("alert_test", auth.privileged ? 60_000 : 3600_000))) {
+  if (!(await claimSlot("alert_test", auth.privileged && !auth.simples ? 60_000 : 3600_000))) {
     return Response.json({ configured: true, sent: false, throttled: true, destination: alertKind(url) }, { status: 429 });
   }
   const base = process.env.SIN_OS_URL ?? "https://sinos-iota.vercel.app";

@@ -447,7 +447,7 @@ export function montarLaudoUsina(JsPDFCtor: typeof JsPDF, d: DadosLaudoUsina): J
     ["Item", "Qtd.", "Tarifa", "Sem trib.", "ICMS", "PIS/Cof.", "Total"],
     [
       ...f.linhas.map((l) => [l.descricao, `${brl(l.quantidade, l.unidade === "kW" ? 1 : 0)} ${l.unidade}`, l.tarifa === null ? "-" : brl(l.tarifa, 4), brl(l.liquido), brl(l.icms), brl(l.pisCofins), brl(l.total)]),
-      ["TOTAL", "", "", brl(f.totalLiquido), "", brl(f.totalTributos), brl(f.total)],
+      ["TOTAL", "", "", brl(f.totalLiquido), brl(f.linhas.reduce((s, l) => s + l.icms, 0)), brl(f.linhas.reduce((s, l) => s + l.pisCofins, 0)), brl(f.total)],
     ],
     [5.2, 1.8, 1.3, 1.5, 1.2, 1.2, 1.5],
     ["l", "r", "r", "r", "r", "r", "r"],

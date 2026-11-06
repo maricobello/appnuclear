@@ -90,7 +90,9 @@ export interface ParcelaNaoCompensada {
 
 /** Quanto da tarifa NÃO é compensado em cada kWh de crédito, por enquadramento e ano. */
 export function parcelaNaoCompensada(enq: Enquadramento, ano: number, transicaoAte = 2029): ParcelaNaoCompensada {
-  if (enq === "GD I" || enq === "sem GD") return { fioB: 0, fioA: 0, encargos: false, pendenteArt17: enq === "GD I" && ano > GD1_ATE };
+  if (enq === "sem GD") return { fioB: 0, fioA: 0, encargos: false, pendenteArt17: false };
+  // GD I compensa integralmente até 2045; depois vale o art. 17 — mesma hipótese do GD II (100% do Fio B)
+  if (enq === "GD I") return ano > GD1_ATE ? { fioB: 1, fioA: 0, encargos: false, pendenteArt17: true } : { fioB: 0, fioA: 0, encargos: false, pendenteArt17: false };
   if (enq === "GD III") return { fioB: 1, fioA: 0.4, encargos: true, pendenteArt17: ano >= 2029 };
   if (ano < 2023) return { fioB: 0, fioA: 0, encargos: false, pendenteArt17: false };
   if (ano < transicaoAte) return { fioB: FIO_B_GD2[Math.min(ano, 2028)] ?? 0.9, fioA: 0, encargos: false, pendenteArt17: false };

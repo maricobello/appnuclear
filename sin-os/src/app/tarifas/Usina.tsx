@@ -199,7 +199,7 @@ export function Usina({ agente, uf, icmsPct, icmsOrigem }: { agente: string; uf:
           <Sel
             label="Bandeira"
             value={band}
-            options={[{ value: "atual", label: bandeira ? `Vigente: ${bandeira.nome}` : "Vigente" }, { value: "Verde", label: "Verde" }, ...(bandeira?.tabela ?? []).map((x) => ({ value: x.nome, label: `${x.nome} (+R$ ${brl(x.adicionalMwh)}/MWh)` }))]}
+            options={[{ value: "atual", label: bandeira ? `Vigente (${bandeira.competencia}${bandeira.defasada ? ", mês atual não publicado" : ""}): ${bandeira.nome}` : "Vigente" }, { value: "Verde", label: "Verde" }, ...(bandeira?.tabela ?? []).map((x) => ({ value: x.nome, label: `${x.nome} (+R$ ${brl(x.adicionalMwh)}/MWh)` }))]}
             onChange={setBand}
           />
           <N label="Reativo excedente (da fatura)" value={m.reativo} onChange={set("reativo")} suffix="R$" />

@@ -98,7 +98,7 @@ const MODELS: Model[] = [
 const ROADMAP = [
   { name: "Foundation models de séries temporais (Chronos-Bolt, TimesFM 2.x, Moirai)", note: "exigem serviço Python/GPU — plugáveis via rota /api/previsao como regressor extra na QRA", href: "https://github.com/amazon-science/chronos-forecasting" },
   { name: "DNN do epftoolbox (hiperparâmetros por Optuna)", note: "benchmark de Lago et al. (2021) — combina bem com o LEAR em ensembles", href: "https://github.com/jeslago/epftoolbox" },
-  { name: "SDDP (Pereira & Pinto, 1991) — lógica do NEWAVE/DECOMP/DESSEM (CEPEL)", note: "modelos oficiais que formam o CMO/PLD; reproduzir exige decks do ONS", href: "https://github.com/odow/SDDP.jl" },
+  { name: "SDDP (Pereira & Pinto, 1991) — lógica do NEWAVE/DECOMP/DESSEM (CEPEL)", note: "modelos oficiais que formam o CMO/PLD; o app já roda o NovoModelo (SDDP aberto de ONS/CCEE/EPE) todo dia na tela Planejamento", href: "https://github.com/odow/SDDP.jl" },
 ];
 
 export default function ModelosPage() {
@@ -155,7 +155,7 @@ export default function ModelosPage() {
         </ul>
       </Panel>
 
-      <Panel title="APIs públicas integradas" subtitle="Todas gratuitas; só a EIA exige chave (opcional)">
+      <Panel title="APIs públicas integradas" subtitle="Gratuitas; a EIA pede chave gratuita (opcional) e a Plataforma de Integração da CCEE exige credencial de agente">
         <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-3">
           {SOURCE_LIST.map((s) => (
             <div key={s.id} className="rounded-2xl bg-surface-2 p-4 text-[13px]">

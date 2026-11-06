@@ -169,7 +169,12 @@ async function wrap<T>(id: SourceId, fn: () => Promise<{ data: T; quality: Quali
   }
 }
 
-const yearsNeeded = (daysBack: number) => (new Date().getUTCMonth() * 30 + new Date().getUTCDate() < daysBack ? 2 : 1);
+/** Arquivos anuais necessários para cobrir `daysBack` dias (ano corrente + anteriores; no máximo 5). */
+const yearsNeeded = (daysBack: number) => {
+  const now = new Date();
+  const diaDoAno = Math.floor((now.getTime() - Date.UTC(now.getUTCFullYear(), 0, 1)) / 86400_000) + 1;
+  return daysBack <= diaDoAno ? 1 : Math.min(5, 1 + Math.ceil((daysBack - diaDoAno) / 365));
+};
 
 /** CMO semi-horário por subsistema (DESSEM), agregado para horário. Inclui o programado de D+1. */
 export const fetchCmoHourly = (daysBack = 120) =>

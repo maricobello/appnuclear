@@ -2,6 +2,7 @@ import "server-only";
 import { z } from "zod";
 import { chatModels, groqConfigured, makeGroqChat, type ChatFn, type ChatMessage, type ToolDef } from "../assistant/groq";
 import { SOURCES } from "../sources/registry";
+import { PLD_LIMITS } from "../market/brazil";
 import type { SourceId, SourceResult } from "../sources/types";
 import { listAuditRuns, saveAgentReport } from "../store";
 import { auditSource } from "./checks";
@@ -25,7 +26,8 @@ const SYSTEM = `Você é o agente auditor de dados do SIN OS, um terminal de arb
 Sua função: garantir que as APIs públicas que alimentam modelos de preço e decisões de arbitragem estão disponíveis, frescas, íntegras e coerentes entre si.
 
 Contexto do domínio (use para não gerar falsos alarmes):
-- PLD horário (CCEE) é o CMO do DESSEM (ONS) limitado ao piso/teto regulatórios de 2026: mínimo R$ 57,31, máximo horário R$ 1.611,04. PLD colado no piso por dias é comportamento normal no período úmido — não é anomalia de dados.
+- PLD horário (CCEE) é o CMO do DESSEM (ONS) limitado ao piso/teto regulatórios de ${PLD_LIMITS.year}: mínimo R$ ${PLD_LIMITS.min.toLocaleString("pt-BR")}, máximo horário R$ ${PLD_LIMITS.maxHourly.toLocaleString("pt-BR")}. PLD colado no piso por dias é comportamento normal no período úmido — não é anomalia de dados.
+- A CCEE (dados abertos) bloqueia IPs de nuvem com HTTP 403: é esperado e o PLD segue estimado pelo CMO do ONS. A Plataforma de Integração da CCEE (ccee_pi) e a EIA ficam "disabled" sem credencial: não é falha.
 - A CCEE publica o PLD de D+1 à tarde; o ONS publica o CMO programado de D+1. Timestamps no futuro são esperados nessas fontes.
 - EAR/ENA/carga do ONS são diários (D−1). O BCB não publica câmbio em fins de semana e feriados.
 - Energy-Charts (Europa) opera em resolução de 15 min desde o MTU de 15 min do SDAC; preços negativos são legítimos (mín. harmonizado −500 €/MWh).

@@ -26,23 +26,23 @@ interface DomainSpec {
 
 export const DOMAINS: Record<Domain, DomainSpec> = {
   mercado: { label: "PLD agora, previsão e oportunidades", tools: ["pld_agora", "previsao_pld", "oportunidades"], re: /\b(pld|preco|cmo|previs|amanha|hoje|semana|spread|submercado|sudeste|nordeste|norte|sul|mais car|mais barat|arbitr|oportunidad|horario|hora)/, pages: ["/", "/previsao", "/arbitragem", "/sin", "/carteira"] },
-  bess: { label: "estudo e configuração de bateria (BESS)", tools: ["estudo_bess", "configurar_ativo"], re: /(bateria|bess|armazen|ciclo|lcos|\bmwh\b.*\bmw\b|simula)/, pages: ["/bess", "/arbitragem"] },
-  hidro: { label: "reservatórios, afluência e carga", tools: ["reservatorios"], re: /(reservat|chuva|hidrolog|\bear\b|\bena\b|afluen|seca|carga)/, pages: ["/clima", "/sin"] },
-  dados: { label: "saúde e confiança das fontes de dados", tools: ["saude_dados", "confianca_dados"], re: /(saude|fontes? de dados|fontes? (fora|caiu|caida|offline)|fora do ar|confiab|confianca|revisa|retroativ|auditor|simulad|status)/, pages: ["/auditoria", "/modelos"] },
+  bess: { label: "estudo e configuração de bateria (BESS)", tools: ["estudo_bess", "configurar_ativo"], re: /(bateria|bess|armazen|ciclo|lcos|\bmwh\b.*\bmw\b|\bsimul(ar|acao|e)\b)/, pages: ["/bess", "/arbitragem"] },
+  hidro: { label: "reservatórios, afluência e carga", tools: ["reservatorios"], re: /(reservat|chuva|hidrolog|\bear\b|\bena\b|afluen|seca|carga|barragem|represa|hidreletric)/, pages: ["/clima", "/sin"] },
+  dados: { label: "saúde e confiança das fontes de dados", tools: ["saude_dados", "confianca_dados"], re: /(saude|fontes? de dados|fontes? (fora|caiu|caida|offline)|fora do ar|confiab|confianca|\brevis(ao|oes|ado|ada|ou)\b|retroativ|auditor|simulad|status)/, pages: ["/auditoria", "/modelos"] },
   renovaveis: { label: "corte de eólica e solar (curtailment)", tools: ["renovaveis_corte"], re: /(renovav|eolic|curtail|corte|constrained|desperdic|pato|carga liquida|solar.*(corte|ons))/, pages: ["/renovaveis"] },
-  regulatorio: { label: "radar regulatório e mercado livre", tools: ["radar_mercado"], re: /(regula|radar|\blei\b|aneel|decreto|abertura|mercado livre|migra|leila|open energy|comercializ|portabilidade)/, pages: ["/mercado-livre"] },
-  planejamento: { label: "PLD mensal de 12 meses (NovoModelo/SDDP)", tools: ["planejamento_sddp"], re: /(sddp|newave|novomodelo|planejamento|medio prazo|proximos meses|meses|ano que vem|periodo seco|deficit|valor da agua)/, pages: ["/planejamento"] },
-  rede: { label: "força da rede: curto-circuito e SCR por subestação", tools: ["forca_da_rede"], re: /(rede eletrica|subesta|curto|\bscr\b|barra|conexao (de|da) usina|rede fraca|fluxo de potencia|n-1)/, pages: ["/rede"] },
+  regulatorio: { label: "radar regulatório e mercado livre", tools: ["radar_mercado"], re: /(\bregula(cao|ment|torio|dor)|radar|\blei\b|aneel|decreto|abertura|mercado livre|migra|leila|open energy|comercializ|portabilidade)/, pages: ["/mercado-livre"] },
+  planejamento: { label: "PLD mensal de 12 meses (NovoModelo/SDDP)", tools: ["planejamento_sddp"], re: /(sddp|newave|novomodelo|planejamento|medio prazo|proximos meses|meses|ano que vem|periodo seco|deficit|valor da agua|\b(em|de|ate|para) (janeiro|fevereiro|marco|abril|maio|junho|julho|agosto|setembro|outubro|novembro|dezembro)\b)/, pages: ["/planejamento"] },
+  rede: { label: "força da rede: curto-circuito e SCR por subestação", tools: ["forca_da_rede"], re: /(rede eletrica|subesta|curto[- ]?circuito|\bcurto\b(?! prazo)|\bscr\b|\bbarras?\b|conexao (de|da) usina|rede fraca|fluxo de potencia|n-1)/, pages: ["/rede"] },
   gd: {
     label: "geração distribuída: faturas, conferência, enquadramento, viabilidade, contratos e encargos",
     tools: GD_TOOL_DEFS.map((t) => t.function.name),
-    re: /(\bgd\b|gd ?i|geracao distribuida|fatura|conta de (luz|energia)|compens|credito|fio ?b|injet|\buc\b|\bucs\b|unidade consumidora|assinatura|consorcio|cooperativa|aluguel|locacao|usina solar|fotovolt|placa|kwp|micro ?gera|mini ?gera|encargo|tusd|icms|pis|cofins|disponibilidade|rateio|14\.?300|1\.?059|demanda contratada|ultrapassagem|reativ|grupo [ab]\b|tarifa|bandeira|distribuidora|payback|viabil|cativo|economia (assegurada|percebida|garantida)|resultado(s)? financeiro|custos? da usina|usina geradora)/,
+    re: /(\bgd\b|gd ?i|geracao distribuida|fatura|conta de (luz|energia)|compens|credito|fio ?b|injet|\buc\b|\bucs\b|unidade consumidora|assinatura|consorcio|cooperativa|aluguel|locacao|usina solar|fotovolt|placa|kwp|micro ?gera|mini ?gera|encargo|tusd|icms|\bpis\b|cofins|disponibilidade|rateio|14\.?300|1\.?059|demanda contratada|ultrapassagem|reativ|grupo [ab]\b|tarifa|bandeira|distribuidora|payback|viabil|cativo|economia (assegurada|percebida|garantida)|resultado(s)? financeiro|custos? da usina|usina geradora)/,
     pages: ["/gd"],
   },
   tarifas: {
     label: "tarifa vigente da ANEEL, componentes, tarifa efetiva e reforma tributária (CBS/IBS)",
     tools: TARIFA_TOOL_DEFS.map((t) => t.function.name),
-    re: /(tarifa|\btusd\b|\bte e (a )?tusd|bandeira|componente|\breh\b|reajuste|revisao tarifaria|homologad|distribuidora|preco do kwh|kwh (custa|vale)|\bcbs\b|\bibs\b|reforma tribut|\biva\b|imposto|tribut|icms|pis|cofins|cashback)/,
+    re: /(tarifa|\btusd\b|\bte e (a )?tusd|bandeira|componente|\breh\b|reajuste|revisao tarifaria|homologad|distribuidora|preco do kwh|kwh (custa|vale)|\bcbs\b|\bibs\b|reforma tribut|\biva\b|imposto|tribut|icms|\bpis\b|cofins|cashback)/,
     pages: ["/tarifas"],
   },
 };

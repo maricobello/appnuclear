@@ -38,7 +38,7 @@ export async function buildRenewablesReport(days = 14, now = Date.now()) {
   if (netLoad && netLoad.quality.identityBreaks > 0)
     notes.push(`${netLoad.quality.identityBreaks} hora(s) em que o balanço não fecha (geração − intercâmbio ≠ carga em mais de 1%).`);
   if (pldPanel && !pldOfficial) notes.push("PLD estimado pelo CMO/DESSEM em parte da janela (a CCEE não responde ao servidor): valores a PLD são aproximados.");
-  notes.push("O corte por confiabilidade (REL) e por rede (CNF) pode ser contestado e ressarcido; a flag de dado inválido do ONS não é atualizada depois da contestação, então não a usamos.");
+  notes.push("Pelo dicionário do ONS, só o corte por indisponibilidade externa (REL) gera a referência final enviada à CCEE para o ressarcimento (ESS de constrained-off); o de requisitos de confiabilidade (CNF) e o energético (ENE) não. A flag de dado inválido do ONS não é atualizada depois da contestação, então não a usamos.");
 
   return {
     generatedAt: now,

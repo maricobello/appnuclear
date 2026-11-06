@@ -32,8 +32,9 @@ export type Tech = "eolica" | "solar";
 export type Reason = "REL" | "CNF" | "ENE";
 export const REASONS: Reason[] = ["REL", "CNF", "ENE"];
 export const REASON_LABEL: Record<Reason, string> = {
-  REL: "confiabilidade elétrica",
-  CNF: "atendimento a requisitos da rede",
+  // dicionário de dados do ONS (restricao_coff): REL = razão de indisponibilidade externa (elétrica); CNF = requisitos de confiabilidade
+  REL: "indisponibilidade externa (elétrica)",
+  CNF: "requisitos de confiabilidade",
   ENE: "razão energética (sobra de energia)",
 };
 

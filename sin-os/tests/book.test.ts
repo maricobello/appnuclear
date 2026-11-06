@@ -94,7 +94,9 @@ describe("carteira: liquidação e MtM contra o PLD", () => {
     expect(r.coveredMonths).toBe(1);
     expect(r.partialMonths).toBe(1);
     expect(r.settledRS).toBeCloseTo(50 * 720, 6); // só junho
-    expect(r.partialRS).toBeCloseTo(50 * 744, 6); // julho estimado pela média até agora
+    expect(r.partialRS).toBeCloseTo(50 * 23 * 24, 6); // julho: só as horas já realizadas
+    // o restante de julho (8 dias) vai à curva a termo: sem contar o mês duas vezes
+    expect(markToForward([r], { SE: 250 }).mtmRS).toBeCloseTo(100 * 8 * 24, 6);
     expect(r.months[1].settlementRS).toBeNull();
     expect(openExposure(bookSummary([r.contract], m).results).map((x) => x.month)).toEqual(["2026-07"]);
   });

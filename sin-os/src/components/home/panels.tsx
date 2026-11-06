@@ -499,7 +499,7 @@ export function DaySummary({ br, fc, audit, alerts, now: nowTs }: { br?: BrasilR
     if (fc?.horizon.dailyMean.length) {
       const d = fc.horizon.dailyMean;
       const avg = d.reduce((a, x) => a + (x.point ?? x.lear), 0) / d.length;
-      out.push({ Icon: TrendingUp, tone: "text-accent-2", text: <>Previsão SE 7 dias: média <b className="text-ink">{brl(avg)}</b>, faixa diária de {brl(Math.min(...d.map((x) => x.p05)))} a {brl(Math.max(...d.map((x) => x.p95)))} (90%).</> });
+      out.push({ Icon: TrendingUp, tone: "text-accent-2", text: <>Previsão SE 7 dias: média <b className="text-ink">{brl(avg)}</b>, faixa de 90% de amanhã {brl(d[0].p05)} a {brl(d[0].p95)}{d.length > 1 ? <> e do 7º dia {brl(d[d.length - 1].p05)} a {brl(d[d.length - 1].p95)}</> : null}.</> });
     }
     const ear = br.ear?.values.SE.filter((v): v is number => v !== null) ?? [];
     if (ear.length > 8) {

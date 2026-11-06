@@ -34,7 +34,9 @@ export async function curtailmentMonth(y: number, m: number, opts: { cachedOnly?
   if (opts.cachedOnly) return loadDoc<MonthDoc>("curtail_months", id).catch(() => null);
   const [vE, vS] = await Promise.all([lastModified(curtailmentUrl("eolica", y, m)), lastModified(curtailmentUrl("solar", y, m))]);
   const prev = await loadDoc<MonthDoc>("curtail_months", id).catch(() => null);
-  if (!vE && !vS) return prev; // ONS fora: o último total conhecido continua valendo
+  // ONS fora (ou só um dos arquivos respondeu): o último total conhecido continua valendo — recalcular
+  // com uma tecnologia só gravaria um total parcial e anunciaria uma "republicação" que não houve
+  if (!vE || !vS) return prev;
   const version = `${vE ?? "-"}|${vS ?? "-"}`;
   if (prev && prev.version === version) return prev;
   const rows: CurtRow[] = [];

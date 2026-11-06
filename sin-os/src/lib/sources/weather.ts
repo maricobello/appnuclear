@@ -54,7 +54,7 @@ interface OmResponse {
 /** Curva de potência genérica IEC classe II (cut-in 3, nominal 12, cut-out 25 m/s). */
 export const windCf = (v: number) => (v < 3 || v > 25 ? 0 : v >= 12 ? 1 : ((v - 3) / 9) ** 3);
 /** Fator de capacidade FV aproximado (PR = 0,8 sobre 1000 W/m² STC). */
-export const solarCf = (ghi: number) => Math.min(1, Math.max(0, (ghi / 1000) * 0.8 * 1.1));
+export const solarCf = (ghi: number) => Math.min(1, Math.max(0, (ghi / 1000) * 0.8));
 
 export interface HubForecast {
   hub: Hub;

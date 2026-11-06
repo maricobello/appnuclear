@@ -60,11 +60,15 @@ export interface FaturaEsperada {
 
 /** Bases tributadas "por dentro": cada base b com o conjunto de tributos S vale b/(1−ΣS). */
 function grossUp(bases: { valor: number; icms: boolean; pisCofins: boolean }[], t: { icms: number; pis: number; cofins: number }) {
-  const out = { icms: 0, pis: 0, cofins: 0 };
+  const out = { icms: 0, pis: 0, cofins: 0, invalido: false };
   for (const b of bases) {
     if (b.valor <= 0) continue;
     const rate = (b.icms ? t.icms : 0) + (b.pisCofins ? t.pis + t.cofins : 0);
-    if (rate <= 0 || rate >= 0.9) continue;
+    if (rate <= 0) continue;
+    if (rate >= 0.9) {
+      out.invalido = true;
+      continue;
+    }
     const gross = b.valor / (1 - rate);
     if (b.icms) out.icms += gross * t.icms;
     if (b.pisCofins) {
@@ -119,8 +123,10 @@ export function faturaEsperadaB(e: EntradaFaturaB): FaturaEsperada {
     { valor: valorFioB, icms: true, pisCofins: true },
   ];
   const trib = grossUp(bases, tx);
+  if (trib.invalido) premissas.push(`alíquotas somam ${Math.round((tx.icms + tx.pis + tx.cofins) * 100)}% (≥ 90%): tributos não calculados — confira ICMS, PIS e Cofins`);
   if (e.icmsCompensada === "tusd" || e.icmsCompensada === "integral") {
-    const b = E * (e.icmsCompensada === "tusd" ? tusd : T);
+    // a parcela de Fio B (E·k) já pagou ICMS na base acima: não tributa de novo
+    const b = E * Math.max(0, (e.icmsCompensada === "tusd" ? tusd : T) - k);
     trib.icms += tx.icms > 0 && tx.icms < 0.9 ? (b * tx.icms) / (1 - tx.icms) : 0;
     premissas.push(e.icmsCompensada === "tusd" ? "ICMS cobrado sobre a TUSD da energia compensada" : "ICMS cobrado sobre toda a energia compensada");
   }
@@ -234,7 +240,10 @@ export function conferirFatura(f: FaturaGD, ctx: { uc?: UcGD; anterior?: FaturaG
     if (enq === "GD I") add("fio_b_gd1", "alta", `Cobrança de Fio B (${fmtRs(f.fioBRs)}) numa UC GD I — o GD I compensa integralmente até 2045`, f.fioBRs);
     else if (E > 0 && ctx.uc?.fioBRsKwh) {
       const esperado = parcelaNaoCompensada(enq, ano).fioB;
-      const implicito = f.fioBRs / (E * ctx.uc.fioBRsKwh * (f.tarifasComTributos === false ? 1 : 1 / 0.75));
+      // tributos da própria fatura (frações); sem eles, 25% como último recurso
+      const rate = (f.icmsPct ?? 0) + (f.pisPct ?? 0) + (f.cofinsPct ?? 0);
+      const fatorTrib = f.tarifasComTributos === false ? 1 : rate > 0 && rate < 0.9 ? 1 / (1 - rate) : 1 / 0.75;
+      const implicito = f.fioBRs / (E * ctx.uc.fioBRsKwh * fatorTrib);
       if (Math.abs(implicito - esperado) > 0.08)
         add("fio_b_percentual", "media", `Fio B cobrado equivale a ~${Math.round(implicito * 100)}% (esperado ${Math.round(esperado * 100)}% em ${ano} para ${enq})`, implicito > esperado ? f.fioBRs * (1 - esperado / implicito) : undefined);
     }
@@ -243,7 +252,9 @@ export function conferirFatura(f: FaturaGD, ctx: { uc?: UcGD; anterior?: FaturaG
   // custo de disponibilidade junto com Fio B (GD II/III): a ANEEL diz que não há duplicidade
   if ((enq === "GD II" || enq === "GD III") && (f.fioBRs ?? 0) > 0.5) {
     const cheia = C !== undefined ? C - E : null;
-    const pagouMinimo = (f.disponibilidadeRs ?? 0) > 0.5 || (D !== null && cheia !== null && Math.abs(cheia - D) <= 2 && E > 0);
+    // faturado ≈ mínimo só indica duplicidade se ainda sobrou crédito (senão a UC apenas consumiu acima do que tinha)
+    const sobrouCredito = (f.saldoKwh ?? 0) > 5;
+    const pagouMinimo = (f.disponibilidadeRs ?? 0) > 0.5 || (D !== null && cheia !== null && Math.abs(cheia - D) <= 2 && E > 0 && sobrouCredito);
     if (pagouMinimo) {
       const imp = Math.min(f.disponibilidadeRs || (D && preco ? D * preco : 0), f.fioBRs ?? 0);
       add("disponibilidade_duplicada", "alta", "Custo de disponibilidade e Fio B cobrados juntos — na GD II paga-se o maior dos dois, não a soma (confirmar com a distribuidora)", imp || undefined);

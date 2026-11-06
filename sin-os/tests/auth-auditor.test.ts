@@ -11,7 +11,7 @@ describe("senha do agente auditor", () => {
   });
   it("aceita senha1234 e a ADMIN_KEY no auditor", () => {
     process.env.ADMIN_KEY = "chave-real-longa";
-    expect(authorizeAuditor(req({ "x-admin-key": "senha1234" }))).toEqual({ ok: true, privileged: true });
+    expect(authorizeAuditor(req({ "x-admin-key": "senha1234" }))).toEqual({ ok: true, privileged: true, simples: true });
     expect(authorizeAuditor(req({ "x-admin-key": "chave-real-longa" })).privileged).toBe(true);
     expect(authorizeAuditor(req({ "x-admin-key": "errada" })).ok).toBe(false);
   });

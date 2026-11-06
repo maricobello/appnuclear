@@ -245,7 +245,9 @@ export async function bessStudy(panel: SubPanel, params: BessParams, now = Date.
   const scenarios: BessScenario[] = [];
   for (const s of scen) {
     const res = s.name === "Padrão" ? { revenue: full.revenue, discharged: full.dischargedMWh } : await runWindow(rows, { ...params, rte: s.rte }, s.cyc, s.pol);
-    const f = bessFinance({ ...params, rte: s.rte, degPctYear: s.deg, lcos: s.lcos }, res.revenue * scale, res.discharged * scale);
+    // mesmo ativo em todos os cenários: o CAPEX do caso base só escala com o custo do cenário (LCOS);
+    // degradação e eficiência mudam a receita, não o investimento
+    const f = bessFinance({ ...params, rte: s.rte, degPctYear: s.deg, lcos: s.lcos }, res.revenue * scale, res.discharged * scale, finance.capex * (s.lcos / params.lcos));
     scenarios.push({ name: s.name, policy: s.policy, powerMW: params.powerMW, capacityMWh: params.capacityMWh, rte: s.rte, degPctYear: s.deg, lcos: s.lcos, revenueYear: res.revenue * scale, paybackYears: f.paybackYears, irr: f.irr, npv: f.npv });
   }
 

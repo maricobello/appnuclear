@@ -157,7 +157,8 @@ export function compensar(t: TarifaUsina, e: Pick<EntradaUsina, "consumo" | "inj
     transferencias: { foraParaPonta: r4(usadoFora), pontaParaFora: r4(usadoPonta) },
     creditoUsadoKwh: r4(creditoUsado),
     excedenteKwh: r4(excedente),
-    novoSaldoKwh: r4(Math.max(0, excedente - pos(e.alocadoOutrasKwh))),
+    // saldo = excedente do mês + crédito anterior que sobrou − o que foi alocado às outras UCs
+    novoSaldoKwh: r4(Math.max(0, excedente + (pos(e.creditoAnteriorKwh) - creditoUsado) - pos(e.alocadoOutrasKwh))),
     fatorPontaFora: r4(fator),
   };
 }
@@ -220,7 +221,10 @@ export function faturaUsina(t: TarifaUsina, e: EntradaUsina): FaturaUsina {
     if (k !== "fora") demConsFaturada = Math.max(demConsFaturada, fat);
     else if (!demConsFaturada) demConsFaturada = fat;
     const nome = k === "unica" ? "" : k === "ponta" ? " ponta" : " fora ponta";
-    add({ id: `dem_${k}`, grupo: "Demanda", descricao: `Demanda de consumo${nome}`, quantidade: fat, unidade: "kW", tarifa: r4(tar), liquido: fat * tar }, { icms: true, pc: true });
+    // ICMS só sobre a demanda efetivamente utilizada (Súmula 391 do STJ; Tema 176 do STF); a parte contratada e não usada paga só PIS/Cofins
+    const usada = med > 0 ? Math.min(med, fat) : fat;
+    add({ id: `dem_${k}`, grupo: "Demanda", descricao: `Demanda de consumo${nome}${fat > usada ? " (utilizada)" : ""}`, quantidade: usada, unidade: "kW", tarifa: r4(tar), liquido: usada * tar }, { icms: true, pc: true });
+    if (fat > usada) add({ id: `dem_${k}_nu`, grupo: "Demanda", descricao: `Demanda de consumo${nome} contratada e não utilizada (sem ICMS)`, quantidade: fat - usada, unidade: "kW", tarifa: r4(tar), liquido: (fat - usada) * tar, nota: "Súmula 391 do STJ" }, { icms: false, pc: true });
     if (contr > 0 && med > contr * 1.05) {
       const ult = med - contr;
       add({ id: `ult_${k}`, grupo: "Demanda", descricao: `Ultrapassagem de demanda${nome} (2x)`, quantidade: ult, unidade: "kW", tarifa: r4(tar * 2), liquido: ult * tar * 2, nota: "medida acima de 105% da contratada" }, { icms: true, pc: true });
@@ -262,6 +266,14 @@ export function faturaUsina(t: TarifaUsina, e: EntradaUsina): FaturaUsina {
   fixo("cip", "Contribuição de iluminação pública (CIP)", e.cipRs, "lei municipal");
   fixo("outros", "Outros (multas, juros, serviços)", e.outrosRs, "lançado da fatura");
 
+  // estado sem a isenção do Convênio ICMS 16/2015 (ou acima do limite): ICMS sobre a energia compensada (PIS/Cofins seguem zerados, Lei 13.169/2015)
+  if (e.regime === "SCEE" && !e.icmsIsentaCompensada && icms > 0 && icms < 0.95) {
+    const base = (c.compensado.ponta * (t.energia.ponta.te + t.energia.ponta.tusd) + c.compensado.fora * (t.energia.fora.te + t.energia.fora.tusd)) / 1000;
+    const v = (base * icms) / (1 - icms);
+    if (v > 0) linhas.push({ id: "icms_comp", grupo: "Energia", descricao: "ICMS sobre a energia compensada (estado sem isenção)", quantidade: c.compensado.ponta + c.compensado.fora, unidade: "kWh", tarifa: null, liquido: 0, icms: r2(v), pisCofins: 0, total: r2(v), nota: "base: kWh compensados × (TE + TUSD)" });
+  }
+  if (e.regime === "SCEE" && pos(e.alocadoOutrasKwh) > c.excedenteKwh + (pos(e.creditoAnteriorKwh) - c.creditoUsadoKwh) + 1)
+    alertas.push({ nivel: "alta", texto: `Rateio de ${Math.round(pos(e.alocadoOutrasKwh)).toLocaleString("pt-BR")} kWh maior que o excedente do mês mais o saldo (${Math.round(c.excedenteKwh + pos(e.creditoAnteriorKwh) - c.creditoUsadoKwh).toLocaleString("pt-BR")} kWh): confira a alocação.` });
   if (e.regime === "SCEE" && !e.icmsIsentaCompensada) alertas.push({ nivel: "media", texto: "ICMS sobre a energia compensada marcado como devido: confira a adesão do estado ao Convênio ICMS 16/2015 (limite de 1 MW no texto do CONFAZ)." });
   if (e.regime === "SCEE" && c.excedenteKwh > 0) alertas.push({ nivel: "info", texto: `Excedente de ${Math.round(c.excedenteKwh).toLocaleString("pt-BR")} kWh (equiv. fora ponta) vira crédito por 60 meses; após o rateio, saldo de ${Math.round(c.novoSaldoKwh).toLocaleString("pt-BR")} kWh.` });
 

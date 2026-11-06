@@ -289,7 +289,7 @@ async function pldAgora(args: Record<string, unknown>, ctx: ToolCtx, deps: Assis
     result: {
       agora_brt: stamp(ctx.now),
       fonte: sourceLabel(pld),
-      limites_2026: { piso: PLD_LIMITS.min, teto_horario: PLD_LIMITS.maxHourly, teto_estrutural_media_diaria: PLD_LIMITS.maxStructural },
+      [`limites_${PLD_LIMITS.year}`]: { piso: PLD_LIMITS.min, teto_horario: PLD_LIMITS.maxHourly, teto_estrutural_media_diaria: PLD_LIMITS.maxStructural },
       submercados: subs.map((s) => {
         const tm = dayStats(rowTomorrow[s]);
         return {
@@ -448,7 +448,7 @@ async function saudeDados(_args: Record<string, unknown>, _ctx: ToolCtx, deps: A
             contagem: run.counts,
             problemas: run.sources
               .filter((s) => s.status === "down" || s.status === "degraded")
-              .map((s) => ({ fonte: s.name, status: s.status, erro: (s.error ?? "").slice(0, 160), idade_h: r2(s.ageHours) })),
+              .map((s) => ({ fonte: s.name, status: s.status, esperado: s.id === "ccee_pld" ? "bloqueio esperado da CCEE a IPs de nuvem; PLD coberto pelo CMO do ONS" : undefined, erro: (s.error ?? "").slice(0, 160), idade_h: r2(s.ageHours) })),
           }
         : null,
     },

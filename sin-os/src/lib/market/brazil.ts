@@ -39,7 +39,13 @@ export function limitsFor(year: number): PldLimits {
   return past ?? PAST_LIMITS[0];
 }
 
-export const clampPld = (v: number) => Math.min(PLD_LIMITS.maxHourly, Math.max(PLD_LIMITS.min, v));
+/** Ano (Brasília) de um instante. */
+export const anoBrt = (ts: number) => new Date(ts - 3 * 3600_000).getUTCFullYear();
+/** Limita ao piso/teto horário; com `ts`, usa os limites do ano daquela hora (não os do ano corrente). */
+export const clampPld = (v: number, ts?: number) => {
+  const l = ts === undefined ? PLD_LIMITS : limitsFor(anoBrt(ts));
+  return Math.min(l.maxHourly, Math.max(l.min, v));
+};
 
 export interface DayMatrix {
   dates: string[];

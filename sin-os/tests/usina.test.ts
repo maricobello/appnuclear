@@ -57,6 +57,10 @@ describe("compensação por posto", () => {
     expect(c.transferencias.foraParaPonta).toBeCloseTo(1000 / (294.98 / 474.22), 1);
     expect(c.excedenteKwh).toBeCloseTo(130000 - 1000 / (294.98 / 474.22), 1);
     expect(c.novoSaldoKwh).toBeCloseTo(c.excedenteKwh - 100000, 1);
+    // crédito anterior não usado continua no saldo (USI-01)
+    const c2 = compensar(verde, { ...base, creditoAnteriorKwh: 50000 });
+    expect(c2.creditoUsadoKwh).toBe(0);
+    expect(c2.novoSaldoKwh).toBeCloseTo(c.novoSaldoKwh + 50000, 1);
   });
   it("sem injeção suficiente, usa créditos anteriores (fora ponta primeiro)", () => {
     const c = compensar(verde, { ...base, injecao: { ponta: 0, fora: 5000 }, creditoAnteriorKwh: 10000 });
@@ -78,7 +82,10 @@ describe("fatura esperada da usina", () => {
     expect(f.linhas.find((l) => l.id === "nc_fora")).toBeUndefined(); // fora ponta sem Fio B
   });
   it("demanda de consumo pelo maior valor e TUSDg sobre o excedente", () => {
-    expect(linha("dem_unica").liquido).toBeCloseTo(300 * 23.77, 2);
+    // ICMS só sobre a demanda utilizada (280 kW); os 20 kW contratados e não usados pagam só PIS/Cofins
+    expect(linha("dem_unica").liquido).toBeCloseTo(280 * 23.77, 2);
+    expect(linha("dem_unica_nu").liquido).toBeCloseTo(20 * 23.77, 2);
+    expect(linha("dem_unica_nu").icms).toBe(0);
     expect(linha("tusdg").quantidade).toBe(720);
     expect(linha("tusdg").liquido).toBeCloseTo(720 * 13.57, 2);
     expect(f.linhas.find((l) => l.id === "ult_ger")).toBeUndefined(); // 1020 ≤ 1050
@@ -134,5 +141,19 @@ describe("laudo da usina em PDF", () => {
     const { text } = await extractText(await getDocumentProxy(bytes), { mergePages: true });
     for (const s of ["FATURA DA USINA", "CEMIG-D", "TUSDg", "60% Fio B", "COMPENSAÇÃO DE ENERGIA", "CONFERÊNCIA COM A FATURA REAL", "DIVERGENTE", "Assinatura"]) expect(text).toContain(s);
     expect(nomeArquivoUsina(dados)).toBe("laudo-usina-CEMIG-D-A4-2026-11-05.pdf");
+  });
+});
+
+describe("auditoria nov/2026 — usina", () => {
+  it("USI-02: 'ICMS tributado' na energia compensada vira linha de ICMS", () => {
+    const isento = faturaUsina(verde, base);
+    const trib = faturaUsina(verde, { ...base, icmsIsentaCompensada: false });
+    const l = trib.linhas.find((x) => x.id === "icms_comp")!;
+    const baseRs = (1000 * (474.22 + 1912.96) + 20000 * (294.98 + 185.79)) / 1000;
+    expect(l.icms).toBeCloseTo((baseRs * 0.18) / 0.82, 1);
+    expect(trib.total).toBeCloseTo(isento.total + l.total, 1);
+  });
+  it("USI-04: rateio maior que o excedente + saldo gera alerta", () => {
+    expect(faturaUsina(verde, { ...base, alocadoOutrasKwh: 999999 }).alertas.some((a) => a.texto.includes("Rateio"))).toBe(true);
   });
 });

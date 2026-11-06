@@ -201,7 +201,7 @@ export default function PlanejamentoPage() {
         <Kpi label="EAR hoje" value={r ? r.caso.armazenamento[sub].pct : null} format={(v) => num(v, 1)} unit="%" foot={ear6 ? `6 meses: ${num(ear6.p50, 0)}% · P10 ${num(ear6.p10, 0)}` : undefined} source="energia armazenada (ONS) e a mediana simulada ao fim do 6º estágio" />
         <Kpi label="Risco de déficit" value={riskMax !== null ? 100 * riskMax : null} format={(v) => num(v, 1)} unit="% dos cenários" foot="pior mês em 13" source="fração dos cenários com déficit acima de 0,1% da carga, no pior dos 13 estágios" />
         <Kpi
-          label="Valor da água hoje"
+          label="Valor da água (fim do 1º mês)"
           value={stages[0]?.valor_agua[sub].mean ?? null}
           format={(v) => num(v, 2)}
           unit="R$/MWh"

@@ -9,7 +9,8 @@ export const maxDuration = 300;
 
 function triggerOf(req: Request): AuditRun["trigger"] {
   const ua = req.headers.get("user-agent") ?? "";
-  if (/vercel-cron/i.test(ua)) return "cron";
+  // só a credencial real marca a execução como cron (a senha de teste não)
+  if (/vercel-cron/i.test(ua) && (req.headers.get("authorization") ?? "").replace(/^Bearer\s+/i, "") === (process.env.CRON_SECRET ?? "\u0000")) return "cron";
   const t = req.headers.get("x-trigger");
   return t === "github" ? "github" : t === "api" ? "api" : "manual";
 }
@@ -19,10 +20,10 @@ async function handle(req: Request) {
   if (!auth.ok) return Response.json({ error: "não autorizado" }, { status: 401 });
   const url = new URL(req.url);
 
-  if (!auth.privileged) {
+  if (!auth.privileged || auth.simples) {
     const last = (await listAuditRuns(1).catch(() => []))[0];
     if (last && Date.now() - last.startedAt < 60_000) {
-      return Response.json({ run: last, report: null, reasons: ["limite: 1 execução/min sem credencial"], throttled: true });
+      return Response.json({ run: last, report: null, reasons: [auth.simples ? "limite: 1 execução/min com a senha de teste" : "limite: 1 execução/min sem credencial"], throttled: true });
     }
   }
 

@@ -97,7 +97,8 @@ export async function runAudit(trigger: AuditRun["trigger"]): Promise<AuditOutco
     crossPldCmo(results.ccee_pld.data as SubPanel | null, results.ons_cmo.data as SubPanel | null),
     crossFx(results.bcb_fx.data as FxData | null),
   ];
-  const enabled = sources.filter((s) => s.status !== "disabled");
+  // fontes desativadas e o bloqueio esperado da CCEE (coberto pelo CMO do ONS) não puxam o score geral
+  const enabled = sources.filter((s) => s.status !== "disabled" && !(s.id === "ccee_pld" && s.status === "down"));
   const overallScore = Math.round(enabled.reduce((s, x) => s + x.score, 0) / Math.max(1, enabled.length));
   const counts = { ok: 0, degraded: 0, down: 0, disabled: 0 };
   sources.forEach((s) => counts[s.status]++);
