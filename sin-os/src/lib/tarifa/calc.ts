@@ -4,6 +4,8 @@
  * e LC 214/2025). Funções puras: rodam no servidor, no navegador e nos testes.
  */
 
+import { aliquotasOficiais } from "./rtc";
+
 /** "457,17000000000002" → 457.17; ",00" → 0. */
 export const num = (s: unknown): number => {
   if (typeof s === "number") return s;
@@ -145,15 +147,18 @@ export interface PremissasReforma {
   icms: number;
   pis: number;
   cofins: number;
-  /** ICMS entra na base do IBS/CBS? A LC 214/2025 exclui (conferir). */
+  /** ICMS entra na base do IBS/CBS? A LC 214/2025 e a calculadora oficial da Receita excluem; "sim" é só cenário de estresse. */
   icmsNaBase: boolean;
 }
 
 export const PREMISSAS_PADRAO: PremissasReforma = { cbsRef: 0.088, ibsRef: 0.177, icms: 0.18, pis: 0.0105, cofins: 0.0484, icmsNaBase: false };
 
+/** 2026: alíquotas da tabela oficial da Receita (Calculadora RTC): CBS 0,9%, IBS UF 0,1%, IBS municipal 0%. */
+const OFICIAL_2026 = aliquotasOficiais(2026) ?? { cbs: 0.009, ibsUf: 0.001, ibsMun: 0 };
+
 /** Calendário da transição (EC 132/2023, ADCT, e LC 214/2025). */
 export const TRANSICAO: Record<number, { pisCofins: boolean; icmsFator: number; cbs: (ref: number) => number; ibs: (ref: number) => number; teste: boolean; nota: string }> = {
-  2026: { pisCofins: true, icmsFator: 1, cbs: () => 0.009, ibs: () => 0.001, teste: true, nota: "ano de teste: CBS 0,9% e IBS 0,1% destacados e compensados com PIS/Cofins — sem custo novo" },
+  2026: { pisCofins: true, icmsFator: 1, cbs: () => OFICIAL_2026.cbs, ibs: () => OFICIAL_2026.ibsUf + OFICIAL_2026.ibsMun, teste: true, nota: "ano de teste: CBS 0,9% e IBS 0,1% destacados e compensados com PIS/Cofins — sem custo novo" },
   2027: { pisCofins: false, icmsFator: 1, cbs: (r) => r - 0.001, ibs: () => 0.001, teste: false, nota: "PIS e Cofins extintos; CBS cheia (menos 0,1 p.p.) e IBS de 0,1%" },
   2028: { pisCofins: false, icmsFator: 1, cbs: (r) => r - 0.001, ibs: () => 0.001, teste: false, nota: "igual a 2027" },
   2029: { pisCofins: false, icmsFator: 0.9, cbs: (r) => r, ibs: (r) => r * 0.1, teste: false, nota: "ICMS a 90%; IBS a 10% da alíquota de referência" },
@@ -176,6 +181,8 @@ export interface AnoReforma {
   /** Custo para empresa no regime regular: CBS/IBS viram crédito integral (e, hoje, PIS/Cofins não cumulativos). */
   liquidoEmpresaKwh: number;
   destaqueTesteKwh: number;
+  /** Alíquotas do ano vêm da tabela oficial da Receita (só 2026 hoje) ou são estimativas. */
+  aliquotaOficial: boolean;
   nota: string;
 }
 
@@ -209,6 +216,7 @@ export function simularReforma(baseMwh: number, p: PremissasReforma = PREMISSAS_
       cargaPct: base ? Math.round(((total - base) / base) * 1000) / 10 : 0,
       liquidoEmpresaKwh: r4(total - cbsKwh - ibsKwh - pisCofinsKwh),
       destaqueTesteKwh: t.teste ? r4(baseIva * (cbs + ibs)) : 0,
+      aliquotaOficial: aliquotasOficiais(ano) !== null,
       nota: t.nota,
     };
   });
@@ -218,3 +226,18 @@ export function simularReforma(baseMwh: number, p: PremissasReforma = PREMISSAS_
 export const ICMS_UF: Record<string, number> = {
   AC: 0.19, AL: 0.205, AM: 0.2, AP: 0.18, BA: 0.205, CE: 0.2, DF: 0.2, ES: 0.17, GO: 0.19, MA: 0.23, MG: 0.18, MS: 0.17, MT: 0.17, PA: 0.19, PB: 0.2, PE: 0.205, PI: 0.225, PR: 0.195, RJ: 0.2, RN: 0.2, RO: 0.195, RR: 0.2, RS: 0.17, SC: 0.17, SE: 0.19, SP: 0.18, TO: 0.2,
 };
+
+/**
+ * Alíquotas de CBS e IBS (frações) de um ano: a tabela oficial da Receita quando publicada (2026);
+ * senão, a regra da transição sobre as referências estimadas. Em 2027 e 2028 o IBS de 0,1% é dividido
+ * em 0,05% estadual e 0,05% municipal (LC 214/2025); de 2029 em diante a divisão entre UF e município
+ * depende das leis locais, então o IBS vem somado (dividido = false).
+ */
+export function aliquotasDoAno(ano: number, p: Pick<PremissasReforma, "cbsRef" | "ibsRef"> = PREMISSAS_PADRAO): { cbs: number; ibsUf: number; ibsMun: number; oficial: boolean; dividido: boolean } {
+  const of = aliquotasOficiais(ano);
+  if (of) return { ...of, oficial: true, dividido: true };
+  const t = TRANSICAO[Math.min(2033, Math.max(2026, ano))];
+  const ibs = t.ibs(p.ibsRef);
+  if (ano === 2027 || ano === 2028) return { cbs: t.cbs(p.cbsRef), ibsUf: ibs / 2, ibsMun: ibs / 2, oficial: false, dividido: true };
+  return { cbs: t.cbs(p.cbsRef), ibsUf: ibs, ibsMun: 0, oficial: false, dividido: false };
+}

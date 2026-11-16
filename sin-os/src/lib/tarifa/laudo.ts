@@ -1,5 +1,6 @@
 import type { jsPDF as JsPDF } from "jspdf";
 import type { AnoReforma, Decomposicao, Efetiva } from "./calc";
+import { calcularCibs, CLASSIF_ENERGIA, RTC_FONTE } from "./rtc";
 import type { EntradaUsina, FaturaUsina, TarifaUsina, conferirUsina } from "./usina";
 
 /**
@@ -333,6 +334,21 @@ export function montarLaudo(JsPDFCtor: typeof JsPDF, d: DadosLaudo): JsPDF {
       ["l", "r", "r", "r", "r", "r", "r", "r"],
     );
     paragrafo("Valores em R$/kWh. 2026: CBS 0,9% e IBS 0,1% destacados e compensados (entre parênteses, sem custo). 2027: fim do PIS/Cofins. 2029 a 2032: ICMS a 90/80/70/60% e IBS a 10/20/30/40%. 2033: só IBS e CBS. Empresa no regime regular: crédito integral de IBS/CBS.");
+  }
+
+  if (d.efetiva) {
+    const kwh = d.fatura?.consumoKwh && d.fatura.consumoKwh > 0 ? d.fatura.consumoKwh : 1000;
+    const c = calcularCibs("consumo", 2026, kwh * d.efetiva.semTributosKwh);
+    titulo("Enquadramento oficial CBS/IBS (Calculadora RTC da Receita Federal)");
+    campos([
+      ["NCM", `${RTC_FONTE.ncmEnergia} (energia elétrica)`],
+      ["CST / cClassTrib", `${c.classificacao.cst} / ${c.classificacao.cClassTrib} - ${c.classificacao.situacao}`],
+      ["Fundamento", c.classificacao.fundamento],
+      [`Base de CBS/IBS (${brl(kwh, 0)} kWh)`, `R$ ${brl(c.base)} (sem ICMS, PIS, Cofins e COSIP)`],
+      ["CBS 0,9% / IBS UF 0,1% / IBS mun. 0%", `R$ ${c.tributos.map((x) => brl(x.valor)).join(" / ")} (2026: destacado, sem custo)`],
+      ["Base oficial", `${RTC_FONTE.versaoBase} de ${dataBr(RTC_FONTE.dataBase)} - ${RTC_FONTE.repositorio} (MIT)`],
+    ]);
+    paragrafo(`Outros enquadramentos de energia: ${CLASSIF_ENERGIA.cadeia.cst}/${CLASSIF_ENERGIA.cadeia.cClassTrib} (diferimento na geração, comercialização, transmissão e distribuição - art. 28, § 1º) e ${CLASSIF_ENERGIA.compensada.cst}/${CLASSIF_ENERGIA.compensada.cClassTrib} (energia compensada no SCEE fora da base, até 1 MW e só no custo da energia - art. 28, §§ 3º e 4º).`);
   }
 
   titulo("Premissas, ressalvas e responsabilidade");

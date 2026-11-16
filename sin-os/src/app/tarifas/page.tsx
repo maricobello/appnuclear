@@ -8,6 +8,7 @@ import { baseOption, C, categoryAxis, valueAxis } from "@/lib/chart";
 import { useApi } from "@/lib/useApi";
 import { useBusyFlag } from "@/lib/busy";
 import { PanelVeil } from "@/components/LoadingVeil";
+import { ApuracaoOficial } from "./Rtc";
 import { Usina } from "./Usina";
 import { efetiva, ICMS_UF, PREMISSAS_PADRAO, simularReforma, type Decomposicao, type PremissasReforma } from "@/lib/tarifa/calc";
 import type { Bandeira, Linha, TarifaVigente } from "@/lib/sources/aneel";
@@ -509,7 +510,7 @@ export default function TarifasPage() {
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               <Campo label="CBS de referência" value={Math.round(prem.cbsRef * 10000) / 100} onChange={(v) => setPrem({ ...prem, cbsRef: v / 100 })} />
               <Campo label="IBS de referência" value={Math.round(prem.ibsRef * 10000) / 100} onChange={(v) => setPrem({ ...prem, ibsRef: v / 100 })} />
-              <Escolha label="ICMS na base do IBS/CBS?" value={prem.icmsNaBase ? "sim" : "nao"} options={[{ value: "nao", label: "Não (LC 214/2025)" }, { value: "sim", label: "Sim (cenário conservador)" }]} onChange={(v) => setPrem({ ...prem, icmsNaBase: v === "sim" })} />
+              <Escolha label="ICMS na base do IBS/CBS?" value={prem.icmsNaBase ? "sim" : "nao"} options={[{ value: "nao", label: "Não (regra oficial da Receita)" }, { value: "sim", label: "Sim (cenário conservador)" }]} onChange={(v) => setPrem({ ...prem, icmsNaBase: v === "sim" })} />
             </div>
             {refOpt ? <div className="mt-4"><EChart option={refOpt} height={320} label="Tarifa por ano da transição" /></div> : null}
             <Table
@@ -533,14 +534,27 @@ export default function TarifasPage() {
                 <li>Base: TE + TUSD + bandeira da linha escolhida, em R$/kWh, sem tributos.</li>
                 <li>ICMS e PIS/Cofins são calculados por dentro, como na fatura de hoje: base ÷ (1 − alíquotas).</li>
                 <li>CBS e IBS são calculados por fora, sobre o valor sem esses tributos. A LC 214/2025 tira ICMS, PIS/Cofins e o próprio IBS/CBS da base (o cenário conservador inclui o ICMS).</li>
-                <li>Em 2026 é só teste: CBS de 0,9% e IBS de 0,1% aparecem destacados na nota e são compensados com PIS/Cofins, sem custo novo. Por isso o valor fica entre parênteses.</li>
+                <li>Em 2026 é só teste: CBS de 0,9% e IBS de 0,1% (alíquotas da tabela oficial da Receita, Calculadora RTC) aparecem destacados na nota e são compensados com PIS/Cofins, sem custo novo. Por isso o valor fica entre parênteses.</li>
                 <li>Para empresas no regime regular, CBS e IBS dão crédito integral; a coluna &quot;Empresa (líquido)&quot; tira esse crédito. Consumidor residencial não tem crédito.</li>
-                <li>Conferir: as alíquotas de referência definitivas (resolução do Senado e calibragem anual); a alíquota do IBS de cada estado e município; o cashback de energia para famílias de baixa renda do CadÚnico (LC 214/2025); a regra de energia compensada na GD (SCEE); e como a ANEEL vai tratar os tributos nos reajustes.</li>
+                <li>Energia compensada na GD: sai da base da CBS e do IBS (art. 28, § 3º, cClassTrib 830001) até 1 MW; veja a apuração oficial abaixo.</li>
+                <li>Conferir: as alíquotas de referência definitivas (resolução do Senado e calibragem anual); a alíquota do IBS de cada estado e município; o cashback de energia para famílias de baixa renda do CadÚnico (LC 214/2025); e como a ANEEL vai tratar os tributos nos reajustes.</li>
               </ul>
             </Disclosure>
           </>
         )}
       </Panel>
+      {linha && isEnergia ? (
+        <ApuracaoOficial
+          teMwh={linha.te}
+          tusdMwh={linha.tusd}
+          bandeiraMwh={bandMwh}
+          icmsPct={trib.icms}
+          pisPct={trib.pis}
+          cofinsPct={trib.cofins}
+          consumoInicial={fat.consumo}
+          prem={prem}
+        />
+      ) : null}
       </>
       )}
     </div>

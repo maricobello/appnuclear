@@ -304,7 +304,7 @@ export function Usina({ agente, uf, icmsPct, icmsOrigem }: { agente: string; uf:
               <li>Razão entre postos: só TE (adotado) ou TE+TUSD.</li>
               <li>A partir de 2029: valoração do art. 17 da Lei 14.300 pela ANEEL (o cálculo usa 100% do Fio B como hipótese).</li>
               <li>ICMS sobre o Fio B não compensado e limite de potência da isenção: dependem do RICMS de cada estado.</li>
-              <li>Reforma tributária: tratamento da energia compensada no IBS/CBS (LC 214/2025, alterada pela LC 227/2026).</li>
+              <li>Reforma tributária (Calculadora RTC da Receita): a venda da geração na cadeia é CST 510 / cClassTrib 510001 (diferimento, art. 28, § 1º, LC 214/2025) e só é tributada no fornecimento para consumo. A energia compensada pelas UCs sai da base de CBS/IBS (830001, art. 28, § 3º) até 1 MW e só na parte do custo da energia; acima de 1 MW, tributação integral. Conferir as mudanças da LC 227/2026.</li>
             </ul>
           </Disclosure>
         </>

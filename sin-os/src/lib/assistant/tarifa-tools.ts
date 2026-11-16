@@ -1,4 +1,5 @@
 import { fold } from "../gd/parse";
+import { CLASSIF_ENERGIA, RTC_FONTE } from "../tarifa/rtc";
 import type { Bandeira, ComponenteRow, Linha, TarifaVigente } from "../sources/aneel";
 import { decompor, efetiva, ICMS_UF, PREMISSAS_PADRAO, simularReforma } from "../tarifa/calc";
 import type { ToolDef } from "./groq";
@@ -51,7 +52,7 @@ export const TARIFA_TOOL_DEFS: ToolDef[] = [
     function: {
       name: "reforma_tributaria",
       description:
-        "Simula CBS e IBS (reforma tributária, EC 132/2023 e LC 214/2025) na tarifa de energia de 2026 a 2033: ano de teste, fim do PIS/Cofins em 2027, troca gradual do ICMS pelo IBS de 2029 a 2033, preço por kWh para o consumidor final e custo líquido para empresa com crédito. Aceita a tarifa sem tributos em R$/MWh ou uma distribuidora (usa a B1 residencial convencional vigente).",
+        "Simula CBS e IBS (reforma tributária, EC 132/2023 e LC 214/2025) na tarifa de energia de 2026 a 2033, com as regras oficiais da Calculadora RTC da Receita Federal (base por fora, CST/cClassTrib de energia, exclusão da energia compensada na GD): ano de teste, fim do PIS/Cofins em 2027, troca gradual do ICMS pelo IBS de 2029 a 2033, preço por kWh para o consumidor final e custo líquido para empresa com crédito. Aceita a tarifa sem tributos em R$/MWh ou uma distribuidora (usa a B1 residencial convencional vigente).",
       parameters: {
         type: "object",
         properties: {
@@ -145,9 +146,16 @@ async function reformaTool(args: Record<string, unknown>, deps?: TarifaDeps) {
   return {
     tarifa_sem_tributos_mwh: r4(base),
     origem,
-    premissas: { icms_pct: r4(p.icms * 100), pis_cofins_pct: r4((p.pis + p.cofins) * 100), cbs_ref_pct: r4(p.cbsRef * 100), ibs_ref_pct: r4(p.ibsRef * 100), alerta: "alíquotas de referência são estimativas; a definitiva sai por resolução do Senado" },
+    premissas: { icms_pct: r4(p.icms * 100), pis_cofins_pct: r4((p.pis + p.cofins) * 100), cbs_ref_pct: r4(p.cbsRef * 100), ibs_ref_pct: r4(p.ibsRef * 100), alerta: "2026 usa a tabela oficial da Receita; de 2027 em diante as alíquotas de referência são estimativas (a definitiva sai por resolução do Senado)" },
     anos: anos.map((a) => ({ ano: a.ano, total_kwh: a.totalKwh, icms: a.icmsKwh, pis_cofins: a.pisCofinsKwh, cbs: a.cbsKwh, ibs: a.ibsKwh, carga_pct: a.cargaPct, empresa_liquido_kwh: a.liquidoEmpresaKwh, nota: a.nota })),
-    conferir: ["alíquotas definitivas e do IBS por estado/município", "cashback de energia para baixa renda (LC 214/2025)", "tratamento da energia compensada na GD", "base: ICMS fora da base do IBS/CBS"],
+    oficial_receita: {
+      fonte: `${RTC_FONTE.nome} (base ${RTC_FONTE.versaoBase}, ${RTC_FONTE.dataBase})`,
+      aliquotas_2026: "CBS 0,9%, IBS estadual 0,1%, IBS municipal 0% (únicas publicadas; 2027+ são estimativas)",
+      base_calculo: "por fora: valor da fatura menos ICMS, PIS, Cofins e COSIP (IBS/CBS não incidem sobre o ICMS)",
+      enquadramentos: Object.values(CLASSIF_ENERGIA).map((c) => ({ cst: c.cst, cclasstrib: c.cClassTrib, situacao: c.situacao, quando: c.resumo, fundamento: c.fundamento })),
+      gd_compensada: "energia compensada no SCEE sai da base de CBS/IBS (art. 28, § 3º) só para micro e minigeração até 1 MW e só no custo da energia (TE); TUSD, demanda, disponibilidade e reativo seguem tributados",
+    },
+    conferir: ["alíquotas definitivas de 2027 em diante e do IBS por estado/município", "cashback de energia para baixa renda (LC 214/2025)", "mudanças da LC 227/2026"],
     tela: "/tarifas",
   };
 }
